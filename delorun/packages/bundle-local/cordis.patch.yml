@@ -327,7 +327,7 @@
     - id: delorun-report
       name: '@delorun/bundle-local/report'
       config:
-        issueUrl: https://github.com/Delo-Run/delorun/issues/new
+        issueUrl: https://github.com/twickas/delorun/issues/new
         template: bug_report.yml
 
 # Plugin management protects the guard rows, the update check and the trust bill above, remote

@@ -486,7 +486,7 @@ export const ADVISORY_ACCEPTANCES_PATH = 'delorun/release/advisory-acceptances.y
 export const ADVISORY_FEED_URL = 'https://registry.npmjs.org/-/npm/v1/security/advisories/bulk'
 
 /** Delorun's public repository: its `v<version>` tags and GitHub releases are the releases, and its release workflow publishes to npm. */
-export const RELEASE_REPOSITORY_URL = 'https://github.com/Delo-Run/delorun'
+export const RELEASE_REPOSITORY_URL = 'https://github.com/twickas/delorun'
 
 /** Host of the release metadata (`root/<n>.root.json`, `timestamp.json`). */
 export const RELEASE_METADATA_ORIGIN = 'https://releases.delorun.com'

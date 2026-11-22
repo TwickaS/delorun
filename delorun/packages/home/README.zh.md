@@ -97,7 +97,7 @@ import { ensureHomeTree, readProtectedFile, resolveDelorunHome, writeProtectedFi
 
 ## 尚未实现
 
-- 约定 C1 Windows 规则中的 DACL 检查（[#48](https://github.com/Delo-Run/delorun/issues/48)）：在 Windows 上，目录检查不检查任何内容就返回，受保护文件的检查只查看文件类型，所以其他本人可以读取的 home 或密钥文件在那里不会被拒绝。
+- 约定 C1 Windows 规则中的 DACL 检查（[#48](https://github.com/twickas/delorun/issues/48)）：在 Windows 上，目录检查不检查任何内容就返回，受保护文件的检查只查看文件类型，所以其他本人可以读取的 home 或密钥文件在那里不会被拒绝。
 - 采用 C1 DACL 的 Windows 命名管道：令牌通道只在 Unix 套接字上监听。
 
 <a id="development"></a>

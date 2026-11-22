@@ -5,14 +5,14 @@ import { buildReport, MAX_REPORT_URL_LENGTH, TRUNCATION_NOTE } from '../src/clie
 
 const DETAILS: ReportDetails = {
   delorun: '0.1.0-rc.1', dsh: '0.2.2', os: 'Linux 6.6', platform: 'linux x64', excerpt: '2026-11-15T10:00:00.000Z home: failed & "quoted" <b>\nsecond line',
-  issueUrl: 'https://github.com/Delo-Run/delorun/issues/new', template: 'bug_report.yml',
+  issueUrl: 'https://github.com/twickas/delorun/issues/new', template: 'bug_report.yml',
 }
 
 describe('buildReport', () => {
   it('fills the form\'s version and logs fields and names the template, encoding what needs it', () => {
     const report = buildReport(DETAILS, 'computer')
     const url = new URL(report.url)
-    expect(`${url.origin}${url.pathname}`).toBe('https://github.com/Delo-Run/delorun/issues/new')
+    expect(`${url.origin}${url.pathname}`).toBe('https://github.com/twickas/delorun/issues/new')
     expect(url.searchParams.get('template')).toBe('bug_report.yml')
     expect(url.searchParams.get('version')).toBe('Delorun 0.1.0-rc.1; DeepSeek Harness 0.2.2; Linux 6.6 (linux x64); studio on computer')
     expect(url.searchParams.get('logs')).toBe(DETAILS.excerpt)

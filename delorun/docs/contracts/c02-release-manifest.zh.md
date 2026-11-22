@@ -50,7 +50,7 @@ description: "约定 C2：Delorun 发布的文件、已签名的发布 manifest 
 
 ## 发布文件
 
-版本为 `<version>`（Delorun 的语义化版本，不带前导 `v`）的发布，是 Delorun 公开仓库 `https://github.com/Delo-Run/delorun` 的 git 标签 `v<version>`，以及该标签的 GitHub release。平台标识符是以连字符连接的 Node `process.platform` 与 `process.arch`：`linux-x64`、`linux-arm64`、`darwin-x64`、`darwin-arm64` 与 `win32-x64`。发布会发布其配方列为发布平台的那些平台的运行时（该发布提交处 `delorun/apps/release/closure.json` 中的 `platforms`），其 manifest 恰好指明这些平台。配方拒绝列出它无法从带标签的源码构建其原生代码的平台，因此在能够构建之前，`darwin-x64` 与 `darwin-arm64` 不是发布平台；目前的发布平台是 `linux-x64`、`linux-arm64` 与 `win32-x64`。
+版本为 `<version>`（Delorun 的语义化版本，不带前导 `v`）的发布，是 Delorun 公开仓库 `https://github.com/twickas/delorun` 的 git 标签 `v<version>`，以及该标签的 GitHub release。平台标识符是以连字符连接的 Node `process.platform` 与 `process.arch`：`linux-x64`、`linux-arm64`、`darwin-x64`、`darwin-arm64` 与 `win32-x64`。发布会发布其配方列为发布平台的那些平台的运行时（该发布提交处 `delorun/apps/release/closure.json` 中的 `platforms`），其 manifest 恰好指明这些平台。配方拒绝列出它无法从带标签的源码构建其原生代码的平台，因此在能够构建之前，`darwin-x64` 与 `darwin-arm64` 不是发布平台；目前的发布平台是 `linux-x64`、`linux-arm64` 与 `win32-x64`。
 
 | 文件 | 内容 |
 | --- | --- |
@@ -152,7 +152,7 @@ npm 启动器内嵌打包时所带的根版本，不内嵌任何根版本时拒�
 | `version` | 语义化版本 | 本发布的 Delorun 版本。 |
 | `dsh` | 语义化版本 | 发布中 `@deepseek-ai/dsh-app-boot` 的 `version`，即上游的版本（[C17](c17-plugin-versions.zh.md)）。 |
 | `channel` | `stable` 或 `beta` | 发布所在的通道。 |
-| `source` | `{ "repository", "tag", "commit" }` | 公开仓库的 URL（`https://github.com/Delo-Run/delorun`）、`v<version>`，以及该标签指向的 40 位十六进制提交。 |
+| `source` | `{ "repository", "tag", "commit" }` | 公开仓库的 URL（`https://github.com/twickas/delorun`）、`v<version>`，以及该标签指向的 40 位十六进制提交。 |
 | `published` | 时间戳 | targets 密钥签名它的时间。 |
 | `runtime` | 由平台映射到 `{ "archive": FileRef, "files": FileRef }` 的映射 | 每个运行时归档及其文件列表，恰好覆盖各发布平台且至少一个；没有条目的平台不在该发布中。 |
 | `desktop` | 由 `mac-arm64`、`mac-x64`、`win-x64` 映射到 `{ "installer": DesktopFileRef, "update": DesktopFileRef, "blockmap": FileRef }` 的映射 | 桌面文件；`DesktopFileRef` 增加 `sha512`，即 electron-updater 比较的标准 base64 SHA-512。在 Windows 上，安装程序同时也是更新文件。 |

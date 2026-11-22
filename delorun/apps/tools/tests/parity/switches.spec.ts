@@ -556,7 +556,7 @@ describe('the parity overlay\'s mount of @delorun/bundle-local', () => {
     insert: [
       { id: 'delorun-profile-versions', name: '@delorun/bundle-local/profile-versions', disabled: true },
       { id: 'delorun-requirements', name: '@delorun/bundle-local/requirements', disabled: true },
-      { id: 'delorun-report', name: '@delorun/bundle-local/report', config: { issueUrl: 'https://github.com/Delo-Run/delorun/issues/new', template: 'bug_report.yml' }, disabled: true },
+      { id: 'delorun-report', name: '@delorun/bundle-local/report', config: { issueUrl: 'https://github.com/twickas/delorun/issues/new', template: 'bug_report.yml' }, disabled: true },
     ],
   }
   /** The plugin install check row in the parity form the overlay's seventh patch restates it. */

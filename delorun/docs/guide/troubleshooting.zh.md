@@ -413,7 +413,7 @@ Delorun 把你的[工作区](../reference/glossary.zh.md#workspace)保存在一�
 - 能重现问题的最少步骤；
 - `delorun logs` 的相关行。请先阅读并去掉任何私密内容。
 
-问题请发到 [GitHub Discussions](https://github.com/Delo-Run/delorun/discussions)，缺陷请使用 [issue 模板](https://github.com/Delo-Run/delorun/issues/new/choose)，或发送到 support@delorun.com。[SUPPORT.md](../../../SUPPORT.md) 列出了各个途径。疑似漏洞只能私下报告，方式见 [SECURITY.md](../../../SECURITY.md)。
+问题请发到 [GitHub Discussions](https://github.com/twickas/delorun/discussions)，缺陷请使用 [issue 模板](https://github.com/twickas/delorun/issues/new/choose)，或发送到 support@delorun.com。[SUPPORT.md](../../../SUPPORT.md) 列出了各个途径。疑似漏洞只能私下报告，方式见 [SECURITY.md](../../../SECURITY.md)。
 
 <details>
 <summary>进一步了解</summary>

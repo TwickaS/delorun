@@ -212,7 +212,7 @@ brief 在以下情况下有问题：
 
 - 字段缺失、为空或未知，或文件不是非空的 brief JSON 数组；
 - `Model` 不是 Haiku 的 medium、high 或 max 强度，或 Opus 的 medium 或 high 强度，所以 Opus 的 max 强度会被拒绝；
-- 链接既不是 github.com/Delo-Run/delorun 或 docs.delorun.com 上的 `https://` URL，也不是仓库所跟踪的相对路径；
+- 链接既不是 github.com/twickas/delorun 或 docs.delorun.com 上的 `https://` URL，也不是仓库所跟踪的相对路径；
 - 带反引号的路径（其第一段是仓库的顶层目录）没有指名任何受跟踪的文件或目录，但 `You own` 中允许新文件或新目录，只要其最近的现有父目录是受跟踪的；
 - 文本指名了私有计划目录 `delorun/docs/plans/`，或指名了机器路径，例如以 `/home/`、`/Users/` 或 `~/` 开头的路径；
 - 标签没有在 `labels.yml` 中定义，标签省略了 `brief`，或 brief 带有 `kind/*` 标签（它属于拉取请求）；

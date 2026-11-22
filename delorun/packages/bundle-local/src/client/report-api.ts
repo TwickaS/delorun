@@ -10,7 +10,7 @@ import { call, fields, isString, optional, type Check, type HostFetch } from './
 export const REPORT_ROUTE = '/api/delorunReport.details'
 
 /** The issue form's address and template a row that sets neither uses; an approved device, which cannot read the row's configuration, uses them too. */
-export const REPORT_DEFAULTS = { issueUrl: 'https://github.com/Delo-Run/delorun/issues/new', template: 'bug_report.yml' } as const
+export const REPORT_DEFAULTS = { issueUrl: 'https://github.com/twickas/delorun/issues/new', template: 'bug_report.yml' } as const
 
 /** What the home tells the studio about itself for a problem report. */
 export interface ReportDetails {

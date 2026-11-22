@@ -115,11 +115,11 @@ describe('a briefs file', () => {
   })
 
   it('refuses an http link, a link into another repository and a machine path', () => {
-    expect(problemsOf(briefsWith({ Report: 'See http://github.com/Delo-Run/delorun/issues/1.' }))).toEqual([
-      'briefs[0]: Report: link "http://github.com/Delo-Run/delorun/issues/1" must be an https URL without credentials or a port',
+    expect(problemsOf(briefsWith({ Report: 'See http://github.com/twickas/delorun/issues/1.' }))).toEqual([
+      'briefs[0]: Report: link "http://github.com/twickas/delorun/issues/1" must be an https URL without credentials or a port',
     ])
     expect(problemsOf(briefsWith({ Report: 'See https://github.com/deepseek-ai/deepseek-harness.' }))).toEqual([
-      'briefs[0]: Report: link "https://github.com/deepseek-ai/deepseek-harness" must point into github.com/Delo-Run/delorun',
+      'briefs[0]: Report: link "https://github.com/deepseek-ai/deepseek-harness" must point into github.com/twickas/delorun',
     ])
     expect(problemsOf(briefsWith({ 'Repository and branch': 'In /home/owner/worktree/issues here.' }))).toEqual([
       'briefs[0]: Repository and branch: "/home/owner/worktree/issues" is a machine or home path; a brief names repository paths only',
@@ -176,8 +176,8 @@ describe('the rendered issue body', () => {
     expect(brief).toBeDefined()
     if (brief === undefined) return
     const body = renderBody(brief, CONTEXT)
-    expect(body).toContain('The root [`AGENTS.md`](https://github.com/Delo-Run/delorun/blob/main/AGENTS.md)')
-    expect(body).toContain('[`delorun/apps/tools/tests/issues/fixtures/`](https://github.com/Delo-Run/delorun/tree/main/delorun/apps/tools/tests/issues/fixtures)')
+    expect(body).toContain('The root [`AGENTS.md`](https://github.com/twickas/delorun/blob/main/AGENTS.md)')
+    expect(body).toContain('[`delorun/apps/tools/tests/issues/fixtures/`](https://github.com/twickas/delorun/tree/main/delorun/apps/tools/tests/issues/fixtures)')
     expect(body).toContain('`node_modules/.bin/tsx delorun/apps/tools/src/issues/issues.ts --input')
   })
 })

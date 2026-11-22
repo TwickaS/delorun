@@ -2,7 +2,7 @@
  * The references a work brief may carry into a GitHub issue, and how a rendered brief links them. The issue lives in the
  * public repository's tracker, so every reference names something that repository holds:
  *
- * - a link is an `https://` URL on github.com/Delo-Run/delorun or docs.delorun.com, or a repository-relative path that the
+ * - a link is an `https://` URL on github.com/twickas/delorun or docs.delorun.com, or a repository-relative path that the
  *   tree tracks;
  * - a backticked token is a repository path when its first segment is a top-level directory of the tree; it must then
  *   name a tracked file or directory, or the directory of a glob. The `You own` field may also name a new file or
@@ -17,7 +17,7 @@
  */
 
 /** The URL path of the GitHub repository a brief may link into. */
-export const GITHUB_REPOSITORY_PATH = '/Delo-Run/delorun'
+export const GITHUB_REPOSITORY_PATH = '/twickas/delorun'
 
 /** The documentation host a brief may link into. */
 export const DOCS_HOST = 'docs.delorun.com'

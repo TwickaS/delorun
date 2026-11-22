@@ -10,7 +10,7 @@ import { PRODUCT_URL } from '@/site/config.ts'
 import type { Locale } from '@/site/locale.ts'
 
 /** Delorun's repository. */
-const GITHUB_URL = 'https://github.com/Delo-Run/delorun'
+const GITHUB_URL = 'https://github.com/twickas/delorun'
 
 /** DeepSeek Harness, the project Delorun is a community fork of. */
 const UPSTREAM_URL = 'https://github.com/deepseek-ai/deepseek-harness'
