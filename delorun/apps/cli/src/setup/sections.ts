@@ -31,6 +31,7 @@ import { writePromptRows } from './prompt-switches.ts'
 import { BACK, type Back, type StepIO } from './steps.ts'
 import { writeUpdateCheckRow } from './update-check.ts'
 import { channelOriginOf } from './channel-origin.ts'
+import { isProductionChannel } from './ending.ts'
 import { choiceNote, RECOMMENDED, type ChoiceText } from './choices.ts'
 import { readPatchRow, setPatchRow } from './writes.ts'
 import { systemTailscale } from '@delorun/reach'
@@ -249,11 +250,11 @@ export const PRODUCTION_UPDATE_STATEMENT = 'About once a day Delorun checks rele
 
 /**
  * The statements setup makes about privacy, from the Privacy section's copy.
- * @param channelOrigin - the recorded channel origin of a launcher built for another release channel; absent for production.
+ * @param channelOrigin - the recorded channel origin; absent or the production origin for the npm launcher, another origin for a launcher built for another release channel.
  * @returns one line per statement.
  */
 export function statementLines(channelOrigin?: string): string[] {
-  return [en['statement.delorun'], en['statement.optIns'], en['statement.feedback'], channelOrigin === undefined ? PRODUCTION_UPDATE_STATEMENT : localUpdateStatement(channelOrigin)]
+  return [en['statement.delorun'], en['statement.optIns'], en['statement.feedback'], isProductionChannel(channelOrigin) ? PRODUCTION_UPDATE_STATEMENT : localUpdateStatement(channelOrigin as string)]
 }
 
 /**
@@ -279,7 +280,7 @@ export const MAIN_UPDATE_CHECK_LINES: Readonly<Record<'on' | 'off', string>> = {
  * @returns the two choices.
  */
 function updateCheckText(channelOrigin?: string): readonly ChoiceText[] {
-  const host = channelOrigin === undefined ? 'releases.delorun.com' : new URL(channelOrigin).host
+  const host = isProductionChannel(channelOrigin) ? 'releases.delorun.com' : new URL(channelOrigin as string).host
   return [
     { label: `Yes${RECOMMENDED}`, lines: [`Once a day Delorun asks ${host} whether a newer version exists. You hear about security fixes.`, 'Change later: delorun setup privacy.'] },
     { label: 'No', lines: ['Delorun makes no release check request. You update by hand with npx delorun.', 'Change later: delorun setup privacy.'] },
