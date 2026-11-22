@@ -624,6 +624,18 @@ describe('a machine hold', () => {
     expect('slots' in decision(machine, 4)).toBe(true)
   })
 
+  it('does not let a request the hold blocks take slots or become the head ahead of an allowed request', () => {
+    const machine = new Machine()
+    machine.hold(9, { slots: 14 })
+    hold(machine, { allow: ['/w/a'] })
+    ask(machine, 1, { cwd: '/w/b', since: 1000 })
+    ask(machine, 2, { cwd: '/w/b', min: 8, want: 8, since: 1001 })
+    ask(machine, 3, { cwd: '/w/a', min: 2, want: 6, since: 1002 })
+    expect(decision(machine, 3)).toEqual({ slots: 6, memoryBytes: 6 * GIB })
+    expect(decision(machine, 1)).toEqual({ waits: 'machine held: cleanup' })
+    expect(decision(machine, 2)).toEqual({ waits: 'machine held: cleanup' })
+  })
+
   it('makes a request without a working directory wait, as an old request file records none', () => {
     const machine = new Machine()
     hold(machine, { allow: ['/w/a'] })

@@ -345,6 +345,8 @@ export function decide(state: SlotState, pid: number, budget: SlotBudget): { rea
     && lateSlots + request.min <= budget.slots - head.min
     && lateMemory + need <= budget.memoryBytes - head.need
   for (const request of state.waiting) {
+    // A request the hold blocks starts nothing while it lasts, so it neither takes slots nor holds back a later request.
+    if (state.hold !== undefined && !allowed(state.hold, request.cwd)) continue
     const need = Math.max(request.memoryBytes, request.min * perSlot)
     const fits = request.min <= slots && need <= memory
     const diskFree = !request.disk || disk > 0

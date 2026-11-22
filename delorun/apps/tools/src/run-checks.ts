@@ -53,7 +53,7 @@
  * @module @delorun/tools/run-checks
  */
 import { execFileSync, spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { availableParallelism, tmpdir, totalmem } from 'node:os'
 import { dirname, join, relative, resolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -527,7 +527,7 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
     if (values.hold?.trim() === '') throw new Error('--hold takes a reason: --hold "<reason>"')
     const host = nodeSlotHost(text => process.stderr.write(text))
     const paths = privateSlotPaths(tmpdir(), process.getuid?.() ?? -1)
-    for (const line of values.hold === undefined ? unholdMachine(host, paths) : holdMachine(host, paths, values.hold, (values.allow ?? []).map(root => resolve(root)))) console.log(line)
+    for (const line of values.hold === undefined ? unholdMachine(host, paths) : holdMachine(host, paths, values.hold, (values.allow ?? []).map(root => existsSync(root) ? realpathSync(root) : resolve(root)))) console.log(line)
     return 0
   }
   // The pre-flight is the lane tier of a change run without its test lanes, and it waits in no queue.
