@@ -8,10 +8,13 @@
  *   who may not gets `TAILSCALE_SERVE_NOT_PERMITTED` with the one command the person runs, and nothing is written;
  *   nothing runs through `sudo`. It then writes the profile's `delorun-reach` row with this machine's `ts.net` address
  *   and the fixed listener port, chosen once, and prints the address, the sign-in address and the trust statement.
- * - `off` turns the option off in the row, signs every paired device out (the device list stays; a home that runs does
- *   it itself when it applies the row, one that does not has its stored sessions removed), resets who may ask to pair
- *   without a window, removes whatever Tailscale serves on the serve port at once, and confirms it is gone; a removal
- *   it cannot confirm exits non-zero with the reason.
+ * - `off` turns the option off in the row, resets who may ask to pair without a window, removes whatever Tailscale
+ *   serves on the serve port at once and confirms it is gone, then signs every paired device out (the device list stays).
+ *   The sign-out does not depend on what Tailscale or the home answers: a running home does it itself, after its
+ *   listener has stopped, when it applies the row; a home that does not answer, and one that does not run, have their
+ *   stored sessions removed. "Every paired device is signed out" is printed only once that succeeded; a removal
+ *   Tailscale cannot confirm, a sign-out that failed, or a home that did not apply the row exits non-zero with the
+ *   reason. A home that did not answer keeps its sessions in memory until it restarts.
  * - While the profile's home runs, `on` and `off` ask it over the update channel's `reach.apply` (C19) to restart its
  *   options from the row, and print the state it answers; a home that cannot apply it, or a start that is not
  *   `ready`, exits non-zero with the reason and the restart command.
@@ -295,39 +298,49 @@ async function turnOff(args: readonly string[], context: CommandContext, depende
   // Who may ask to pair without an approval window goes back to the safe default, as in Settings.
   writeMayAskAt(profilePatchPath(home, profile), 'own-user')
   const running = dependencies.running(home, profile)
-  const lines = [`Remote access is off for the profile ${profile}.`, 'Every paired device is signed out and stays on the list; each signs in again when remote access is on.']
-  // A running home signs the devices out itself when it applies the row, below. A home that is not running has only
-  // stored sessions, which go now, so none is there when it starts.
-  if (!running) {
-    try {
-      await new HomeAuth({ directory: join(home, 'secrets', 'home-auth') }).signAllDevicesOut()
-    } catch (error) {
-      if (!(error instanceof HomeAuthError)) throw error
-      context.stderr(`delorun reach: the paired devices could not be signed out: ${error.message}\n`)
-      return EXIT.failed
-    }
-  }
+  const lines = [`Remote access is off for the profile ${profile}.`]
+  const problems: string[] = []
+  // Tailscale first, so the address stops answering; whatever it says, the devices are signed out below.
+  let failure: { readonly error: unknown } | undefined
   try {
     const host = URL.parse(row.address)?.hostname ?? (await readTailscale(dependencies.tailscale)).dnsName
     await removeServe(dependencies.tailscale, host, row.servePort, serveTarget(row.listenerPort))
     lines.push('Tailscale no longer serves this computer\'s studio.')
   } catch (error) {
-    if (!(error instanceof ReachError)) throw error
-    if (error.code !== 'TAILSCALE_NOT_INSTALLED') {
-      context.stdout(`${lines.join('\n')}\n`)
-      context.stderr(`delorun reach: Tailscale may still serve this computer's studio. ${error.detail} (${error.code})\n`)
-      return EXIT.failed
-    }
-    lines.push('Tailscale is not installed, so nothing serves this computer\'s studio.')
+    if (!(error instanceof ReachError)) failure = { error }
+    else if (error.code === 'TAILSCALE_NOT_INSTALLED') lines.push('Tailscale is not installed, so nothing serves this computer\'s studio.')
+    else problems.push(`Tailscale may still serve this computer's studio. ${error.detail} (${error.code})`)
   }
-  context.stdout(`${lines.join('\n')}\n`)
-  if (!running) return EXIT.ok
-  const answer = await askHome(dependencies, home, profile, 'reach.apply')
-  if (answer.kind === 'unavailable') {
-    context.stderr(`delorun reach: the running Delorun did not close its remote listener: ${answer.reason}.\nRestart Delorun to close it: ${restartCommand(profile)}.\n`)
+  // A running home signs the devices out itself when it applies the row, after its listener has stopped. When it does
+  // not answer, or while no home runs, the stored sessions go here, so none is there when it starts; a home that
+  // answered nothing keeps its sessions in memory until it restarts.
+  let signedOut = false
+  let live: readonly ReachOptionStatus[] = []
+  if (running) {
+    const answer = await askHome(dependencies, home, profile, 'reach.apply')
+    if (answer.kind === 'options') {
+      signedOut = true
+      live = answer.options
+    } else {
+      problems.push(`the running Delorun did not close its remote listener or end its sessions: ${answer.reason}.\nRestart Delorun to close it: ${restartCommand(profile)}.`)
+    }
+  }
+  if (!signedOut) {
+    try {
+      await new HomeAuth({ directory: join(home, 'secrets', 'home-auth') }).signAllDevicesOut()
+      signedOut = true
+    } catch (error) {
+      if (!(error instanceof HomeAuthError)) throw error
+      problems.push(`the paired devices could not be signed out: ${error.message}`)
+    }
+  }
+  if (signedOut) lines.splice(1, 0, 'Every paired device is signed out and stays on the list; each signs in again when remote access is on.')
+  context.stdout(`${[...lines, ...live.map(liveLine)].join('\n')}\n`)
+  if (failure !== undefined) throw failure.error
+  if (problems.length > 0) {
+    context.stderr(problems.map(problem => `delorun reach: ${problem}\n`).join(''))
     return EXIT.failed
   }
-  context.stdout(`${answer.options.map(liveLine).join('\n')}\n`)
   return EXIT.ok
 }
 

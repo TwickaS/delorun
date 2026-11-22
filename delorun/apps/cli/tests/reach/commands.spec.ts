@@ -187,20 +187,30 @@ describe('delorun reach', () => {
     await expect(reach({ tailscale: () => Promise.reject(new Error('broken runner')) }).run(['off'], context)).rejects.toThrow('broken runner')
   })
 
-  it('signs every paired device out when it turns off with Delorun stopped, keeps the list, and restores no session when turned on again', async () => {
-    // Pins `signAllDevicesOut` in `turnOff`: a stored session that survived would be admitted again once access is on.
-    const directory = join(delorunHome, 'secrets', 'home-auth')
+  /** A paired device with one stored session, and a check of whether a token is still live in the stored sessions. */
+  async function pairedWithSession(secrets = join('secrets', 'home-auth')): Promise<{ directory: string, address: StudioAddress, device: { id: DeviceId }, old: { token: string }, live: (token: string) => Promise<boolean> }> {
+    const directory = join(delorunHome, secrets)
     const address = brandString<StudioAddress>('http://127.0.0.1:3080')
     const paired = new HomeAuth({ directory })
     await paired.start()
     const { device } = await paired.claim({ listener: 'loopback', host: '127.0.0.1:3080', source: 'local', ownerCode: (await paired.issueOwnerCode()).code, devicePublicKey: { kty: 'EC', crv: 'P-256', x: brandString<Base64Url>('A'.repeat(43)), y: brandString<Base64Url>('B'.repeat(43)) }, label: 'Phone', address })
-    const open = (): Promise<{ token: string }> => paired.openSession({ deviceId: device.id, listener: 'reach-tailscale-private', address, factor: 'tailnet-membership', lifetimeMs: 60 * 60 * 1000 })
-    const old = await open()
+    const old = await paired.openSession({ deviceId: device.id, listener: 'reach-tailscale-private', address, factor: 'tailnet-membership', lifetimeMs: 60 * 60 * 1000 })
     await paired.stop()
     const live = async (token: string): Promise<boolean> => {
       const reader = new HomeAuth({ directory })
       await reader.start()
       try { return (await reader.sessionOf(token)) !== undefined } finally { await reader.stop() }
+    }
+    return { directory, address, device, old, live }
+  }
+
+  it('signs every paired device out when it turns off with Delorun stopped, keeps the list, and restores no session when turned on again', async () => {
+    // Pins `signAllDevicesOut` in `turnOff`: a stored session that survived would be admitted again once access is on.
+    const { directory, address, device, old, live } = await pairedWithSession()
+    const open = async (): Promise<{ token: string }> => {
+      const again = new HomeAuth({ directory })
+      await again.start()
+      try { return await again.openSession({ deviceId: device.id, listener: 'reach-tailscale-private', address, factor: 'tailnet-membership', lifetimeMs: 60 * 60 * 1000 }) } finally { await again.stop() }
     }
     expect(await live(old.token)).toBe(true)
     await reach().run(['on', 'tailscale'], context)
@@ -218,12 +228,49 @@ describe('delorun reach', () => {
     // Turned on again, the old cookie is still refused; a fresh sign-in gets a new one.
     await reach().run(['on', 'tailscale'], context)
     expect(await live(old.token)).toBe(false)
-    const again = new HomeAuth({ directory })
-    await again.start()
-    const fresh = await again.openSession({ deviceId: device.id, listener: 'reach-tailscale-private', address, factor: 'tailnet-membership', lifetimeMs: 60 * 60 * 1000 })
-    await again.stop()
+    const fresh = await open()
     expect(await live(fresh.token)).toBe(true)
     expect(await live(old.token)).toBe(false)
+  })
+
+  it('signs the devices out whatever Tailscale or the running home answers, and says so only once it has', async () => {
+    const { old, live } = await pairedWithSession()
+    await reach().run(['on', 'tailscale'], context)
+    const failing = fakeTailscale(HOST, { 'serve off': { code: 1, stdout: '', stderr: 'serve is busy' } })
+    failing.config = ownRule(HOST, 443, readReachRow(delorunHome, 'default').listenerPort)
+    const failingServe = failing.run
+    // The home runs and answers: it signs out in its own apply, even though Tailscale could not remove the rule.
+    const sent: string[] = []
+    const answering = (answer: ResponseLine[] | Error) => (_home: string, _profile: string, request: UnsignedRequest): Promise<ResponseLine[]> => {
+      sent.push(request.op)
+      return answer instanceof Error ? Promise.reject(answer) : Promise.resolve(answer)
+    }
+    const off = [{ ok: true, options: [{ option: 'tailscale-private', state: 'off' }] }]
+    await expect(reach({ tailscale: failingServe, running: () => true, send: answering(off) }).run(['off'], context)).resolves.toBe(EXIT.failed)
+    expect(sent).toEqual(['reach.apply'])
+    expect(out.stderr).toContain('Tailscale may still serve this computer\'s studio')
+    expect(out.stdout).toContain('Every paired device is signed out')
+    // The home runs and does not answer: the stored sessions go here, and the restart is named.
+    expect(await live(old.token)).toBe(true)
+    out.stdout = ''
+    out.stderr = ''
+    await expect(reach({ tailscale: failingServe, running: () => true, send: answering(new Error('no socket')) }).run(['off'], context)).resolves.toBe(EXIT.failed)
+    expect(await live(old.token)).toBe(false)
+    expect(out.stderr).toContain('Restart Delorun to close it')
+    expect(out.stdout).toContain('Every paired device is signed out')
+  })
+
+  it('does not say the devices are signed out when the sign-out fails, and still removes the serve rule', async () => {
+    const { directory } = await pairedWithSession()
+    writeFileSync(join(directory, 'sessions.json'), 'not json')
+    await reach().run(['on', 'tailscale'], context)
+    out.stdout = ''
+    const live = fakeTailscale(HOST)
+    live.config = ownRule(HOST, 443, readReachRow(delorunHome, 'default').listenerPort)
+    await expect(reach({ tailscale: live.run, running: () => false }).run(['off'], context)).resolves.toBe(EXIT.failed)
+    expect(out.stdout).not.toContain('signed out')
+    expect(out.stderr).toContain('the paired devices could not be signed out')
+    expect(live.config).toEqual({ TCP: {}, Web: {} })
   })
 
   it('has the running Host sign the devices out before it applies a row that leaves access off, and not for one that turns it on', async () => {
