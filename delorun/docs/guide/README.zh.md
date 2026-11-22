@@ -27,7 +27,7 @@ description: "Delorun 用户指南，按你想做的事组织成一张地图：�
 
 ## 我想开始使用
 
-- **安装 Delorun 并进行第一次 chat：**[安装与首次运行](install.zh.md)。它涵盖你需要先准备什么、[按使用方式进行 setup](install.zh.md#setup-how-you-will-use-delorun)、[studio 与你的第一次 chat](install.zh.md#the-studio-and-your-first-chat)，以及[没有浏览器的电脑](install.zh.md#a-computer-without-a-browser)。
+- **安装 Delorun 并进行第一次 chat：**[安装与首次运行](install.zh.md)。它涵盖你需要先准备什么、[按使用方式进行 setup](install.zh.md#setup-a-few-questions)、[studio 与你的第一次 chat](install.zh.md#the-studio-and-your-first-chat)，以及[没有浏览器的电脑](install.zh.md#a-computer-without-a-browser)。
 - **带上我的 DeepSeek Harness chat：**[从 DeepSeek Harness 切换](switching.zh.md)。它说明哪些保持不变、哪些不同，哪些内容会被复制、哪些会留在原处，以及[如何切换回去](switching.zh.md#going-back)。
 - **了解 Delorun 是做什么的、将走向哪里：**[路线图](roadmap.zh.md)。它说明现在正在构建什么、接下来是什么、之后是什么。
 
