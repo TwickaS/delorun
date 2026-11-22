@@ -411,8 +411,8 @@ describe('an install whose retention cannot finish', () => {
   })
 })
 
-describe('the line the launcher itself reports', () => {
-  it('reports installing once the release’s files are in the staging directory, and not before', async () => {
+describe('the steps the launcher itself reports', () => {
+  it('reports installing once the release’s files are in the staging directory, then installed, then starting, in that order', async () => {
     const fixture = await fixtureRelease()
     const recorded: Recorded = { launches: [], installs: [], retentions: 0 }
     const directory = await home()
@@ -425,7 +425,17 @@ describe('the line the launcher itself reports', () => {
       roots: fixture.roots,
     })
     await runLauncher({ ...options, report: event => events.push(event.step) })
-    expect(events).toEqual(['filled', 'installing'])
+    expect(events).toEqual(['filled', 'installing', 'installed', 'starting'])
+  })
+
+  it('reports a failure of the install before the refusal is printed', async () => {
+    const recorded: Recorded = { launches: [], installs: [], retentions: 0 }
+    const events: string[] = []
+    let printed = ''
+    const options = launch({ home: await home(), store: recordingStore(recorded), channel: refusingChannel(new InstallError('DOWNLOAD_REFUSED', 'https://example.test/a', 'example.test is not a release host'), { version: 1 } as ChannelRelease['root']), roots: [], stderr: (text) => { events.push('printed'); printed += text } })
+    await runLauncher({ ...options, report: event => events.push(event.step) })
+    expect(events[0]).toBe('failed')
+    expect(printed).not.toBe('')
   })
 })
 

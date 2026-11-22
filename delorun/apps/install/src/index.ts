@@ -11,7 +11,8 @@ export { Downloader, RELEASE_HOSTS, RELEASE_TIMINGS, type Downloaded, type Downl
 export { InstallError, isInstallError, messageOf, type InstallErrorCode, type InstallLayoutCode } from './errors.ts'
 export { manualSource, newestManifestVersion, type ManualSource } from './manual-source.ts'
 export { installDescriber, installRemedies } from './refusal.ts'
-export { formatSize, progressLines, type InstallerProgress, type InstallProgress } from './progress.ts'
+export { formatDuration, formatSize, formatSpeed, isInstallerProgress, type InstallerProgress, type InstallProgress } from './progress.ts'
+export { createRenderer, InstallRenderer, type Every, type RenderStream, type RendererOptions } from './render.ts'
 export { extractArchive, extractionPath, type ExtractRequest } from './extract.ts'
 export { readAnchoredRoot, readShippedRoots } from './roots.ts'
 export {

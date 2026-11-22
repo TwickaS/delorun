@@ -24,7 +24,7 @@ import { DELORUN_HOME_ENTRIES, type RuntimeVersion } from '@delorun/contract-hom
 import type { ReleaseChannel, RootMetadata } from '@delorun/contract-release-manifest'
 import { HOME_DATA_FORMAT_SCHEMA } from '@delorun/contract-update-report'
 import { acquireHomeLock, holderAlive, newStartId, profileOption, readHomeLock, runDirectory, type HomeLock, type Refusal } from '@delorun/home'
-import { isInstallError, messageOf, newestManifestVersion, readStoredRootBytes, readStoredRootChain, readStoredTimestamp, verifyStoredRoot, type UnconfirmedInstall } from '@delorun/install'
+import { isInstallError, messageOf, type InstallerProgress, newestManifestVersion, readStoredRootBytes, readStoredRootChain, readStoredTimestamp, verifyStoredRoot, type UnconfirmedInstall } from '@delorun/install'
 import { Redactor } from '@delorun/logs'
 import { readRoot, verifySignedManifest } from '@delorun/release-formats/sign/verify'
 import { parseRuntimeVersion, type ChannelRelease, type StorePaths, type VerifiedRuntime, type InstallRequest } from '@delorun/runtime-store'
@@ -122,6 +122,27 @@ export interface RepairOptions {
   readonly repairMarkGraceSeconds: number
   /** Whether the channel already asked the person about a release below the floor; {@link repairUnconfirmed}'s `asked`. */
   readonly belowFloorAsked?: () => boolean
+  /**
+   * The install's progress display: told of `installing` and `installed`, ended with the line that says what to do next
+   * when the repair finishes, and marked failed when it does not. Nothing is shown by default.
+   */
+  readonly progress?: RepairProgress
+}
+
+/** The part of the install renderer a repair drives. */
+export interface RepairProgress {
+  /**
+   * Show a step the repair itself reports.
+   * @param event - the step.
+   */
+  handle(event: InstallerProgress): void
+  /**
+   * End the display after the last line of a repair that succeeded.
+   * @param next - what to do next, without its `Next:`.
+   */
+  finish(next: string): void
+  /** End the display of a repair that stopped; the refusal's own text follows. */
+  fail(): void
 }
 
 /**
@@ -312,9 +333,11 @@ export async function runRepair(options: RepairOptions): Promise<number> {
     endRecord = recorded.end
     await repair(options, log, undo, holds, recorded)
     outcome = 'repaired'
+    options.progress?.finish('start Delorun with: delorun')
     return LAUNCHER_EXIT.ok
   } catch (error) {
     for (const step of undo.reverse()) await step().catch((undoError: unknown) => options.output.stderr(`Delorun could not put a step back: ${messageOf(undoError)}\n`))
+    options.progress?.fail()
     const refusal = error instanceof RepairRefusal ? { text: renderLauncherRefusal(error.refusal), exit: LAUNCHER_EXIT.failed } : refusalFor(error, { home: options.home, profile: options.profile })
     log.reason = error instanceof RepairRefusal ? error.refusal.lead : messageOf(error)
     options.output.stderr(refusal.text)
@@ -433,8 +456,17 @@ async function repair(options: RepairOptions, log: Record<string, unknown>, undo
   }
   await mkdir(runtimes, { mode: 0o700 })
 
-  const runtime = await store.install({ version: release.version, root: release.root, fill: directory => options.channel.fill(release, directory) })
+  const runtime = await store.install({
+    version: release.version,
+    root: release.root,
+    fill: async (directory) => {
+      const files = await options.channel.fill(release, directory)
+      options.progress?.handle({ step: 'installing', version: release.version })
+      return files
+    },
+  })
   await options.channel.recordInstalled(release)
+  options.progress?.handle({ step: 'installed', version: release.version })
   say(options, log, `Installed release ${release.version}, verified against its signed manifest and the release log.`)
 
   const copy = await dataGuard(options, release.version, runtime, below, log)

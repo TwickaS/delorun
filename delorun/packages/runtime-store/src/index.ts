@@ -31,6 +31,7 @@ export {
   type PreparedRuntime,
   type ReportedHealth,
   type RuntimeChannel,
+  type UpdateInstallEvent,
   type UpdateReleaseChannel,
   type UpdateReport,
   type UpdateReporter,

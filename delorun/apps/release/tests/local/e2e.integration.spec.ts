@@ -135,13 +135,20 @@ describe('the built launcher against a local release', LIMIT, () => {
     const built = await buildLauncher({ roots: [served.rootPath], out: join(served.directory, 'launcher'), constants: { channelOrigin: served.origin, logOrigin: `http://127.0.0.1:${String(port)}` }, version: '0.0.1-e2e' })
     const home = join(served.directory, 'home')
     const first = await npx(built.tarball, home, ['--version'], served.directory)
-    expect(first.stderr.split('\n').filter(line => line !== '' && !line.startsWith('npm '))).toEqual([
-      'Resolving the release: the stable channel names 0.1.0.',
-      'Checking the signature: 0.1.0 is signed under release root 1.',
-      expect.stringMatching(/^Checking the release log: not checked \(the release log gave no checkpoint \(.+ could not be fetched: .+\)\)\.$/u),
-      'Warning: Release 0.1.0 has not been checked against the release log; Delorun checks it at the next connection.',
-      expect.stringMatching(/^Downloading delorun-0\.1\.0-linux-x64\.tar\.gz \(\d+(\.\d)? (kB|MB)\)\.$/u),
-      'Installing release 0.1.0.',
+    // The durations and the percentage lines depend on the machine's speed.
+    const checklist = first.stderr.split('\n').filter(line => line !== '' && !line.startsWith('npm ') && !/^ {2}\d+%/u.test(line)).map(line => line.replace(/ {2}\d+(\.\d)?s$/u, ''))
+    expect(checklist).toEqual([
+      '✔ Found release 0.1.0 on the stable channel',
+      '✔ Signature checked (release root 1)',
+      expect.stringMatching(/^! Release log not checked \(the release log gave no checkpoint \(.+ could not be fetched: .+\)\)$/u),
+      '  Warning: Release 0.1.0 has not been checked against the release log; Delorun checks it at the next connection.',
+      'Downloading delorun-0.1.0-linux-x64.tar.gz…',
+      expect.stringMatching(/^✔ Downloaded \d+(\.\d)? (kB|MB)/u),
+      '✔ Download matches its signed hash',
+      'Unpacking the runtime…',
+      expect.stringMatching(/^✔ Unpacked the runtime \([\d,]+ files\)$/u),
+      '✔ Installed release 0.1.0',
+      '✔ Starting Delorun',
     ])
     expect(first.stdout).toBe('Delorun 0.1.0\n')
     expect(first.status).toBe(0)
@@ -198,7 +205,7 @@ describe('the built launcher against a local release', LIMIT, () => {
     const built = await buildLauncher({ roots: [served.rootPath], out: join(served.directory, 'launcher'), constants: { channelOrigin: served.origin, logOrigin: log.origin }, version: '0.0.1-e2e' })
     const home = join(served.directory, 'home')
     const finished = await node(built.tarball, home, ['--version'], served.directory)
-    expect(finished.stderr).toContain('Checking the release log: verified.')
+    expect(finished.stderr).toContain('✔ Release log checked')
     expect(finished.stderr).not.toContain('Warning:')
     expect(finished.status).toBe(0)
     const state = JSON.parse(readFileSync(join(home, 'trust', 'release-log.json'), 'utf8')) as { releases: Record<string, { state: string }> }
@@ -293,7 +300,7 @@ describe.skipIf(REAL_CLOSURE === undefined)('the built launcher against a closur
     const built = await buildLauncher({ roots: [served.rootPath], out: join(served.directory, 'launcher'), constants: { channelOrigin: served.origin, logOrigin: `http://127.0.0.1:${String(await closedPort())}` }, version: '0.0.1-e2e' })
     const home = join(served.directory, 'home')
     const first = await node(built.tarball, home, ['--version'], served.directory)
-    expect(first.stderr).toContain('Installing release 0.1.0.')
+    expect(first.stderr).toContain('✔ Installed release 0.1.0')
     expect(first.stdout).toMatch(/^Delorun 0\.1\.0\nDSH \d+\.\d+\.\d+/u)
     expect(first.status).toBe(0)
     const second = await node(built.tarball, home, ['--version', '--json'], served.directory)

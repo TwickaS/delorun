@@ -320,7 +320,7 @@ describe('the release log', () => {
       progress: event => events.push(event),
     })
     await channel.resolve()
-    expect(events.at(-1)).toEqual({ step: 'log-checked', version: VERSION, state: 'unchecked', detail: 'the log\'s consistency proof could not be read (the log answered 503)' })
+    expect(events.find(event => event.step === 'log-checked')).toEqual({ step: 'log-checked', version: VERSION, state: 'unchecked', detail: 'the log\'s consistency proof could not be read (the log answered 503)' })
   })
 
   it('continues when the log’s newest witnessed checkpoint is stale, naming its age', async () => {
@@ -330,7 +330,7 @@ describe('the release log', () => {
     // which lives three days, still verifies.
     const { channel } = await harness(fixture, { now: () => (NOW + 2 * 24 * 3600) * 1000, progress: event => events.push(event) })
     await channel.resolve()
-    expect(events.at(-1)).toEqual({ step: 'log-checked', version: VERSION, state: 'unchecked', detail: 'the newest witness cosignature is 172860 seconds old, over the 86400-second limit' })
+    expect(events.find(event => event.step === 'log-checked')).toEqual({ step: 'log-checked', version: VERSION, state: 'unchecked', detail: 'the newest witness cosignature is 172860 seconds old, over the 86400-second limit' })
   })
 
   it('continues and records unchecked when the log’s latest checkpoint has no witness cosignature', async () => {
@@ -341,7 +341,7 @@ describe('the release log', () => {
     const release = await channel.resolve()
     await channel.fill(release, await staging())
     await channel.recordInstalled(release)
-    expect(events.at(-2)).toEqual({ step: 'log-checked', version: VERSION, state: 'unchecked', detail: 'the latest checkpoint has 0 of the 1 witness cosignatures a check needs' })
+    expect(events.find(event => event.step === 'log-checked')).toEqual({ step: 'log-checked', version: VERSION, state: 'unchecked', detail: 'the latest checkpoint has 0 of the 1 witness cosignatures a check needs' })
     const state = JSON.parse(await readFile(join(home, 'trust', 'release-log.json'), 'utf8')) as { releases: Record<string, { state: string }> }
     expect(state.releases[VERSION]?.state).toBe('unchecked')
   })
@@ -406,12 +406,51 @@ describe('the release log', () => {
     const events: InstallProgress[] = []
     const { channel } = await harness(fixture, { progress: event => events.push(event) })
     await channel.fill(await channel.resolve(), await staging())
-    expect(events).toEqual([
+    const name = `delorun-${VERSION}-${fixture.platform}.tar.gz`
+    expect(events.filter(event => event.step !== 'download-bytes' && event.step !== 'unpack-files')).toEqual([
+      { step: 'resolving', channel: 'stable' },
       { step: 'resolved', channel: 'stable', version: VERSION },
       { step: 'signature-checked', version: VERSION, rootVersion: 1 },
       { step: 'log-checked', version: VERSION, state: 'verified' },
-      { step: 'downloading', name: `delorun-${VERSION}-${fixture.platform}.tar.gz`, bytes: fixture.archive.byteLength },
+      { step: 'downloading', name, bytes: fixture.archive.byteLength },
+      { step: 'downloaded', name, bytes: fixture.archive.byteLength },
+      { step: 'download-verified', name },
+      { step: 'unpacking', files: expect.any(Number) as number },
     ])
+  })
+
+  it('reports the bytes of the archive and the files written, ending on the full count, and names the hash check only after the bytes arrived', async () => {
+    const fixture = await fixtureRelease()
+    const events: InstallProgress[] = []
+    const { channel } = await harness(fixture, { progress: event => events.push(event) })
+    await channel.fill(await channel.resolve(), await staging())
+    const bytes = events.filter(event => event.step === 'download-bytes')
+    expect(bytes.at(-1)).toMatchObject({ received: fixture.archive.byteLength, total: fixture.archive.byteLength })
+    const files = events.filter(event => event.step === 'unpack-files')
+    const unpacking = events.find(event => event.step === 'unpacking')
+    expect(files.at(-1)).toMatchObject({ written: (unpacking as { files: number }).files, total: (unpacking as { files: number }).files })
+    const order = events.map(event => event.step)
+    expect(order.indexOf('downloaded')).toBeGreaterThan(order.lastIndexOf('download-bytes'))
+    expect(order.indexOf('download-verified')).toBeGreaterThan(order.indexOf('downloaded'))
+    expect(order.indexOf('unpacking')).toBeGreaterThan(order.indexOf('download-verified'))
+  })
+
+  it('reports no more than ten counts a second, and always the last one', async () => {
+    const fixture = await fixtureRelease()
+    const still: InstallProgress[] = []
+    // A clock that never moves: only the first count and the last of each kind pass the limit.
+    const first = await harness(fixture, { now: () => NOW * 1000, progress: event => still.push(event) })
+    await first.channel.fill(await first.channel.resolve(), await staging())
+    expect(still.filter(event => event.step === 'download-bytes').length).toBeLessThanOrEqual(2)
+    expect(still.filter(event => event.step === 'unpack-files').length).toBeLessThanOrEqual(2)
+    expect(still.filter(event => event.step === 'unpack-files').at(-1)).toMatchObject({ written: 3, total: 3 })
+    // A clock that moves a second at each reading: every count passes.
+    const moving: InstallProgress[] = []
+    let time = NOW * 1000
+    const second = await harness(fixture, { now: () => (time += 1000), progress: event => moving.push(event) })
+    await second.channel.fill(await second.channel.resolve(), await staging())
+    const unpacking = moving.find(event => event.step === 'unpacking') as { files: number }
+    expect(moving.filter(event => event.step === 'unpack-files')).toHaveLength(unpacking.files)
   })
 
   it('reports nothing about the log and installs nothing when the log contradicts the release', async () => {
@@ -421,7 +460,7 @@ describe('the release log', () => {
     const { channel, home } = await harness(fixture, { log: logService(fixture.checkpoint, [Buffer.alloc(32, 7)]), progress: event => events.push(event) })
     const error = await refusal(channel.resolve(), 'RELEASE_LOG_FAILED')
     expect(error.detail).toContain('consistency-proof-invalid')
-    expect(events.map(event => event.step)).toEqual(['resolved', 'signature-checked'])
+    expect(events.map(event => event.step)).toEqual(['resolving', 'resolved', 'signature-checked'])
     await expect(readFile(join(home, 'trust', 'release-log.json'))).rejects.toMatchObject({ code: 'ENOENT' })
   })
 
@@ -430,7 +469,7 @@ describe('the release log', () => {
     const events: InstallProgress[] = []
     const { channel } = await harness(fixture, { log: logService('not a signed checkpoint\n'), progress: event => events.push(event) })
     await channel.resolve()
-    expect(events.at(-1)).toMatchObject({ step: 'log-checked', state: 'unchecked' })
+    expect(events.find(event => event.step === 'log-checked')).toMatchObject({ step: 'log-checked', state: 'unchecked' })
   })
 
   it('refuses the install when the bundle’s inclusion proof does not verify', async () => {

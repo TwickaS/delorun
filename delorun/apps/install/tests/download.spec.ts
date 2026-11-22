@@ -169,6 +169,22 @@ describe('a download into a file', () => {
     expect(await readdir(directory)).toEqual(['archive.tar.gz'])
   })
 
+  it('tells how many bytes are on disk after each piece, ending on the whole length', async () => {
+    const pieces = [Buffer.from('the runtime '), Buffer.from('archive'), Buffer.from('\n')]
+    const origin = await standIn((request, response) => {
+      void request
+      response.writeHead(200, { 'content-length': String(pieces.reduce((sum, piece) => sum + piece.byteLength, 0)) })
+      for (const piece of pieces) response.write(piece)
+      response.end()
+    })
+    const counted: number[] = []
+    const downloader = new Downloader({ hosts: LOOPBACK, timings: TIMINGS })
+    const written = await downloader.file(`${origin}/archive.tar.gz`, 1_024, join(await scratch(), 'archive.tar.gz'), (bytes) => { counted.push(bytes) })
+    expect(counted.at(-1)).toBe(written.length)
+    expect([...counted].sort((left, right) => left - right)).toEqual(counted)
+    expect(counted.length).toBeGreaterThan(0)
+  })
+
   it('refuses with the download refusal when the disk fills mid-write, and removes the file', async () => {
     const body = Buffer.alloc(4_096, 1)
     const origin = await standIn((request, response) => {

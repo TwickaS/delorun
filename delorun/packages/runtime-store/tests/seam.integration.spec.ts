@@ -13,7 +13,7 @@ import {
   type FixtureHome,
 } from './support.ts'
 import type { RuntimeStoreError } from '../src/index.ts'
-import { HomeRuntimeStore, type ChannelRelease, type OpenUpdateChannel, type PreparePhase, type ReleaseFileBytes } from '../src/index.ts'
+import { HomeRuntimeStore, type ChannelRelease, type OpenUpdateChannel, type PreparePhase, type ReleaseFileBytes, type UpdateInstallEvent } from '../src/index.ts'
 
 const V1 = version('0.1.0')
 const V2 = version('0.2.0')
@@ -52,7 +52,7 @@ class FixtureChannel {
   /** The versions the store installed and the channel recorded, in order. */
   readonly recorded: RuntimeVersion[] = []
   /** Where the channel writes its install progress, as the prepare that opened it gave it. */
-  line: (text: string) => void = () => {}
+  report: (event: UpdateInstallEvent) => void = () => {}
   private readonly releases = new Map<RuntimeVersion, OfferedRelease>()
 
   /**
@@ -67,7 +67,7 @@ class FixtureChannel {
     const chosen = target ?? newest
     const release = chosen === undefined ? undefined : this.releases.get(chosen)
     if (release === undefined) throw new Error(`the channel has no release ${String(chosen)}`)
-    this.line(`Resolving the release: ${release.version}.\n`)
+    this.report({ step: 'resolved', channel: 'stable', version: release.version })
     return { version: release.version, root: release.root }
   }
 
@@ -85,14 +85,14 @@ class FixtureChannel {
 }
 
 /**
- * An opener of one fixture channel, which writes a line for each release it resolves.
+ * An opener of one fixture channel, which reports a step for each release it resolves.
  * @param channel - the channel.
- * @param lines - where the lines go; nowhere by default.
+ * @param events - where the steps go besides the opener's caller; nowhere by default.
  * @returns the opener.
  */
-function opening(channel: FixtureChannel, lines: string[] = []): OpenUpdateChannel {
-  return async (line) => {
-    channel.line = (text) => { lines.push(text); line(text) }
+function opening(channel: FixtureChannel, events: UpdateInstallEvent[] = []): OpenUpdateChannel {
+  return async (report) => {
+    channel.report = (event) => { events.push(event); report(event) }
     return channel
   }
 }
@@ -164,18 +164,18 @@ describe('prepare', () => {
     expect(await fixture.store.checkRuntime(V2, fixture.root)).toMatchObject({ version: V2 })
   })
 
-  it('records the release through the channel once the store installed it, writes the channel\'s lines, and opens no channel for an intact target', async () => {
+  it('records the release through the channel once the store installed it, reports the install\'s steps, and opens no channel for an intact target', async () => {
     await fixture.install(V1)
     const recorded: string[] = []
     const channel = new FixtureChannel(offered(V2, closureFiles('0.2.0')))
     channel.recordInstalled = async (release: ChannelRelease) => { recorded.push(`${release.version} installed=${String(await isInstalledNow(release.version))}`) }
     let opened = 0
-    const written: string[] = []
-    const store = new HomeRuntimeStore({ store: fixture.store, profile: 'default', root: async () => fixture.root, fullCheckDays: 7, openChannel: async (line) => { opened++; return opening(channel)(line) }, report: new FixtureReporter() })
-    await store.prepare(undefined, () => {}, (text) => { written.push(text) })
+    const written: UpdateInstallEvent[] = []
+    const store = new HomeRuntimeStore({ store: fixture.store, profile: 'default', root: async () => fixture.root, fullCheckDays: 7, openChannel: async (report) => { opened++; return opening(channel)(report) }, report: new FixtureReporter() })
+    await store.prepare(undefined, () => {}, (event) => { written.push(event) })
     await store.prepare(undefined, () => {}, () => {})
     expect(recorded).toEqual([`${V2} installed=true`])
-    expect(written).toEqual([`Resolving the release: ${V2}.\n`])
+    expect(written).toEqual([{ step: 'resolved', channel: 'stable', version: V2 }, { step: 'installing', version: V2 }, { step: 'installed', version: V2 }])
     await store.prepare(V2, () => {}, () => {})
     expect(opened).toBe(2)
   })

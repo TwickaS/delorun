@@ -7,10 +7,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { HOME_DATA_FORMAT_SCHEMA, DATA_FORMATS_FILE, DATA_FORMATS_SCHEMA, type DataFormats, type HomeDataFormat } from '@delorun/contract-update-report'
 import type { RuntimeVersion } from '@delorun/contract-home-layout'
 import { acquireHomeLock, newStartId } from '@delorun/home'
-import { StorePaths, type VerifiedRuntime } from '@delorun/runtime-store'
+import { StorePaths, type ReleaseFileBytes, type VerifiedRuntime } from '@delorun/runtime-store'
 import { dataFormatsText, saveDataCopy, writeHomeDataFormat } from '@delorun/update'
 import { fixtureKeys, fixtureRelease, nextRoot, type Fixture } from '../../install/tests/support.ts'
-import { parseRepairLine, runRepair, type RepairChannel, type RepairLine, type RepairOptions, type RepairStore } from '../src/repair.ts'
+import { parseRepairLine, runRepair, type RepairChannel, type RepairLine, type RepairOptions, type RepairProgress, type RepairStore } from '../src/repair.ts'
 
 const version = (text: string): RuntimeVersion => text as RuntimeVersion
 const FORMATS: DataFormats = { schema: DATA_FORMATS_SCHEMA, persistence: 'c'.repeat(64) as DataFormats['persistence'], delorunRecords: { 'update-record': 1 } }
@@ -102,6 +102,24 @@ describe('delorun repair', () => {
     expect(asked[0]).toContain('Replace the installed program 0.1.0 with 0.1.1?')
     expect(out.join('')).toContain('runtimes.set-aside-20261113T120000Z')
     expect(out.join('')).toContain('delorun recover discard runtimes.set-aside-20261113T120000Z')
+  })
+
+  it('tells the install display of the steps it reports itself, then ends it with what to do next', async () => {
+    const events: string[] = []
+    const progress: RepairProgress = { handle: (event) => { events.push(event.step) }, finish: (next) => { events.push(`finish: ${next}`) }, fail: () => { events.push('fail') } }
+    const base = options()
+    const install = base.store.install.bind(base.store)
+    const channel: RepairChannel = { ...base.channel, fill: () => Promise.resolve({} as ReleaseFileBytes) }
+    const store: RepairStore = { ...base.store, install: async (request) => { await request.fill(join(home, 'staging')); return install(request) } }
+    expect(await runRepair({ ...base, store, channel, progress })).toBe(0)
+    expect(events).toEqual(['installing', 'installed', 'finish: start Delorun with: delorun'])
+  })
+
+  it('marks the install display failed when the repair stops, and ends it with no next step', async () => {
+    const events: string[] = []
+    const progress: RepairProgress = { handle: (event) => { events.push(event.step) }, finish: (next) => { events.push(`finish: ${next}`) }, fail: () => { events.push('fail') } }
+    expect(await runRepair({ ...options({ answer: false }), progress })).toBe(1)
+    expect(events).toEqual(['fail'])
   })
 
   it('writes one redacted record per run to logs/repair.log at mode 0600', async () => {

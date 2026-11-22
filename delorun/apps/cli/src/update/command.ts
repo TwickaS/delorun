@@ -36,6 +36,7 @@ import { commandRows, styleOf, type Style } from '../style.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandContext, type CommandOutput, type CommandResult } from '../command.ts'
 import { hostRefusal } from '@delorun/npm-launcher'
 import { runtimePlatformOf } from './channel.ts'
+import { updateDisplay } from './progress.ts'
 import { checkForUpdate, failureText, noticeLines, noticeOf, profileReader, runningRelease, type CheckOptions } from './notice.ts'
 import { installFrom, type InstallFromOptions } from './from.ts'
 import { runtimeOfFile, type RunningRuntime } from './runtime.ts'
@@ -90,19 +91,19 @@ export const TERMINAL_PROMPTS: UpdatePrompts = {
  * @param options - the source, `--yes` and the question.
  * @returns the version to prepare.
  */
-export type ManualInstall = (options: { readonly home: string, readonly from: string, readonly yes: boolean, readonly confirm: InstallFromOptions['confirm'], readonly line: (text: string) => void, readonly env: Readonly<Record<string, string | undefined>> }) => Promise<RuntimeVersion>
+export type ManualInstall = (options: { readonly home: string, readonly from: string, readonly yes: boolean, readonly confirm: InstallFromOptions['confirm'], readonly report: InstallFromOptions['report'], readonly env: Readonly<Record<string, string | undefined>> }) => Promise<RuntimeVersion>
 
 /**
  * {@link installFrom} over this machine's store and the launcher's roots.
- * @param options - the home, the source, `--yes`, the question, the output line and the environment.
+ * @param options - the home, the source, `--yes`, the question, the install-step listener and the environment.
  * @returns the version to prepare.
  */
 export const MANUAL_INSTALL: ManualInstall = async (options) => {
-  const { home, from, yes, confirm: ask, line, env } = options
+  const { home, from, yes, confirm: ask, report, env } = options
   const running = runtimeOfFile(home, fileURLToPath(import.meta.url))
   if (!running.store) throw new CliError(EXIT.failed, 'delorun update --from: this Delorun does not run from the runtime store, so it has no release to replace; install Delorun with its launcher.')
   return installFrom({
-    home, from, yes, confirm: ask, line,
+    home, from, yes, confirm: ask, report,
     running: running.version,
     anchor: launcherAnchor(home, env),
     store: new RuntimeStore({ home, platform: runtimePlatformOf(process.platform, process.arch), logger: SILENT }),
@@ -268,34 +269,48 @@ interface Asked {
  * @param home - the resolved Delorun home.
  * @param profile - the CLI profile.
  * @param request - the request.
- * @param output - where the progress lines are printed.
+ * @param context - where the progress lines are printed, and the environment.
  * @param asked - what the refusal says.
  * @returns the final line, whose `ok` is true.
  * @throws {CliError} when the home process refused, the connection failed, or the request ended without a final line.
  */
-async function ask(home: string, profile: string, request: UnsignedRequest, output: CommandOutput, asked: Asked): Promise<ResponseLine> {
+async function ask(home: string, profile: string, request: UnsignedRequest, context: CommandContext, asked: Asked): Promise<ResponseLine> {
   const unanswered = (why: string): CliError => new CliError(EXIT.failed, `delorun update: ${why}. ${asked.unanswered} Its log records why: delorun logs home`)
+  const display = updateDisplay(context, context.env)
   let lines: readonly ResponseLine[]
   try {
-    lines = await sendHomeRequest(home, profile, request, { onLine: phases(output) })
+    lines = await sendHomeRequest(home, profile, request, { onLine: display.onLine })
   } catch (error) {
+    display.fail()
     throw unanswered(`the connection to the home process failed during the request ${asked.what} (${error instanceof Error ? error.message : String(error)})`)
   }
   const final = lines.at(-1)
+  if (final?.ok === false) display.fail()
+  else display.close()
   if (final?.ok === false) throw new CliError(EXIT.failed, `delorun update: the home process refused ${asked.what}: ${String(final.error)}${typeof final.detail === 'string' ? `\n${final.detail}` : ''}`)
   if (final === undefined || !(asked.field in final)) throw unanswered(`the home process ended the request ${asked.what} without an answer`)
   return final
 }
 
 /**
- * Print each phase as it arrives, and each line of the target's install progress as the home process wrote it.
- * @param output - where the command writes.
- * @returns the listener.
+ * Install the release `--from` names, drawing the install's progress.
+ * @param from - the folder or address.
+ * @param yes - whether `--yes` was given.
+ * @param home - the resolved Delorun home.
+ * @param prompts - the questions.
+ * @param manual - installs the release.
+ * @param context - the environment and output.
+ * @returns the installed version.
  */
-function phases(output: CommandOutput): (line: ResponseLine) => void {
-  return (line) => {
-    if (line.ok && typeof line.phase === 'string') output.stdout(`… ${line.phase}\n`)
-    if (line.ok && typeof line.line === 'string') output.stdout(line.line)
+async function installedFrom(from: string, yes: boolean, home: string, prompts: UpdatePrompts, manual: ManualInstall, context: CommandContext): Promise<RuntimeVersion> {
+  const display = updateDisplay(context, context.env)
+  try {
+    const version = await manual({ home, from, yes, confirm: question => display.asking(() => prompts.agree(question)), report: display.report, env: context.env })
+    display.close()
+    return version
+  } catch (error) {
+    display.fail()
+    throw error
   }
 }
 
@@ -383,7 +398,7 @@ export async function runUpdate(args: readonly string[], context: CommandContext
   if (gitProblem !== undefined) {
     throw new CliError(EXIT.failed, `delorun update: Delorun saves the profile's history with git before it updates, so it can go back, and git cannot run here: ${gitProblem}. Install git, then run delorun update again. Nothing was fetched or changed.`)
   }
-  const target = values.from === undefined ? undefined : await manual({ home: home.path, from: values.from, yes: values.yes === true, confirm: prompts.agree, line: text => { context.stdout(text) }, env: context.env })
+  const target = values.from === undefined ? undefined : await installedFrom(values.from, values.yes === true, home.path, prompts, manual, context)
   const prepared = await ask(home.path, profile, { op: 'update.prepare', args: target === undefined ? {} : { target } }, context, { what: 'to prepare the update', field: 'reportId', unanswered: 'Nothing was applied.' })
   const report = prepared.report as UpdateReport
   const reportId = String(prepared.reportId)
