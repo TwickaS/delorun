@@ -15,7 +15,7 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { createServer, request as httpRequest, type IncomingMessage, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { REACH_SESSION_COOKIE, type DeviceId, type ReachListenerId, type StudioAddress } from '@delorun/contract-admission'
 import { HOME_AUTH_FILES } from '@delorun/contract-device-approval'
@@ -36,6 +36,8 @@ const FUNNEL: ReachListenerId = 'reach-tailscale-funnel'
 const PIN = '482916'
 /** Each secret comparison is one scrypt derivation at the production cost; these specs make a dozen or more, so they outlast the default 10 s under load. */
 const SCRYPT_TIMEOUT_MS = 60_000
+// Every spec and hook here may derive at the production cost, so the whole file gets the longer limit, not only the specs that make the most comparisons.
+vi.setConfig({ testTimeout: SCRYPT_TIMEOUT_MS, hookTimeout: SCRYPT_TIMEOUT_MS })
 const MINUTE = 60_000
 /** The one action the grant tests confirm, with the lowercase hex SHA-256 of its arguments the grant route requires. */
 const ACTION = 'pluginManager/installBundle'
