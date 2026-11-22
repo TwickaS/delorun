@@ -254,7 +254,7 @@
 | reach | 远程访问 | 远程访问（reach） | | 从另一台设备或网络打开 studio |
 | reach option | 远程访问方式 | | | 远程访问的一种途径 |
 | Tailscale reach | Tailscale 远程访问 | | | 通过 tailnet 的远程访问 |
-| Delorun relay | Delorun 中继 | Delorun 中继（Delorun relay） | 隧道 | Delo Run 的中继 |
+| Delorun relay | Delorun 中继 | Delorun 中继（Delorun relay） | 隧道 | Delorun 的中继 |
 | relay control | 中继控制面 | | | 中继的 Cloudflare Workers 部分 |
 | relay data plane | 中继数据面 | | | 转发加密字节的无状态直通服务器 |
 | self-hosted relay | 自托管中继 | | | 由本人运行的同一中继数据面 |

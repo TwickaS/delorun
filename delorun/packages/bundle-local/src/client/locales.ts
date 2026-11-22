@@ -3,7 +3,7 @@
 /** English dictionary. */
 export const en = {
   'notice.title': 'Preview',
-  'notice.body': 'Delorun is a pre-release community fork of DeepSeek Harness. It is built and maintained by Delo Run, independently of DeepSeek, and it is still in preview: many areas need continued improvement.\n\nDelorun has no DeepSeek account sign-in and no telemetry of its own. Your model provider and your own API key work as before. Report problems and suggestions on Delorun\'s GitHub issues page.',
+  'notice.body': 'Delorun is a pre-release community fork of DeepSeek Harness. It is built and maintained independently of DeepSeek, and it is still in preview: many areas need continued improvement.\n\nDelorun has no DeepSeek account sign-in and no telemetry of its own. Your model provider and your own API key work as before. Report problems and suggestions on Delorun\'s GitHub issues page.',
   'notice.continue': 'Continue',
   'nav': 'Privacy',
   'title': 'Privacy',
@@ -84,7 +84,7 @@ export type PrivacyLocaleKey = keyof typeof en
 /** Chinese dictionary. */
 export const zh: typeof en = {
   'notice.title': '预览版',
-  'notice.body': 'Delorun 是 DeepSeek Harness 的预发布社区分支，由 Delo Run 独立构建和维护，与 DeepSeek 无关。它仍处于预览阶段，许多方面需要持续改进。\n\nDelorun 没有 DeepSeek 账户登录，也没有自己的遥测。你的模型提供方与你自己的 API 密钥照常可用。问题与建议请提交到 Delorun 的 GitHub issues 页面。',
+  'notice.body': 'Delorun 是 DeepSeek Harness 的预发布社区分支，独立构建和维护，与 DeepSeek 无关。它仍处于预览阶段，许多方面需要持续改进。\n\nDelorun 没有 DeepSeek 账户登录，也没有自己的遥测。你的模型提供方与你自己的 API 密钥照常可用。问题与建议请提交到 Delorun 的 GitHub issues 页面。',
   'notice.continue': '继续',
   'nav': '隐私',
   'title': '隐私',

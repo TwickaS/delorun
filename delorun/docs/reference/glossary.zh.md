@@ -57,7 +57,7 @@ Delorun 的文档、skill、界面文案与拉取请求所用的词，每个概�
 其他章节中的定义：home、studio、工作区与 chat 见[运行位置](#where-things-run)，home 进程与网络设置也在那里；远程访问与 tailnet 见[远程访问 studio](#reaching-a-studio)，受信任设备见[登录](#signing-in)，安全模式见[修改 harness](#changing-the-harness)，提示注入与回收站见[保障工作安全](#keeping-work-safe)。
 
 - **Delorun**：开源项目、应用，附带 `delorun` 命令：构建在 DeepSeek Harness 之上。<a id="delorun"></a>
-- **Delo Run**：位于 delorun.com 的托管服务：网站及其发布消息订阅；配合 Delorun 中继（[路线图](../guide/roadmap.zh.md)），它还提供账户（邮件验证码、GitHub、可选的通行密钥）、登录，以及经由 Delorun 的设备批准。公开文本只标注联系邮箱 support@delorun.com。<a id="delorun-run"></a>
+- **托管服务**（hosted service）：Delorun 在 delorun.com 运营的服务：网站及其发布消息订阅；配合 Delorun 中继（[路线图](../guide/roadmap.zh.md)），它还提供账户（邮件验证码、GitHub、可选的通行密钥）、登录，以及经由 Delorun 的设备批准。公开文本只标注联系邮箱 support@delorun.com。<a id="hosted-service"></a>
 - **stock DSH**：上游按原样发布的 DeepSeek Harness。**stock look**：关闭 studio 附加功能后的 Delorun。<a id="stock"></a>
 - **studio**：harness 的网页界面，在浏览器与桌面应用中相同。代码对应：上游的 Web 客户端。<a id="studio"></a>
 - **studio 附加功能**：Delorun 的主题、侧边栏、chat 状态、设置布局与新手引导；首个发布版本默认开启它们，“设置”中的一个开关可以关闭它们。代码对应：`@delorun/bundle-studio`。<a id="studio-additions"></a>
@@ -96,7 +96,7 @@ Delorun 的文档、skill、界面文案与拉取请求所用的词，每个概�
 - **远程访问**（reach）：从另一台设备或网络打开 studio。**远程访问方式**（reach option）：其中一种方式：Tailscale 私有网络、Tailscale Funnel、自托管中继或 Delorun 中继。<a id="reach"></a>
 - **tailnet**：Tailscale 为你建立的你自己的设备私有网络：只有登录你的 Tailscale 账户的设备才能在其上互相访问。Delorun 的远程访问选项只向你的 tailnet 开放 studio。技术说明：`tailscale serve` 在电脑的 `ts.net` 名称上向 tailnet 设备发布 studio（[远程访问](../guide/everyday-use/reach.zh.md)）。<a id="tailnet"></a>
 - **Tailscale 远程访问**（Tailscale reach）：通过本人的 tailnet 远程访问：`tailscale serve` 仅供 tailnet 设备访问，Funnel 面向公共互联网。Delorun 的约定要求它不使用 Delorun 的基础设施；Tailscale 的协调服务与证书则为受信任的对象；除非开启 Tailnet Lock，否则 Tailscale 可以把设备加入 tailnet。<a id="tailscale-reach"></a>
-- **Delorun 中继**（Delorun relay）：Delo Run 的中继，位于 `delo.run` 名称下。**中继控制面**（relay control）：其 Cloudflare Workers 部分，负责名称、密钥绑定、隧道授权、限额与滥用处理。**中继数据面**（relay data plane）：无状态的直通服务器，转发它们无法读取的加密字节。<a id="delorun-relay"></a>
+- **Delorun 中继**（Delorun relay）：Delorun 的中继，位于 `delo.run` 名称下。**中继控制面**（relay control）：其 Cloudflare Workers 部分，负责名称、密钥绑定、隧道授权、限额与滥用处理。**中继数据面**（relay data plane）：无状态的直通服务器，转发它们无法读取的加密字节。<a id="delorun-relay"></a>
 - **自托管中继**（self-hosted relay）：由本人在自己的服务器与域名上运行的同一中继数据面。端到端加密在以下条件下保持成立：该域名的 CAA 记录把证书签发绑定到 home 的 ACME 账户（`accounturi`），且 home 不通过中继响应任何证书质询。其运营者即其所有者，因此 Delorun 中继的每账户限额不适用于它。<a id="self-hosted-relay"></a>
 - **studio 地址**（studio address）：能够访问 home 的 studio 的地址，例如 `k7x2p9.delo.run`、本人自己的域名或 `ts.net` 名称。<a id="studio-address"></a>
 - **远程访问监听器**（reach listener）：为一种远程访问方式提供服务的 Host 监听器。它绑定到 `127.0.0.1` 或一个 Unix 套接字，不允许覆盖主机地址；它在任何路由之前对每个请求与升级请求进行认证，并在登录之前只提供其登录前允许列表中的路由。回环监听器是上游自己的监听器。代码中为 `@delorun/contract-admission` 中的监听器 id。<a id="reach-listener"></a>
@@ -114,7 +114,7 @@ Delorun 的文档、skill、界面文案与拉取请求所用的词，每个概�
 - **home 密钥**（home key）：home 自己的签名密钥，它向 home 的设备与中继标识该 home，为其告警签名，并在设备重置后保留。**匹配码**（match code）：设备批准期间新设备与受信任设备都显示的 8 位数字，由两台设备各自看到的密钥推导而来；本人在受信任设备上输入新设备显示的匹配码。<a id="home-key"></a>
 - **批准窗口**（approval window）：home 接受任何设备配对请求的分钟数（默认 5 分钟），由在 home 自己的电脑上的 **Add a device** 或 `delorun devices approve` 打开。**弹窗配对**（pop-up pairing）：无需窗口，由以电脑自身用户身份登录 Tailscale 的设备（或在允许时，任何 tailnet 设备）发出的请求；电脑上的 studio 会显示它，本人仍须输入匹配码。<a id="approval-window"></a>
 - **受信任设备**（trusted device）：home 已为某个 studio 地址批准的浏览器或桌面应用。它持有绑定到该地址来源的设备密钥，因此新地址会再次批准它。**设备批准**（device approval）：在一个实时会话中，由受信任设备批准新设备，方法是输入新设备显示的代码。<a id="trusted-device"></a>
-- **身份因子**（identity factor）：为远程访问证明本人身份的登录方式：通行密钥、本人自己的 OpenID Connect 提供方，或在使用 Delorun 中继时的 Delo Run 账户；开启远程访问时，须为每个 studio 地址注册。仅本地的 home 不需要它；公开远程访问必须具备它，tailnet 私有远程访问则可改用 tailnet 身份。它从不替代设备批准。<a id="identity-factor"></a>
+- **身份因子**（identity factor）：为远程访问证明本人身份的登录方式：通行密钥、本人自己的 OpenID Connect 提供方，或在使用 Delorun 中继时的 Delorun 账户；开启远程访问时，须为每个 studio 地址注册。仅本地的 home 不需要它；公开远程访问必须具备它，tailnet 私有远程访问则可改用 tailnet 身份。它从不替代设备批准。<a id="identity-factor"></a>
 - **恢复套件**（recovery kit）：所有受信任设备丢失时，用于恢复批准权限的已保存密钥。使用它需要身份因子，并会换成一个新套件。home 自己的终端（`delorun devices reset`）是另一条恢复途径；在没有身份因子的情况下，它是唯一途径。<a id="recovery-kit"></a>
 - **所有者认领**（owner claim）：尚无所有者的 home 的首台设备认领，须凭所有者验证码完成，且只在 home 的回环监听器上接受；home 有所有者之前，远程访问保持关闭。<a id="owner-claim"></a>
 
@@ -161,7 +161,7 @@ Delorun 的文档、skill、界面文案与拉取请求所用的词，每个概�
 - **运行日志**（operational log）：Delorun 各进程（CLI home 进程、桌面 Host、Docker 监管器、自托管中继）记录其运行情况的文件。Delorun 的约定要求它轮转、从不保存密钥，并可通过 `delorun logs` 查看。它不同于记录 chat 且永久保留的会话日志。代码与维护者文档中为运行日志约定。<a id="operational-log"></a>
 - **会话与轮次键**（session and turn keys）：上游的会话与轮次 id。属于某个会话与轮次的运行日志记录携带它们，使一个 chat 的轮次能追溯到背后的进程故障；会话日志事件不携带额外的 id。<a id="log-keys"></a>
 - **活动历史**（activity history）：一个只读视图，基于会话日志展示每个 chat 做过的事，通过 `delorun history` 查看。未提供此功能，界面文本不使用该术语。**系统状态面板**（system-stats panel）：每台机器上的实时 CPU、内存与进程占用，位于活动历史旁边。未提供此功能。<a id="activity-history"></a>
-- **遥测**（telemetry）：Delorun 会发送到 Delo Run、不含内容的使用数据。Delorun 不发送自有遥测；Delorun 新增的任何遥测都需经本人选择开启，默认为「否」，并显示其确切负载。上游的产品分析与 DeepSeek 会话日志上传是独立的；Delorun 的约定要求它们保持可用，除非本人选择开启，否则保持关闭。<a id="telemetry"></a>
+- **遥测**（telemetry）：Delorun 会发送到托管服务、不含内容的使用数据。Delorun 不发送自有遥测；Delorun 新增的任何遥测都需经本人选择开启，默认为「否」，并显示其确切负载。上游的产品分析与 DeepSeek 会话日志上传是独立的；Delorun 的约定要求它们保持可用，除非本人选择开启，否则保持关闭。<a id="telemetry"></a>
 
 <a id="community"></a>
 

@@ -53,7 +53,7 @@ DeepSeek Harness 的插件和聊天保持兼容。一个人看到的一切，也
 这是随后内容的计划顺序，而不是一组承诺。前一阶段就绪后，下一阶段才开始。
 
 - **桌面应用。** macOS 和 Windows 覆盖了大多数开发者。它在 Windows 上管理 WSL2，与命令行共用一个 profile，并增加 macOS 的发布版本。
-- **然后是带账号的免费中继。** 无需 Tailscale 即可访问：`your-name.delo.run` 形式的 studio 地址、一个 Delo Run 账号，以及通过 Delorun 进行的设备批准。[Delorun 中继](../reference/glossary.zh.md#delorun-relay)转交它无法读取的加密流量，公布它的页面会准确说明 Delorun 能看到什么。它是免费的，每个账号在设备和流量上有合理使用上限。在此之前，[远程访问](../reference/glossary.zh.md#reach)是你自己的 tailnet 上的 Tailscale（[用手机访问 studio](everyday-use/reach.zh.md)）。
+- **然后是带账号的免费中继。** 无需 Tailscale 即可访问：`your-name.delo.run` 形式的 studio 地址、一个 Delorun 账号，以及通过 Delorun 进行的设备批准。[Delorun 中继](../reference/glossary.zh.md#delorun-relay)转交它无法读取的加密流量，公布它的页面会准确说明 Delorun 能看到什么。它是免费的，每个账号在设备和流量上有合理使用上限。在此之前，[远程访问](../reference/glossary.zh.md#reach)是你自己的 tailnet 上的 Tailscale（[用手机访问 studio](everyday-use/reach.zh.md)）。
 - **然后是额外的机器。** 在一个 studio 中，让聊天运行在笔记本、服务器或家用实验室的机器上。如果已有的 DeepSeek Harness 插件能胜任，Delorun 就采用它。
 - **然后是 `1.0.0`，可供企业使用。** 桌面应用、中继和额外的机器都能工作，签名密钥在离线机器上的密钥仪式中生成，外部安全评审已经完成并公布了报告。
 

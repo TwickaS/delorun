@@ -1,5 +1,5 @@
 /**
- * Hand-written fixes to upstream's texts that Delo Run shows, laid over the
+ * Hand-written fixes to upstream's texts that Delorun shows, laid over the
  * generated vocabulary: upstream's casing slips, labels that read better in
  * Delorun's sentence case, the Chinese texts the generator's word swap does
  * not reach, and the plugin manager's install texts, which name `delorun plugin`

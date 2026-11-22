@@ -3,23 +3,23 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delorun/docs/guide/safety-and-updates/trust.md
 /:
-  en: 266aaf157f524bfa
-  zh: 2efbb5ff32a5f277
+  en: e22c821328528df9
+  zh: 62965cd0a0b161fd
 /what-you-trust-when-you-use-delorun:
   en: f4315a5bac9eafb1
   zh: a80080390e2d48b7
 /what-you-trust-when-you-use-delorun/summary:
-  en: ca3cbac9ceab261e
-  zh: 7f4db3f47cf3e0c5
+  en: 977978a0c08f52bf
+  zh: 9c8ef75b4f378090
 /what-you-trust-when-you-use-delorun/contents:
-  en: b8c23de6bfca0117
-  zh: 51dce95376c014a2
+  en: 20ff9a02a6ceaf1a
+  zh: f115852e94a5612d
 /what-you-trust-when-you-use-delorun/what-runs-on-your-computer:
   en: a6e9b7fafba970a8
-  zh: cac9df63eec95010
-/what-you-trust-when-you-use-delorun/what-delo-run-can-and-cannot-do:
-  en: cdaa8e830a58aaaf
-  zh: f3cfe05306bb2d05
+  zh: c63e657ed1af2a00
+/what-you-trust-when-you-use-delorun/what-the-delorun-project-can-and-cannot-do:
+  en: efd81f6ddc7f746b
+  zh: f74dc304de6e9fc8
 /what-you-trust-when-you-use-delorun/how-releases-are-signed-in-the-preview:
   en: aaf1b5304815634b
   zh: 4897409c29961276
@@ -27,20 +27,20 @@
   en: 63311d6fa2e2be78
   zh: a2de8be922c46669
 /what-you-trust-when-you-use-delorun/what-each-reach-option-shows-its-provider:
-  en: d77ab647abd6de35
-  zh: cccb913f407c9fe8
+  en: 5ff8a038c68670be
+  zh: 90529ff00f0284c8
 /what-you-trust-when-you-use-delorun/what-leaves-your-machine:
   en: a6089958da26ed66
   zh: d80a0461dc19e07b
 /what-you-trust-when-you-use-delorun/what-leaves-your-machine/by-default:
-  en: 3c1dd945b818e88e
-  zh: 31b38d3f09e8bd06
+  en: 92ccc068767c0924
+  zh: ddc8f0065d3ce704
 /what-you-trust-when-you-use-delorun/what-leaves-your-machine/only-when-you-opt-in:
   en: 24b24834c385288a
   zh: 688b75297645ec42
 /what-you-trust-when-you-use-delorun/checking-it-yourself:
-  en: 150281aa23c86735
-  zh: 84154954d68d63f7
+  en: bab8354ea38374e7
+  zh: 99dc23000aa81849
 /what-you-trust-when-you-use-delorun/reporting-a-problem:
   en: a870d140fd0bbee4
   zh: 5a91dd7cb42fa312

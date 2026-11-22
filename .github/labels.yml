@@ -76,7 +76,7 @@
   description: "Runtime supervision and process confinement: the supervisor, the Docker runtime and the sandbox."
 - name: area/account
   color: "bfdadc"
-  description: "Delo Run account pages and the waitlist."
+  description: "Delorun account pages and the waitlist."
 - name: area/docs-site
   color: "bfdadc"
   description: "Delorun's documentation website."

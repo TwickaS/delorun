@@ -206,7 +206,7 @@ Own-domain reach is the self-hosted relay option. The certificate authority this
 <a id="delorun-relay-client"></a>
 ### Delorun relay client
 
-Delorun does not include a Delorun relay client ([roadmap](../guide/roadmap.md)): it registers no `delorun-relay` provider, and setup does not offer the option. Such a provider registers through the same Service Definition with the option id `delorun-relay`, publishes a visibility note that names what Delo Run can see and do, including that Delorun could obtain a publicly logged certificate for a `delo.run` name, and follows [C6's rules for the Delorun relay](c06-relay-protocol.md#delorun-relay).
+Delorun does not include a Delorun relay client ([roadmap](../guide/roadmap.md)): it registers no `delorun-relay` provider, and setup does not offer the option. Such a provider registers through the same Service Definition with the option id `delorun-relay`, publishes a visibility note that names what the hosted service can see and do, including that Delorun could obtain a publicly logged certificate for a `delo.run` name, and follows [C6's rules for the Delorun relay](c06-relay-protocol.md#delorun-relay).
 
 <a id="consumers"></a>
 ## Consumers

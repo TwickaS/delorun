@@ -110,7 +110,7 @@ Delorun 不会启动其设置关闭了某项保护的 [profile](../../reference/
 - 如果无法读取完全访问授权列表，那么没有任何授权有效，“设置”→“安全”→“权限”会这样说明：请修复或删除它所指出的文件，然后重新授权。
 - 如果你在没有授权的文件夹中运行 `delorun headless`，那么它会以 “which you have not granted full access” 拒绝且不会启动：请运行 `delorun workspace full-access <folder> on`，或不带完全访问运行。正在运行的 headless 任务只在它下次检查权限时才会看到撤销。
 - 如果你在 chat 中选择更安全的预设，那么工作区的授权会被撤回，该工作区中其他处于完全访问的已打开 chat 也会降级：要回到原状，请重新授权。
-- 如果单条命令在没有授权的情况下请求在沙箱之外运行，那么 DeepSeek Harness 会直接询问你，它的问题不会说明该命令可以读取 Delorun 的 home：请把它当作可以读取来看待。
+- 如果单条命令在没有授权的情况下请求在沙箱之外运行，那么 Delorun 会用原有的批准问题直接询问你，该问题不会说明该命令可以读取 Delorun 的 home：请把它当作可以读取来看待。
 - 如果你在 setup 中选择了 [**Ask less (like DeepSeek Harness)**](../../reference/glossary.zh.md#ask-less)，那么工作区会像在 DeepSeek Harness 中那样，在 studio 自己的确认之后切换为完全访问，没有按工作区的授权。
 
 </details>

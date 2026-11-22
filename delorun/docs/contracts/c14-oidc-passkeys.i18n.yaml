@@ -3,20 +3,20 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delorun/docs/contracts/c14-oidc-passkeys.md
 /:
-  en: 3baa081f23d04b55
-  zh: 3cfd99c3c0fa555e
+  en: 9a6ce9f85f86aea6
+  zh: cff75c8b224ea5da
 /contract-c14-openid-connect-and-passkeys:
   en: 756b70d68705e2c0
   zh: 6e30c6465bbfd3b4
 /contract-c14-openid-connect-and-passkeys/summary:
-  en: 8ebeff5c3631e81e
-  zh: 95c2071329054ea9
+  en: bb5718bca238e73f
+  zh: 6af8e6cd5027f8a1
 /contract-c14-openid-connect-and-passkeys/status:
-  en: bd304e2216b634b8
-  zh: 5a70084f89621d80
+  en: 643469d1a3d33466
+  zh: 1a2cd9d9715d21bd
 /contract-c14-openid-connect-and-passkeys/contents:
-  en: ba0206131f7f04e4
-  zh: 15bc1d3277230031
+  en: d165f93573aa3951
+  zh: 53ec1a717888436c
 /contract-c14-openid-connect-and-passkeys/contract:
   en: 01be7ced4357bf93
   zh: d0b98165ff86d494
@@ -69,11 +69,11 @@
   en: a72ddae0f679d724
   zh: ac19d58423de47a9
 /contract-c14-openid-connect-and-passkeys/contract/errors:
-  en: 9941fc1afdcd2a15
-  zh: b86bc33d7321498e
-/contract-c14-openid-connect-and-passkeys/contract/delo-run-issuer:
-  en: 6051dd4d0ff54a25
-  zh: 770990173ac3d2c2
+  en: e172311af0313ef1
+  zh: d364e8a00c7ca823
+/contract-c14-openid-connect-and-passkeys/contract/delorun-issuer:
+  en: b7203a6816b5bc55
+  zh: 6127c61efdfeefde
 /contract-c14-openid-connect-and-passkeys/consumers:
   en: a364f544d5ebac68
   zh: 64399ccdd6f722c6

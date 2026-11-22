@@ -110,9 +110,9 @@ CLI profile 改变了以下默认值。[对等清单](../reference/parity-with-d
 
 远程访问关闭时，任何 Tailscale 节点、中继或身份提供方都不在通往 studio 的路径上。开启 Tailscale 私有远程访问时，由 Tailscale 承载流量：其协调服务能看到机器的名称、机器与每台设备的 IP 地址、连接时间与流量大小，除非开启 Tailnet Lock，它可以向 tailnet 添加设备，并获取 `ts.net` 证书。被添加的设备可以打开登录页面并请求批准，在本人于电脑上批准之前无法打开任何 chat。自托管中继与 OpenID Connect 提供方尚未构建，因此两者都不在任何路径上。[远程访问设计](../design/reach.zh.md)以及约定 [C5](../contracts/c05-device-approval.zh.md)、[C6](../contracts/c06-relay-protocol.zh.md)、[C7](../contracts/c07-reach-providers.zh.md) 与 [C14](../contracts/c14-oidc-passkeys.zh.md) 说明了每一方能看到和能做的事，并各自附有已存在内容的状态。
 
-### Delo Run 项目
+### Delorun 项目
 
-Delo Run 持有离线的 root 与 targets 密钥以及在线的 timestamp 密钥。它可以发布一个已签名并记录在公开日志中的版本。在本人确认之前，没有客户端会安装它：npm 启动器只安装到空的运行时仓库中，`delorun update` 也只在本人确认后才应用。更新从不转到更低的发布：运行时仓库在安装任何内容之前，以 `TARGET_LOWER` 拒绝低于正在运行版本的通道发布或请求的版本，`delorun update` 拒绝这样的报告，只有 `delorun recover rollback` 能回退。timestamp 命令拒绝降低通道版本，客户端也拒绝比自己已存储的更旧的 timestamp，因此不持有密钥的通道宿主只能扣住更新的发布，且只到它最后提供的 timestamp 在签发 3 天后过期为止；在此期间启动仍运行已安装的发布（[C2](../contracts/c02-release-manifest.zh.md#freshness-and-rollback-protection)）。Delo Run 无法进入 home：通往 studio 的任何路径上都没有 Delorun 基础设施，它也不持有 home 的任何密钥。本人对 Delo Run 的剩余信任包括其发布，以及提供其元数据的 `delorun.com` 名称。
+Delorun 项目持有离线的 root 与 targets 密钥以及在线的 timestamp 密钥。它可以发布一个已签名并记录在公开日志中的版本。在本人确认之前，没有客户端会安装它：npm 启动器只安装到空的运行时仓库中，`delorun update` 也只在本人确认后才应用。更新从不转到更低的发布：运行时仓库在安装任何内容之前，以 `TARGET_LOWER` 拒绝低于正在运行版本的通道发布或请求的版本，`delorun update` 拒绝这样的报告，只有 `delorun recover rollback` 能回退。timestamp 命令拒绝降低通道版本，客户端也拒绝比自己已存储的更旧的 timestamp，因此不持有密钥的通道宿主只能扣住更新的发布，且只到它最后提供的 timestamp 在签发 3 天后过期为止；在此期间启动仍运行已安装的发布（[C2](../contracts/c02-release-manifest.zh.md#freshness-and-rollback-protection)）。该项目无法进入 home：通往 studio 的任何路径上都没有 Delorun 基础设施，它也不持有 home 的任何密钥。本人对 Delorun 项目的剩余信任包括其发布，以及提供其元数据的 `delorun.com` 名称。
 
 ### 上游与依赖作者
 

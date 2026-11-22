@@ -64,7 +64,7 @@ The rows are the guarantees a person reasonably expects of a native workspace. "
 
 A self-hosted home is a home directory (`~/.delorun`) on a machine you own and operate. What that means for trust:
 
-- **You hold the keys.** Model credentials live on your machine; Delo Run has no route to them. The release and release-log hosts learn your IP address and the version you ask for, nothing else.
+- **You hold the keys.** Model credentials live on your machine; the Delorun project has no route to them. The release and release-log hosts learn your IP address and the version you ask for, nothing else.
 - **You own the operating system.** File permissions, full-disk encryption, backups and who can log in are yours. Delorun's protection is the home's 0700 and 0600 layout on Linux and macOS plus the sandbox's protected-home rules in the CLI profile; it is not disk encryption, and it does not defend against a program you run as the same user.
 - **You own the update decision.** `delorun update` reports what an update will change and applies nothing until you confirm; it snapshots the profile and rolls back when the new release fails its health check. The signature check does not depend on the host that serves the files.
 - **You can check it.** `delorun verify` reports the installed release's signature, its release-log state and its files. It reports its other checks, the confinement rules among them, as not run.

@@ -75,7 +75,7 @@ export const EN = {
     privacy: 'Privacy',
     licence: 'MIT licence',
     upstream: 'Built on DeepSeek Harness',
-    owner: `Delorun is published by ${TRADING_NAME}`,
+    owner: `Published by ${TRADING_NAME}`,
     skip: 'Skip to the content',
     primaryNav: 'Main',
     footerNav: 'Footer',

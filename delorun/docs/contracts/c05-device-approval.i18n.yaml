@@ -15,8 +15,8 @@
   en: e2f72e51c29a128c
   zh: c1e08c2c5e3ac456
 /contract-c5-device-approval/contents:
-  en: 1fbf42d12d2d5bf7
-  zh: 03b0f807fa83d9e6
+  en: f6b1785f56e76252
+  zh: a0f19785ea53b912
 /contract-c5-device-approval/contract:
   en: f01b7dcd9a443524
   zh: 612df9cabb1d68ca
@@ -72,11 +72,11 @@
   en: 7ac0a26c2e842990
   zh: 907b54c1de73ea5f
 /contract-c5-device-approval/contract/errors:
-  en: cdd2da28b6c3fb27
-  zh: fbad38fb63d19490
-/contract-c5-device-approval/contract/delo-run-mailbox:
-  en: d4216e052b6b5af8
-  zh: b85b158f50b94cd9
+  en: b161bd19db4ea135
+  zh: 27fbc4bb2488e6a1
+/contract-c5-device-approval/contract/delorun-mailbox:
+  en: de6957e6ce5cb080
+  zh: 8f2df2e7728a12f7
 /contract-c5-device-approval/consumers:
   en: 01b67904e78edd67
   zh: 260a4a5d09cedc70

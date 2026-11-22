@@ -1,5 +1,5 @@
 ---
-description: "Contract C14: the identity factors a reach address can use, passkey relying-party IDs per address with the ts.net rule both ways, the person's own OpenID Connect provider with client registration and redirect URIs per address, required claims, audience per home, the owner identity pinned at its first enrolment, nonce, PKCE, issuer checks and mix-up protection, signing key IDs and rotation, and the Delo Run issuer as a fast-follow."
+description: "Contract C14: the identity factors a reach address can use, passkey relying-party IDs per address with the ts.net rule both ways, the person's own OpenID Connect provider with client registration and redirect URIs per address, required claims, audience per home, the owner identity pinned at its first enrolment, nonce, PKCE, issuer checks and mix-up protection, signing key IDs and rotation, and the Delorun issuer as a fast-follow."
 ---
 
 # Contract C14: OpenID Connect and passkeys
@@ -9,7 +9,7 @@ English | [中文](c14-oidc-passkeys.zh.md)
 <a id="summary"></a>
 ## Summary
 
-Reach asks for an identity factor in addition to device approval: a passkey, or a sign-in at the person's own OpenID Connect provider. The home is the relying party for both. This page defines which factors each reach address can use, the passkey relying-party ID of each address, how the home registers as a client at the person's provider, the authorisation flow with its nonce, PKCE and issuer checks, the claims and audience the home requires, the owner identity it pins, how it fetches and rotates signing keys, and the rules that bind the Delo Run issuer, a fast-follow. A factor never replaces device approval ([C5](c05-device-approval.md)). The types package [`@delorun/contract-oidc-passkeys`](../../packages/contract-oidc-passkeys/README.md) carries the rules, claims, codes and limits.
+Reach asks for an identity factor in addition to device approval: a passkey, or a sign-in at the person's own OpenID Connect provider. The home is the relying party for both. This page defines which factors each reach address can use, the passkey relying-party ID of each address, how the home registers as a client at the person's provider, the authorisation flow with its nonce, PKCE and issuer checks, the claims and audience the home requires, the owner identity it pins, how it fetches and rotates signing keys, and the rules that bind the Delorun issuer, a fast-follow. A factor never replaces device approval ([C5](c05-device-approval.md)). The types package [`@delorun/contract-oidc-passkeys`](../../packages/contract-oidc-passkeys/README.md) carries the rules, claims, codes and limits.
 
 <a id="status"></a>
 ## Status
@@ -17,7 +17,7 @@ Reach asks for an identity factor in addition to device approval: a passkey, or 
 Face ID unlock (below) is built. The passkey and OpenID Connect sign-in factors on this page are not built: the home has no passkey relying party and no OpenID Connect client. The `tailnet-membership` factor of the Tailscale private route is built.
 
 - **Built and reached:** setup's answers schema names `reach.identityFactor` and refuses any value other than `null` in a `--config` document ([C11](c11-setup-answers.md)).
-- **Not built:** passkey enrolment and assertion with user verification and counters; client registration at the person's provider; the authorisation flow with `state`, `nonce`, PKCE and issuer checks; ID token checks and signing-key rotation; the pinned owner subject; re-authentication; the Delo Run issuer.
+- **Not built:** passkey enrolment and assertion with user verification and counters; client registration at the person's provider; the authorisation flow with `state`, `nonce`, PKCE and issuer checks; ID token checks and signing-key rotation; the pinned owner subject; re-authentication; the Delorun issuer.
 
 The requirements and denial tests below that this list names as not built or reached by nothing protect no one until a change builds and wires them. The [reach design](../design/reach.md) states that the private tailnet route signs in with the approved device key alone, with no passkey or OpenID Connect; where this page lists an identity factor for `tailscale-private`, the design supersedes it.
 
@@ -43,7 +43,7 @@ The requirements and denial tests below that this list names as not built or rea
   - [PIN mode](#pin-mode)
   - [Limits](#limits)
   - [Errors](#errors)
-  - [Delo Run issuer](#delo-run-issuer)
+  - [Delorun issuer](#delorun-issuer)
 - [Consumers](#consumers)
 - [Compatibility](#compatibility)
 - [Security](#security)
@@ -315,16 +315,16 @@ The error codes `PIN_INVALID`, `PIN_WEAK`, `PIN_MODE_OFF`, `PIN_NOT_ALLOWED_ON_A
 | `UNLOCK_INVALID` | A page-unlock token; no device holds a running page unlock, so every token is unknown. |
 | `LOOPBACK_REQUIRED` | A session whose factor is `tailnet-membership` answers a prompt or sends a request for an action granted only at the home's own computer ([tailnet membership](#tailnet-membership)). |
 
-<a id="delo-run-issuer"></a>
-### Delo Run issuer
+<a id="delorun-issuer"></a>
+### Delorun issuer
 
-The Delo Run issuer, which lets a person sign in with a Delo Run account, is not part of Delorun, which configures no Delo Run issuer ([roadmap](../guide/roadmap.md)). Such an issuer follows every rule of this page as a second issuer, and also these:
+The Delorun issuer, which lets a person sign in with a Delorun account, is not part of Delorun, which configures no Delorun issuer ([roadmap](../guide/roadmap.md)). Such an issuer follows every rule of this page as a second issuer, and also these:
 
 - Its redirect URI is `https://<address>/auth/oidc/callback/delorun`, so it never shares a redirect URI with the person's provider.
 - It signs ID tokens with asymmetric keys only, every token header carries `kid`, and it publishes a key set.
 - It publishes a new signing key in its key set at least 24 hours before it signs with it, and keeps a retired key there for at least 24 hours after its last use.
 - Its signing private keys are Cloudflare Worker secrets, never in a repository, a configuration file or a log.
-- Its audience is the client ID Delo Run assigns to each home.
+- Its audience is the client ID the hosted service assigns to each home.
 
 <a id="consumers"></a>
 ## Consumers

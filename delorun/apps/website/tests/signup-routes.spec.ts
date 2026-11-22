@@ -81,7 +81,7 @@ describe('POST /api/subscribe', () => {
     await route(post('/api/subscribe', SIGNUP), h.env, h.deps)
     expect(h.sent).toHaveLength(1)
     const [message] = h.sent
-    expect(message).toMatchObject({ to: 'ada@example.com', replyTo: 'support@delorun.com', from: { email: 'updates@delorun.com', name: 'Delo Run' } })
+    expect(message).toMatchObject({ to: 'ada@example.com', replyTo: 'support@delorun.com', from: { email: 'updates@delorun.com', name: 'Delorun' } })
     expect(message?.text).toContain('Hello Ada,')
     expect(message?.headers['List-Unsubscribe']).toContain(`${ORIGIN}/unsubscribe?token=`)
     expect(message?.headers['List-Unsubscribe-Post']).toBe('List-Unsubscribe=One-Click')

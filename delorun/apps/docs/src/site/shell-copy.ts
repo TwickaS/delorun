@@ -29,14 +29,14 @@ export const THEME_COPY: Readonly<Record<Locale, ThemeCopy>> = {
 export const FOOTER_COPY: Readonly<Record<Locale, FooterCopy>> = {
   en: {
     navLabel: 'Footer',
-    owner: 'Delo Run',
+    owner: 'Published by Delorun',
     licence: { label: 'MIT licence', href: `${GITHUB_URL}/blob/main/LICENSE` },
     upstream: { label: 'Built on DeepSeek Harness', href: UPSTREAM_URL },
     theme: THEME_COPY.en,
   },
   zh: {
     navLabel: '页脚',
-    owner: 'Delo Run',
+    owner: '由 Delorun 发布',
     licence: { label: 'MIT 许可证', href: `${GITHUB_URL}/blob/main/LICENSE` },
     upstream: { label: '基于 DeepSeek Harness 构建', href: UPSTREAM_URL },
     theme: THEME_COPY.zh,
