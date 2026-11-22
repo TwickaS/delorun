@@ -75,7 +75,7 @@ An install prints one line per step to standard error, so the output of the comm
 Resolving the release: the stable channel names 0.1.0-preview.2.7.
 Checking the signature: 0.1.0-preview.2.7 is signed under release root 1.
 Checking the release log: verified.
-Downloading delorun-0.1.0-preview.2.7-linux-x64.tar.gz (217.9 MB).
+Downloading delorun-0.1.0-preview.2.7-linux-x64.tar.gz (218.0 MB).
 Installing release 0.1.0-preview.2.7.
 ```
 
