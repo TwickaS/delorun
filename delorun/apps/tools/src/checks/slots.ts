@@ -7,7 +7,11 @@
  * A run asks for slots by writing a request `req-<priority>-<milliseconds>-<pid>.json` into one directory. Requests are
  * served first come, first served within a priority, and priority 0 (a push to the trunk) goes ahead of waiting priority 1
  * requests; no holder is interrupted. A request is granted when its minimum fits beside the holders and every request ahead
- * of it has been granted, except that a request that touches no disk may pass one that waits only for a disk-heavy place.
+ * of it has been granted, except that a request that touches no disk may pass one that waits only for a disk-heavy place, and
+ * that a later request may start beside the head, the first waiting request that does not fit, when it fits, touches no disk
+ * and is granted its minimum, and the slots and memory held by runs granted after the head began to wait, with this grant, stay
+ * within the machine less the head's minimum and memory: so the head fits as soon as the holders that were there before it
+ * have finished, whatever the runs that started beside it are doing.
  * The grant is elastic: the run gets what it asks for up to the free slots, and at most the machine less a reserve of a
  * quarter of the slots, so a small run can always start beside a large one; a trunk push may take the reserve. A grant is
  * recorded as `held-<pid>.json` and removed when the process ends; the files of dead processes are removed by whichever run
@@ -208,10 +212,27 @@ export function decide(state: SlotState, pid: number, budget: SlotBudget): { rea
   const reserve = Math.floor(budget.slots / 4)
   // What a fitting request is granted from the free slots: what it asks for, at most the machine less the reserve.
   const grantOf = (request: SlotRequest, free: number): number => Math.max(request.min, Math.min(request.want, free, request.priority === 0 ? budget.slots : budget.slots - reserve))
-  // An earlier request that does not fit holds back every later one; one that waits only for a disk-heavy place holds back
-  // the later disk-heavy ones. Each earlier request that would start keeps for itself the grant it would get.
+  // The first earlier request that does not fit is the head. It holds back every later one, except that a small later
+  // request may start beside it while the head is not delayed (see `backfills`). A request that waits only for a disk-heavy
+  // place holds back the later disk-heavy ones. Each earlier request that would start keeps for itself the grant it would get.
   let ahead: string | undefined
   let diskAhead: string | undefined
+  let head: { readonly min: number, readonly need: number } | undefined
+  // Slots and memory held by runs granted after the head began to wait, and by earlier requests that start in this pass:
+  // what the head cannot count on getting back when the runs that were already there finish.
+  let lateSlots = 0
+  let lateMemory = 0
+  let takenSlots = 0
+  let takenMemory = 0
+  // A later request may start beside the blocked head when it fits, touches no disk, and the runs granted after the head
+  // began to wait, with this one, leave room for the head's minimum and memory; so the head fits as soon as every holder
+  // that was there before it has finished, whatever the later runs are doing.
+  const backfills = (request: SlotRequest, need: number): boolean => head !== undefined
+    && !request.disk
+    && request.min <= slots
+    && need <= memory
+    && lateSlots + request.min <= budget.slots - head.min
+    && lateMemory + need <= budget.memoryBytes - head.need
   for (const request of state.waiting) {
     const need = Math.max(request.memoryBytes, request.min * perSlot)
     const fits = request.min <= slots && need <= memory
@@ -219,7 +240,7 @@ export function decide(state: SlotState, pid: number, budget: SlotBudget): { rea
     if (request.pid === pid) {
       const older = state.oldWaiting.find(ticket => ticket.priority < request.priority || (ticket.priority === request.priority && ticket.since < request.since))
       if (older !== undefined) return { waits: `an old worktree's run in process ${String(older.pid)} arrived earlier and waits in the previous queue` }
-      if (ahead !== undefined) return { waits: ahead }
+      if (ahead !== undefined) return backfills(request, need) ? { slots: request.min, memoryBytes: need } : { waits: ahead }
       if (request.disk && diskAhead !== undefined) return { waits: diskAhead }
       if (request.min > slots) return { waits: `${String(slots)} of ${String(budget.slots)} slots are free and it needs ${String(request.min)}` }
       if (!fits) return { waits: `${(memory / 1024 ** 3).toFixed(1)} GiB of memory is free and it needs ${(need / 1024 ** 3).toFixed(1)} GiB` }
@@ -228,13 +249,30 @@ export function decide(state: SlotState, pid: number, budget: SlotBudget): { rea
       return { slots: granted, memoryBytes: Math.min(memory, Math.max(request.memoryBytes, granted * perSlot)) }
     }
     if (!fits) {
+      if (head === undefined) {
+        head = { min: request.min, need }
+        const later = state.holders.filter(holder => holder.since > request.since)
+        lateSlots = takenSlots + later.reduce((sum, holder) => sum + holder.slots, 0)
+        lateMemory = takenMemory + later.reduce((sum, holder) => sum + holder.memoryBytes, 0)
+      }
       ahead ??= `the request of process ${String(request.pid)} is ahead in the queue`
       continue
     }
-    if (ahead !== undefined) continue
+    if (ahead !== undefined) {
+      if (backfills(request, need)) {
+        slots -= request.min
+        memory -= need
+        lateSlots += request.min
+        lateMemory += need
+      }
+      continue
+    }
     const takes = grantOf(request, slots)
+    const takesMemory = Math.max(need, Math.min(memory, takes * perSlot))
     slots -= takes
-    memory -= Math.max(need, Math.min(memory, takes * perSlot))
+    memory -= takesMemory
+    takenSlots += takes
+    takenMemory += takesMemory
     if (!request.disk) continue
     if (diskFree) disk -= 1
     else diskAhead ??= `the request of process ${String(request.pid)} waits ahead for a disk-heavy place`
