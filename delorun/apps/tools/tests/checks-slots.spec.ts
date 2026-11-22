@@ -416,6 +416,82 @@ describe('the order of requests', () => {
   })
 })
 
+describe('a run that starts beside a blocked head', () => {
+  const small: SlotBudget = { slots: 16, memoryBytes: 16 * GIB, diskRuns: 2 }
+  const request = (pid: number, extra: { min?: number, want?: number, memoryBytes?: number, disk?: boolean, since: number }) => ({ file: String(pid), pid, want: extra.want ?? extra.min ?? 2, min: extra.min ?? 2, memoryBytes: extra.memoryBytes ?? 0, disk: extra.disk ?? false, priority: 1 as const, label: '', since: extra.since })
+  const holder = (pid: number, slots: number, since: number, extra: { memoryBytes?: number } = {}) => ({ file: `h${String(pid)}`, pid, slots, memoryBytes: extra.memoryBytes ?? 0, disk: false, priority: 1 as const, label: '', since, requested: since })
+  const head = request(1, { min: 8, since: 10 })
+  const waits = { waits: 'the request of process 1 is ahead in the queue' }
+
+  it('starts two 2-slot requests behind an 8-slot head beside a 12-slot holder, and makes a third wait, each with its minimum', () => {
+    const state = { oldWaiting: [], holders: [holder(9, 12, 0)], waiting: [head, request(2, { want: 4, since: 11 }), request(3, { since: 12 }), request(4, { since: 13 })] }
+    expect(decide(state, 1, small)).toEqual({ waits: '4 of 16 slots are free and it needs 8' })
+    expect(decide(state, 2, small)).toEqual({ slots: 2, memoryBytes: 2 * GIB })
+    expect(decide(state, 3, small)).toEqual({ slots: 2, memoryBytes: 2 * GIB })
+    expect(decide(state, 4, small)).toEqual(waits)
+  })
+
+  it('does not delay the head: runs granted after it began to wait never hold more than the machine less its minimum', () => {
+    // 4 slots are free, but 6 are held by runs granted after the head waits and the head needs 8 of 16.
+    const state = { oldWaiting: [], holders: [holder(9, 6, 0), holder(8, 6, 11)], waiting: [head, request(2, { since: 12 })] }
+    expect(decide(state, 2, small)).toEqual({ slots: 2, memoryBytes: 2 * GIB })
+    const full = { ...state, holders: [holder(9, 4, 0), holder(8, 6, 11)], waiting: [head, request(2, { since: 12 }), request(3, { since: 13 })] }
+    // 6 late slots plus this one's 2 reach the 8 allowed; the next small request waits though 6 slots are free.
+    expect(decide(full, 2, small)).toEqual({ slots: 2, memoryBytes: 2 * GIB })
+    expect(decide(full, 3, small)).toEqual(waits)
+    expect(decide({ ...full, holders: [holder(9, 4, 0), holder(8, 7, 11)] }, 2, small)).toEqual(waits)
+    // Holders that were there before the head do not count against the bound.
+    expect(decide({ ...full, holders: [holder(9, 4, 0), holder(8, 6, 5)] }, 3, small)).toEqual({ slots: 2, memoryBytes: 2 * GIB })
+  })
+
+  it('bounds the memory the same way against the head\'s need', () => {
+    const memoryHead = request(1, { min: 2, memoryBytes: 10 * GIB, since: 10 })
+    const state = { oldWaiting: [], holders: [holder(9, 2, 0, { memoryBytes: 8 * GIB }), holder(8, 2, 11, { memoryBytes: 3 * GIB })], waiting: [memoryHead, request(2, { memoryBytes: 3 * GIB, since: 12 }), request(3, { memoryBytes: 4 * GIB, since: 13 })] }
+    // 16 - 10 = 6 GiB may be held by later runs: 3 GiB held and 3 GiB more fit, then 4 GiB more would not.
+    expect(decide(state, 1, small)).toEqual({ waits: '5.0 GiB of memory is free and it needs 10.0 GiB' })
+    expect(decide(state, 2, small)).toEqual({ slots: 2, memoryBytes: 3 * GIB })
+    expect(decide(state, 3, small)).toEqual(waits)
+  })
+
+  it('still makes a disk-heavy request behind the head wait', () => {
+    const state = { oldWaiting: [], holders: [holder(9, 12, 0)], waiting: [head, request(2, { disk: true, since: 11 })] }
+    expect(decide(state, 2, small)).toEqual(waits)
+  })
+
+  it('starts the head as soon as the earlier holder leaves, with the backfilled runs still holding', () => {
+    const state = { oldWaiting: [], holders: [holder(9, 12, 0)], waiting: [head, request(2, { since: 11 }), request(3, { since: 12 })] }
+    const backfilled = [holder(2, 2, 13), holder(3, 2, 14)]
+    expect(decide({ ...state, holders: [holder(9, 12, 0), ...backfilled], waiting: [head] }, 1, small)).toEqual({ waits: '0 of 16 slots are free and it needs 8' })
+    expect(decide({ ...state, holders: backfilled, waiting: [head] }, 1, small)).toEqual({ slots: 8, memoryBytes: 8 * GIB })
+  })
+
+  it('leaves requests ahead of the head as they were, and counts what they take against the bound', () => {
+    const state = { oldWaiting: [], holders: [holder(9, 10, 0)], waiting: [request(2, { since: 5 }), head, request(3, { since: 12 })] }
+    // The earlier small request starts as it always did; the head waits for slots; the later one backfills beside both.
+    expect(decide(state, 2, small)).toEqual({ slots: 2, memoryBytes: 2 * GIB })
+    expect(decide(state, 3, small)).toEqual({ slots: 2, memoryBytes: 2 * GIB })
+    // A grant the earlier request takes counts against the bound, so no more slots go to later ones than the head can spare.
+    const wideHead = request(1, { min: 10, since: 10 })
+    const wide = { ...state, holders: [holder(9, 8, 0)], waiting: [{ ...request(2, { since: 5 }), want: 4 }, wideHead, request(3, { since: 12 }), request(4, { since: 13 })] }
+    expect(decide(wide, 2, small)).toEqual({ slots: 4, memoryBytes: 4 * GIB })
+    expect(decide(wide, 3, small)).toEqual({ slots: 2, memoryBytes: 2 * GIB })
+    expect(decide(wide, 4, small)).toEqual(waits)
+  })
+
+  it('grants a backfilled request through takeSlots, and the head then waits only for the earlier holder', async () => {
+    const machine = new Machine()
+    machine.hold(7, { slots: 12 })
+    const headHost = machine.host(1)
+    const headRun = takeSlots(headHost, paths, small, demand({ want: 8, min: 8 }))
+    machine.time += 10
+    const grant = await takeSlots(machine.host(2), paths, small, demand({ want: 4, min: 2 }))
+    expect(grant.slots).toBe(2)
+    machine.onSleep = (count) => { if (count === 3) machine.end(7) }
+    expect((await headRun).slots).toBe(8)
+    expect(machine.files.has('/s/held-2.json')).toBe(true)
+  })
+})
+
 describe('a claim that overfills the machine', () => {
   const holder = (pid: number, requested: number, extra: Partial<{ slots: number, memoryBytes: number, disk: boolean, priority: 0 | 1 }> = {}) => ({ pid, slots: 1, memoryBytes: GIB, disk: false, priority: 1 as const, label: '', since: 0, requested, file: `held-${String(pid)}.json`, ...extra })
 
