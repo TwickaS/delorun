@@ -227,6 +227,17 @@ describe('the welcome step', () => {
   })
 })
 
+describe('the welcome step on a studio with device access', () => {
+  it('names the address as copyable text only when one is given', () => {
+    render(<WelcomeStep services={stepServices()} guide={guideOf()} notice={undefined} deviceAddress="https://my-pc.example.ts.net" />)
+    expect(screen.getByText(en['welcome.devices'], { exact: false }).textContent).toBe(`${en['welcome.devices']} https://my-pc.example.ts.net`)
+    expect(screen.getByText('https://my-pc.example.ts.net').tagName).toBe('CODE')
+    cleanup()
+    render(<WelcomeStep services={stepServices()} guide={guideOf()} notice={undefined} />)
+    expect(screen.queryByText(en['welcome.devices'], { exact: false })).toBeNull()
+  })
+})
+
 describe('a command', () => {
   it('copies itself and says so, or says to copy it by hand when the clipboard refuses', async () => {
     const writeText = vi.fn(() => Promise.resolve())

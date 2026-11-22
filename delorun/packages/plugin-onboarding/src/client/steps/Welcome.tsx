@@ -52,16 +52,17 @@ export function StudioPreview({ t }: { readonly t: StepServices['t'] }): ReactNo
 }
 
 /**
- * @param props - the services, the guide and the preview notice when it is owed.
+ * @param props - the services, the guide, the preview notice when it is owed and the Tailscale address of the studio when device access is on.
  * @returns the step body.
  */
-export function WelcomeStep({ services, notice }: StepProps & { readonly notice: NoticeFace | undefined }): ReactNode {
+export function WelcomeStep({ services, notice, deviceAddress }: StepProps & { readonly notice: NoticeFace | undefined; readonly deviceAddress?: string | undefined }): ReactNode {
   const { t, language } = services
   const locale = useSyncExternalStore(useCallback(listener => language.subscribe(listener), [language]), () => language.getSnapshot())
   const [first, ...rest] = notice?.paragraphs() ?? []
   return (
     <div className={`${css.stack} ${welcome.welcome}`}>
       <p className={css.lead}>{t('welcome.lead')}</p>
+      {deviceAddress !== undefined && <p className={css.hint}>{t('welcome.devices')} <code className={`${css.command} ${welcome.address}`}>{deviceAddress}</code></p>}
       <div className={welcome.tiles}>
         <ChipGroup label={t('welcome.language')} value={locale.active} onChange={(id) => { language.setLocale(id) }} variant="tiles" hideLabel
           options={locale.locales.filter(each => COVERED_LOCALES.includes(each.id) || each.id === locale.active).map(each => ({

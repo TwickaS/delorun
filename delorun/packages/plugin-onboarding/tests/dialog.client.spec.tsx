@@ -39,6 +39,8 @@ interface Options {
   readonly extra?: readonly OnboardingStep[]
   readonly writeResult?: boolean | 'reject'
   readonly reach?: ReachState
+  /** The studio's address over Tailscale the reach status holds. */
+  readonly reachAddress?: string
   readonly start?: ReturnType<typeof startFace>
   readonly useStockLook?: () => Promise<boolean>
   /** The PIN state a phone reads; absent fails the read. */
@@ -61,7 +63,7 @@ async function mountEntry(options: Options = {}) {
   const completeStep = vi.fn((_id: string) => {})
   const startChat = vi.fn((_workspaceId?: string, _keepCurrent?: boolean) => Promise.resolve())
   const loadRecord = vi.fn(() => Promise.resolve(options.record ?? NO_RECORD))
-  const host = hostFake({ reach: options.reach ?? 'absent', ...options.tailscale === undefined ? {} : { readiness: { ...READY, tailscale: options.tailscale } } })
+  const host = hostFake({ reach: options.reach ?? 'absent', reachAddress: options.reachAddress, ...options.tailscale === undefined ? {} : { readiness: { ...READY, tailscale: options.tailscale } } })
   const start = options.start ?? startFace()
   const deferredOnly = createSnapshotStore(options.deferredOnly ?? false)
   const pinFetch = vi.fn((_input: string) => options.pinState === undefined ? Promise.reject(new Error('no PIN request')) : Promise.resolve(new Response(JSON.stringify(options.pinState))))
@@ -632,6 +634,34 @@ describe('finishing later and the last step', () => {
       const term = [...document.querySelectorAll('dt')].find(each => each.textContent === 'Phone access')
       expect(term?.nextElementSibling?.textContent).toBe(summary)
     })
+  })
+})
+
+describe('the welcome step and device access', () => {
+  const ADDRESS = 'https://my-pc.example.ts.net'
+  const message = () => screen.queryByText(en['welcome.devices'], { exact: false })
+
+  it('names the address at the computer while device access is on', async () => {
+    const { host } = await mountEntry({ reach: 'set-up', reachAddress: ADDRESS, record: { reachSetUp: true } })
+    expect(host.reachAddress).toHaveBeenCalledOnce()
+    expect(message()?.textContent).toBe(`${en['welcome.devices']} ${ADDRESS}`)
+  })
+
+  it.each<readonly [string, ReachState]>([['device access is off', 'off'], ['the home has no reach', 'absent']])('says nothing of it when %s, and never asks for the address', async (_, reach) => {
+    const { host } = await mountEntry({ reach, reachAddress: ADDRESS, record: { reachSetUp: false } })
+    expect(message()).toBeNull()
+    expect(host.reachAddress).not.toHaveBeenCalled()
+  })
+
+  it('says nothing of it on a device that is already signed in', async () => {
+    const { host } = await mountEntry({ reach: 'remote', reachAddress: ADDRESS, record: { reachSetUp: true } })
+    expect(message()).toBeNull()
+    expect(host.reachAddress).not.toHaveBeenCalled()
+  })
+
+  it('says nothing of it when the address cannot be read', async () => {
+    await mountEntry({ reach: 'set-up', record: { reachSetUp: true } })
+    expect(message()).toBeNull()
   })
 })
 

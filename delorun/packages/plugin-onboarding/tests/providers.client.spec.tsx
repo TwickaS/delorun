@@ -33,7 +33,7 @@ async function mount(change: Parameters<typeof providersFake>[0] = {}, keys: Key
   const guide = createGuide(hostFake({ keys }).host)
   render(
     <StepFrame title="Models" headingRef={null} count="Step 2 of 7" place={2} total={7} steps={['Welcome', 'Models']} stepsLabel="Steps" stepKey="models">
-      <ProvidersStep services={stepServices({ providers: providers.face })} guide={guide} next={next} back={back} remote={remote} pinOn={pinOn} />
+      <ProvidersStep services={stepServices({ providers: providers.face, remote })} guide={guide} next={next} back={back} remote={remote} pinOn={pinOn} />
     </StepFrame>,
   )
   await flush()
@@ -445,6 +445,26 @@ describe('a key Delorun already has', () => {
     const next = screen.getByRole('button', { name: en['providers.next'] })
     expect(document.activeElement).toBe(next)
     expect(next.hasAttribute('disabled')).toBe(false)
+  })
+
+  it('says Found on the host computer, and shows no key, when the studio is open on a paired device', async () => {
+    const answer = found({ kind: 'environment', variable: 'DEEPSEEK_API_KEY' })
+    await mount({}, answer, true)
+    await click(screen.getByRole('checkbox', { name: 'Use OpenAI' }))
+    await click(screen.getByRole('button', { name: en['providers.connect'] }))
+    expect(screen.getByText(en['providers.found.host'])).toBeTruthy()
+    expect(screen.queryByText(en['providers.found'])).toBeNull()
+    expect(document.body.querySelector('input')).toBeNull()
+    expect(document.body.innerHTML).not.toContain(FAKE_KEY)
+    // Pasting a key is still allowed: Replace key opens the field.
+    await click(screen.getByRole('button', { name: en['providers.replace'] }))
+    expect(screen.getByLabelText(en['providers.key'])).toBeTruthy()
+  })
+
+  it('says Key found at the computer itself', async () => {
+    await walk({ kind: 'environment', variable: 'DEEPSEEK_API_KEY' })
+    expect(screen.getByText(en['providers.found'])).toBeTruthy()
+    expect(screen.queryByText(en['providers.found.host'])).toBeNull()
   })
 
   it('keeps the provider connected, and saves nothing, when Next is pressed untouched', async () => {

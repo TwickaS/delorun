@@ -13,7 +13,7 @@ import type { HostFace, ReachState } from './types.ts'
 export const REACH_STATUS_PATH = '/delorun/reach/status'
 
 /** The fields of the reach status the guide reads. */
-interface ReachSummary { readonly options?: readonly { readonly state?: unknown }[] }
+interface ReachSummary { readonly options?: readonly { readonly state?: unknown; readonly address?: unknown }[] }
 
 /**
  * Fetch a route relative to the document and parse its JSON answer.
@@ -38,6 +38,23 @@ async function ask<T>(path: string, schema: z.ZodType<T>, body?: unknown): Promi
 /** Whether a page's hostname names this computer's loopback interface. */
 export function isLoopbackHostname(hostname: string): boolean {
   return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]'
+}
+
+/**
+ * Read the studio's address over Tailscale.
+ * @returns the address of the first ready option; undefined when none is ready, the route is absent or it cannot be read.
+ */
+export async function readReachAddress(): Promise<string | undefined> {
+  try {
+    const response = await fetch(REACH_STATUS_PATH.slice(1), { headers: { accept: 'application/json' } })
+    if (!response.ok) return undefined
+    const summary = await response.json() as ReachSummary
+    const ready = Array.isArray(summary.options) ? summary.options.find(option => option.state === 'ready') : undefined
+    return typeof ready?.address === 'string' && ready.address !== '' ? ready.address : undefined
+  } catch (error) {
+    console.warn('delorun onboarding: the reach address was not read', error)
+    return undefined
+  }
 }
 
 /**
@@ -83,5 +100,6 @@ export const hostApi: HostFace = {
   agentModels: async agent => await ask(AGENT_MODELS_PATH, AgentModelsAnswer, { agent }) ?? { state: 'unavailable', reason: 'failed' },
   recommend: registry => ask(RECOMMEND_PATH, RecommendAnswer, { registry }),
   reach: readReach,
+  reachAddress: readReachAddress,
   defer: async (id, deferred) => (await ask(DEFER_STEP_PATH, DeferStepAnswer, { id, deferred }))?.deferred,
 }

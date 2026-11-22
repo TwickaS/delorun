@@ -157,6 +157,7 @@ export function hostFake(change: {
   readonly recommend?: RecommendAnswer | undefined
   readonly agentModels?: AgentModelsAnswer
   readonly reach?: ReachState
+  readonly reachAddress?: string | undefined
   readonly localModels?: readonly LocalServer[] | undefined
 } = {}) {
   const deferred = new Set<DeferrableStep>()
@@ -165,14 +166,15 @@ export function hostFake(change: {
   const localModels = vi.fn(() => Promise.resolve('localModels' in change ? change.localModels : []))
   const recommend = vi.fn((_registry: boolean) => Promise.resolve('recommend' in change ? change.recommend : { plugins: [], registry: 'not-asked' as const }))
   const reach = vi.fn(() => Promise.resolve(change.reach ?? 'absent'))
+  const reachAddress = vi.fn(() => Promise.resolve(change.reachAddress))
   const agentModels = vi.fn((_agent: 'claude-code' | 'codex') => Promise.resolve(change.agentModels ?? { state: 'unavailable' as const, reason: 'not-running' as const }))
   const defer = vi.fn((id: DeferrableStep, on: boolean) => {
     if (on) deferred.add(id)
     else deferred.delete(id)
     return Promise.resolve([...deferred] as readonly DeferrableStep[] | undefined)
   })
-  const host: HostFace = { agentModels, readiness, keyTest, localModels, recommend, reach, defer }
-  return { host, agentModels, readiness, keyTest, localModels, recommend, reach, defer }
+  const host: HostFace = { agentModels, readiness, keyTest, localModels, recommend, reach, reachAddress, defer }
+  return { host, agentModels, readiness, keyTest, localModels, recommend, reach, reachAddress, defer }
 }
 
 /** The home directory the folder listings start at. */

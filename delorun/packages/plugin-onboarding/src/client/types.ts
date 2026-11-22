@@ -183,6 +183,8 @@ export interface HostFace {
   readonly recommend: (registry: boolean) => Promise<RecommendAnswer | undefined>
   /** @returns whether the reach step applies. */
   readonly reach: () => Promise<ReachState>
+  /** @returns the studio's address over Tailscale while an option is ready; undefined when none is or the route cannot be read. */
+  readonly reachAddress: () => Promise<string | undefined>
   /**
    * Note that a step waits for the computer, or that it is done.
    * @param id - the step.

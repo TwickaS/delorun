@@ -36,6 +36,7 @@ export const en = {
   'copy.failed': 'Could not copy. Select the command and copy it yourself.',
 
   'welcome.lead': 'Pick your language, then connect a model.',
+  'welcome.devices': 'You can finish setup on any device signed in to your Tailscale:',
   'welcome.language': 'Language',
   'welcome.language.own': 'Show Delorun in English',
   'welcome.preview': 'The studio in English',
@@ -55,6 +56,7 @@ export const en = {
   'providers.lead': 'Tick the providers you use. Delorun keeps each key on this computer.',
   'providers.none': 'No model provider can connect with a key here.',
   'providers.found': 'Key found',
+  'providers.found.host': 'Found on the host computer',
   'providers.connected': 'Connected',
   'providers.connect': 'Connect',
   'providers.continueNoKey': 'Continue without a key',
@@ -394,6 +396,7 @@ export const zh: Record<OnboardingLocaleKey, string> = {
   'copy.failed': '无法复制。请选中命令后自行复制。',
 
   'welcome.lead': '先选择语言，再连接模型。',
+  'welcome.devices': '你可以在任何登录了你的 Tailscale 的设备上完成设置：',
   'welcome.language': '语言',
   'welcome.language.own': '用中文显示 Delorun',
   'welcome.preview': '中文界面的 studio',
@@ -413,6 +416,7 @@ export const zh: Record<OnboardingLocaleKey, string> = {
   'providers.lead': '勾选你使用的服务商。Delorun 把每个密钥保存在这台电脑上。',
   'providers.none': '这里没有可以用密钥连接的模型服务商。',
   'providers.found': '已找到密钥',
+  'providers.found.host': '在主机电脑上找到',
   'providers.connected': '已连接',
   'providers.connect': '连接',
   'providers.continueNoKey': '不添加密钥，继续',

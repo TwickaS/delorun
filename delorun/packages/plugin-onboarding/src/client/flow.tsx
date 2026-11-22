@@ -72,6 +72,8 @@ export interface FlowInput {
   readonly reach: ReachState
   /** What the person did on Phone access; `on` adds the PIN step when the Phone access step turned reach on. */
   readonly phone: PhoneOutcome
+  /** The studio's address over Tailscale, which Welcome shows at the computer while device access is on; absent when it is not known. */
+  readonly deviceAddress?: string | undefined
   /** Where the chat opens without a choice. */
   readonly target: StartTarget
   /** The preview notice when it is owed: it exists, this browser has not acknowledged it and onboarding was not reopened. Continuing from Welcome acknowledges it. */
@@ -96,12 +98,12 @@ export interface FlowInput {
  * @param input - the services and what decides which steps apply.
  * @returns the steps, ascending by order.
  */
-export function buildSteps({ services, guide, record, extra, reach, phone, target, notice, keepCurrent, first, pinOn = false, browserAdded = false, only }: FlowInput): FlowStep[] {
+export function buildSteps({ services, guide, record, extra, reach, phone, deviceAddress, target, notice, keepCurrent, first, pinOn = false, browserAdded = false, only }: FlowInput): FlowStep[] {
   const { t, plugins, optionalRows } = services
   if (only !== undefined) return deferredSteps({ services, guide, only })
   const covered = (id: string): boolean => record.sections?.includes(id) === true
   const props = { services, guide }
-  const built: FlowStep[] = [{ ...STEPS.welcome, title: () => t('step.welcome'), render: () => <WelcomeStep {...props} notice={notice} />, ...notice === undefined ? {} : { onContinue: notice.acknowledge } }]
+  const built: FlowStep[] = [{ ...STEPS.welcome, title: () => t('step.welcome'), render: () => <WelcomeStep {...props} notice={notice} deviceAddress={reach === 'set-up' ? deviceAddress : undefined} />, ...notice === undefined ? {} : { onContinue: notice.acknowledge } }]
   built.push({ ...STEPS.providers, title: () => t('step.providers'), render: (next, back) => <ModelsStep {...props} next={next} back={back} remote={reach === 'remote'} pinOn={pinOn} /> })
   // The first open leaves out Look, Agents, Recommended plugins, Browser and Phone access: Settings holds them and the full guide shows them.
   if (!first) {

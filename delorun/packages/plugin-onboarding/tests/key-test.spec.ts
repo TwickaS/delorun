@@ -345,6 +345,21 @@ describe('where a found key came from', () => {
   })
 })
 
+describe('a key found on the host computer', () => {
+  it('reaches a paired device as a result and the name of its variable, never as key text', async () => {
+    const secret = 'sk-HOSTONLY0123456789'
+    vi.stubEnv('DEEPSEEK_API_KEY', secret)
+    const answer = await testKeys(deps({
+      providers: () => [{ id: 'openai', name: 'OpenAI' }],
+      credentialConfigured: vi.fn(async () => true),
+      credentialSource: vi.fn(async () => ({ kind: 'environment' as const, variable: 'DEEPSEEK_API_KEY' })),
+    }))
+    expect(answer.providers[0]?.source).toEqual({ kind: 'environment', variable: 'DEEPSEEK_API_KEY' })
+    expect(JSON.stringify(answer)).not.toContain(secret)
+    expect(KeyTestAnswer.safeParse(answer).success).toBe(true)
+  })
+})
+
 describe('the key test answer on the wire', () => {
   const row = (source: unknown) => ({ providers: [{ provider: 'openai', name: 'OpenAI', result: 'works', source }] })
 
