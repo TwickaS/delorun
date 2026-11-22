@@ -9,7 +9,7 @@ export const en = {
   'group.data': 'Data',
   'group.other': 'Other',
   'page.general': 'General',
-  'page.general.keywords': 'language locale look stock original updates release version check shortcuts keys onboarding welcome tour getting started advanced coding view developer run setup again setup guide',
+  'page.general.keywords': 'language locale look stock original updates release version check shortcuts keys onboarding welcome tour getting started advanced coding view developer run setup again setup guide how delorun runs terminal command prompts asks background profile name port phone access',
   'page.appearance': 'Appearance',
   'page.appearance.keywords': 'theme colour color accent dark light mode contrast font typeface text size density spacing branding name icon logo mark greeting sign-in pages studio name', // us-spelling: quoted output
   'page.sidebar': 'Sidebar',
@@ -108,7 +108,7 @@ export const zh: Record<SettingsLayoutLocaleKey, string> = {
   'group.data': '数据',
   'group.other': '其他',
   'page.general': '通用',
-  'page.general.keywords': '语言 区域 外观 原版 更新 发行版 版本 检查 快捷键 按键 引导 欢迎 介绍 开始使用 高级 编码视图 开发者',
+  'page.general.keywords': '语言 区域 外观 原版 更新 发行版 版本 检查 快捷键 按键 引导 欢迎 介绍 开始使用 高级 编码视图 开发者 如何运行 终端 命令 询问 后台 配置名称 端口 手机访问',
   'page.appearance': '外观',
   'page.appearance.keywords': '主题 颜色 强调色 深色 浅色 模式 对比度 字体 文字大小 密度 间距',
   'page.sidebar': '侧边栏',

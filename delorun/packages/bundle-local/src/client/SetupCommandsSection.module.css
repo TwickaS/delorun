@@ -1,0 +1,11 @@
+/* The "How Delorun runs" section: the command under each row's text. */
+
+.command {
+  display: inline-block;
+  margin-top: 8px;
+  font-family: var(--dsw-font-mono, monospace);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-primary);
+  overflow-wrap: anywhere;
+}

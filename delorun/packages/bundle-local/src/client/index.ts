@@ -25,6 +25,9 @@
  * It registers the trust badge at the sidebar's foot (`sidebar.footer.action`), which opens the trust panel: what this
  * Delorun runs and how much of it was checked, from the `delorun-trust` row's bill, with Check now on the home's own computer.
  *
+ * It registers the "How Delorun runs" section (`delorun-setup-commands`), which shows the command for each choice the first-run guide
+ * leaves to the terminal; Delorun's Settings layout places it under General.
+ *
  * Other surfaces open the sections with `ctx.settingsShell.openSection(PRIVACY_SECTION_ID)`,
  * `ctx.settingsShell.openSection(DEVICES_SECTION_ID)` or `ctx.settingsShell.openSection(NETWORK_SECTION_ID)`.
  * @module @delorun/bundle-local/client
@@ -66,6 +69,8 @@ import { saveBrowserFile } from './save-file.ts'
 import { VersionsSection, type VersionsSectionInjected } from './VersionsSection.tsx'
 import { en as networkEn, zh as networkZh, type NetworkLocaleKey } from './network-locales.ts'
 import { NetworkSection, type NetworkSectionInjected } from './NetworkSection.tsx'
+import { en as setupCommandsEn, zh as setupCommandsZh, type SetupCommandsLocaleKey } from './setup-commands-locales.ts'
+import { SetupCommandsSection, type SetupCommandsSectionInjected } from './SetupCommandsSection.tsx'
 import { OPT_IN_FIELDS, OptIn, type OptInId, type OptInSettings } from './opt-in.ts'
 import { PluginInstallsSection, type PluginInstallsSectionInjected } from './PluginInstallsSection.tsx'
 import { PrivacySection, type PrivacySectionInjected } from './PrivacySection.tsx'
@@ -153,6 +158,8 @@ export type { McpWaitingNoticeInjected, McpWaitingNoticeProps } from './McpWaiti
 export type { DangerousBadgeInjected, DangerousBadgeProps } from './DangerousBadge.tsx'
 export type { ConsentToastProps, ConsentToastSource, ConsentToastState } from './ConsentToast.tsx'
 export type { NetworkLocaleKey } from './network-locales.ts'
+export type { SetupCommandsLocaleKey } from './setup-commands-locales.ts'
+export { SETUP_COMMANDS, type SetupCommandsSectionInjected, type SetupCommandsSectionProps } from './SetupCommandsSection.tsx'
 export type { VersionsLocaleKey } from './versions-locales.ts'
 export type { VersionsSectionInjected, VersionsSectionProps } from './VersionsSection.tsx'
 export { PROFILE_VERSION_ROUTES, type VersionChanges, type VersionEntry, type VersionsAnswer } from './versions-api.ts'
@@ -210,6 +217,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'delorunConsents': ConsentsLocaleKey
     /** The Network section's copy. */
     'delorunNetwork': NetworkLocaleKey
+    /** The "How Delorun runs" section's copy. */
+    'delorunSetupCommands': SetupCommandsLocaleKey
     /** The Setup versions section's copy. */
     'delorunVersions': VersionsLocaleKey
     /** The "Needs setup" state's copy in Plugins. */
@@ -255,6 +264,9 @@ export const PIN_MODE_SECTION_ORDER = 21.5
 
 /** Dictionary namespace of the Network section. */
 export const NETWORK_NS = 'delorunNetwork'
+
+/** Dictionary namespace of the "How Delorun runs" section. */
+export const SETUP_COMMANDS_NS = 'delorunSetupCommands'
 
 /** Dictionary namespace of the Setup versions section. */
 export const VERSIONS_NS = 'delorunVersions'
@@ -320,6 +332,12 @@ export const NETWORK_SECTION_ID = 'delorun-network'
 
 /** The Network section's place in the Settings navigation: right after External agents. */
 export const NETWORK_SECTION_ORDER = 24
+
+/** The `settings.section` id of the "How Delorun runs" section, which Delorun's Settings layout places under General. */
+export const SETUP_COMMANDS_SECTION_ID = 'delorun-setup-commands'
+
+/** The "How Delorun runs" section's place in the Settings navigation: right after About. */
+export const SETUP_COMMANDS_SECTION_ORDER = 26
 
 /** The `settings.section` id of the Setup versions section. */
 export const SETUP_VERSIONS_SECTION_ID = 'delorun-setup-versions'
@@ -589,6 +607,17 @@ export function apply(ctx: Context): void {
     locale: NETWORK_NS,
     inject: networkFace,
   }, NetworkSection))
+  ctx.effect(() => ctx.locale.register(SETUP_COMMANDS_NS, { en: setupCommandsEn, zh: setupCommandsZh }), 'delorun-setup-commands: section dictionaries')
+  const setupCommandsT = ctx.locale.bind(SETUP_COMMANDS_NS)
+  const setupCommandsFace = (): SetupCommandsSectionInjected => ({ fetch: studioFetch })
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section',
+    id: SETUP_COMMANDS_SECTION_ID,
+    order: SETUP_COMMANDS_SECTION_ORDER,
+    label: () => setupCommandsT('nav'),
+    locale: SETUP_COMMANDS_NS,
+    inject: setupCommandsFace,
+  }, SetupCommandsSection))
   ctx.effect(() => ctx.locale.register(VERSIONS_NS, { en: versionsEn, zh: versionsZh }), 'delorun-setup-versions: section dictionaries')
   const versionsT = ctx.locale.bind(VERSIONS_NS)
   const isLoopback = (ctx.get('connection') as ConnectionHandle).isLoopback

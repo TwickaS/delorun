@@ -25,7 +25,7 @@ The navigation has five groups: General, Agent, Safety, Devices and Data. Each p
 
 | Group | Page | What it holds | Ids it places |
 | --- | --- | --- | --- |
-| General | General | Language; Look (Delorun or the stock look); Updates (the release check and the current versions on one line); Keyboard shortcuts; Getting started (show onboarding again); Advanced (the coding view) | rows `language`, `delorun-look`, `delorun-update-check`, `delorun-versions`, `shortcuts`, `delorun-onboarding`, `developer-tools` |
+| General | General | Language; Look (Delorun or the stock look); Updates (the release check and the current versions on one line); Keyboard shortcuts; Getting started (show onboarding again); How Delorun runs (the command for each choice the first-run guide leaves to the terminal); Advanced (the coding view) | rows `language`, `delorun-look`, `delorun-update-check`, `delorun-versions`, `shortcuts`, `delorun-onboarding`, `developer-tools`; section `delorun-setup-commands` |
 | General | Appearance | Delorun's Colours section, then a Text and density card: typeface, font size with more font settings, density | section `delorun-appearance`; rows `delorun-typeface`, `font-size`, `delorun-density` |
 | General | Sidebar | The sidebar's Header and Chat list, then Snooze and idle chats | sections `delorun-sidebar`, `delorun-chat-states` |
 | General | Conversation | Detail and Folding | section `delorun-conversation` |
