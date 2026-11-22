@@ -30,8 +30,6 @@ export const PRIVACY_FIXED_LINE = 'Plugins run with Delorun\'s full access. Mark
 export type PrivacyRunContext = RunContext & Readonly<{
   /** The studio ports the helper publishes on 127.0.0.1, because only the network owner can publish. */
   publish?: Readonly<{ host: number; container: number }>
-  /** The plugin container's name, when it is not `bench-<runId>`. */
-  container?: string
 }>
 
 /** What the privacy observer adds to the plugin container, with the agreed extras. */

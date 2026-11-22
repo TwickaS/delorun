@@ -33,6 +33,14 @@ function containerOf(run: PrivacyRunContext): string {
   return run.container ?? `bench-${run.runId}`
 }
 
+/**
+ * @param run - the run's context.
+ * @returns the host and container ports to publish on the helper, from the context's `publish` or its `studioPort`.
+ */
+function publishOf(run: PrivacyRunContext): { host: number; container: number } | undefined {
+  return run.publish ?? (run.studioPort === undefined ? undefined : { host: run.studioPort, container: run.studioPort })
+}
+
 /** How to make an observer. */
 export type PrivacyObserverOptions = Readonly<{
   docker?: Docker
@@ -127,10 +135,11 @@ export function createPrivacyObserver(options: PrivacyObserverOptions = {}): Obs
       if (!run.baseline && await loadBaseline(baselineDir, run.host) === undefined) throw new Error(`no privacy baseline for ${run.host}: run \`bench baseline --host ${run.host}\` first`)
       const canaries = makeCanaries(run.runId, layout)
       const image = await buildHelperImage(docker)
+      const publish = publishOf(run)
       const folder = join(run.outDir, 'privacy')
       await mkdir(folder, { recursive: true })
       // The plugin container runs as the same user and writes the hooks' log here through the mounted output folder.
-      const helper = await startHelper(docker, image, { runId: run.runId, outDir: run.outDir, canaries: canaries.values, ...run.publish === undefined ? {} : { publish: run.publish }, ...options.proxyArgs === undefined ? {} : { proxyArgs: options.proxyArgs } })
+      const helper = await startHelper(docker, image, { runId: run.runId, outDir: run.outDir, canaries: canaries.values, ...publish === undefined ? {} : { publish }, ...options.proxyArgs === undefined ? {} : { proxyArgs: options.proxyArgs } })
       states.set(run.runId, { canaries, helper: helper.name })
       const preload = await readFile(new URL('./preload.mjs', import.meta.url), 'utf8')
       const ca = await readFile(helper.caPath, 'utf8')
@@ -191,9 +200,9 @@ export function createPrivacyObserver(options: PrivacyObserverOptions = {}): Obs
       const manifest: unknown = await readFile(join(run.outDir, 'plugin-package.json'), 'utf8').then((text): unknown => JSON.parse(text)).catch(() => undefined)
       const access = readDeclaredAccess(manifest)
       const report: PrivacyReport = buildPrivacy(assemble(facts, baseline), access.declared, layout)
-      // The card's privacy section is strict, so it gets the markers only; the findings and the declared reasons are kept beside it.
+      // The card takes the markers, the findings and the declared reasons; problems with the block stay beside it.
       await writeFile(join(folder, 'report.json'), `${JSON.stringify({ ...report, problems: access.problems.map(problem => `dsh.access: ${problem}`) }, null, 2)}\n`)
-      return { markers: report.markers, contentsChecked: report.contentsChecked }
+      return report
     },
   }
 }

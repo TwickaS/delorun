@@ -9,7 +9,7 @@ import { createHash } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { BENCH_LABEL, dockerOrThrow } from '../docker.ts'
+import { BENCH_LABEL, dockerOrThrow, realDocker } from '../docker.ts'
 import type { Docker } from '../docker.ts'
 
 const HELPER_DIR = dirname(fileURLToPath(import.meta.url))
@@ -35,7 +35,7 @@ export async function helperImageTag(): Promise<string> {
  * @param options - `force` rebuilds even when the tag exists.
  * @returns the image tag.
  */
-export async function buildHelperImage(docker: Docker, options: Readonly<{ force?: boolean }> = {}): Promise<string> {
+export async function buildHelperImage(docker: Docker = realDocker, options: Readonly<{ force?: boolean }> = {}): Promise<string> {
   const tag = await helperImageTag()
   if (options.force !== true && (await docker(['image', 'inspect', tag])).status === 0) return tag
   await dockerOrThrow(docker, ['build', '--label', BENCH_LABEL, '--tag', tag, HELPER_DIR], { timeoutMs: 900_000 })
