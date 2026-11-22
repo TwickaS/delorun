@@ -5,8 +5,8 @@ const spawned = vi.hoisted(() => ({ spawn: vi.fn() }))
 vi.mock('node:child_process', () => ({ spawn: spawned.spawn }))
 
 const {
-  WSL_TIMEOUTS_MS, WslHomeError, acceptLink, listDistros, parseDistroList, parseHomeStatus, readHomeStatus, readSignInLink,
-  requireListedDistro, runWsl,
+  WSL_TIMEOUTS_MS, WslHomeError, acceptLink, delorunArgs, findLoginShell, listDistros, parseDistroList, parseHomeStatus, parseLoginShell,
+  readHomeStatus, readSignInLink, requireListedDistro, runWsl, selectLauncher,
 } = await import('../src/wsl-home.ts')
 
 const LINK = 'http://127.0.0.1:18601/?token=SECRET-ONE-TIME'
@@ -164,5 +164,129 @@ describe('running wsl.exe', () => {
     const start = runWsl(['-l'], 1000).catch((error: unknown) => error)
     missing.emit('error', new Error('spawn wsl.exe ENOENT'))
     expect(await start).toMatchObject({ code: 'wsl-unavailable' })
+  })
+})
+
+describe('the login shell fallback', () => {
+  const BASH = { kind: 'login-shell', shell: { path: '/bin/bash', flavour: 'posix' } } as const
+  const FISH = { kind: 'login-shell', shell: { path: '/usr/bin/fish', flavour: 'fish' } } as const
+
+  it.each([
+    ['alice:x:1000:1000:Alice,,,:/home/alice:/bin/bash', { path: '/bin/bash', flavour: 'posix' }],
+    ['alice:x:1000:1000::/home/alice:/usr/bin/zsh', { path: '/usr/bin/zsh', flavour: 'posix' }],
+    ['alice:x:1000:1000::/home/alice:/bin/sh\n', { path: '/bin/sh', flavour: 'posix' }],
+    ['alice:x:1000:1000::/home/alice:/usr/local/bin/fish', { path: '/usr/local/bin/fish', flavour: 'fish' }],
+  ])('accepts the login shell in %j', (entry, shell) => {
+    expect(parseLoginShell(entry, 'alice')).toEqual(shell)
+  })
+
+  it.each([
+    ['a shell outside the list', 'alice:x:1000:1000::/home/alice:/usr/sbin/nologin'],
+    ['a shell that exits', 'alice:x:1000:1000::/home/alice:/bin/false'],
+    ['a program the person owns', 'alice:x:1000:1000::/home/alice:/home/alice/bin/bash'],
+    ['a temporary program', 'alice:x:1000:1000::/home/alice:/tmp/bash'],
+    ['a path that climbs out of a listed one', 'alice:x:1000:1000::/home/alice:/bin/../tmp/bash'],
+    ['a shell with arguments', 'alice:x:1000:1000::/home/alice:/bin/bash -x'],
+    ['a shell followed by a command', 'alice:x:1000:1000::/home/alice:/bin/bash;rm'],
+    ['a relative shell', 'alice:x:1000:1000::/home/alice:bash'],
+    ['a name that only ends like a listed shell', 'alice:x:1000:1000::/home/alice:/bin/notbash'],
+    ['an entry with too few fields', 'alice:x:1000'],
+    ['an entry for another account', 'mallory:x:1001:1001::/home/mallory:/bin/bash'],
+    ['an empty entry', ''],
+  ])('refuses %s', (_name, entry) => {
+    expect(parseLoginShell(entry, 'alice')).toBeUndefined()
+  })
+
+  it('finds the shell with `id` and `getent` started by --exec, never through a shell', async () => {
+    const run = vi.fn(async (args: readonly string[]) => args.includes('id')
+      ? answer('alice\n') : answer('alice:x:1000:1000::/home/alice:/bin/bash\n'))
+    expect(await findLoginShell('Ubuntu', run)).toEqual({ path: '/bin/bash', flavour: 'posix' })
+    expect(run.mock.calls.map(call => call[0])).toEqual([
+      ['-d', 'Ubuntu', '--exec', 'id', '-un'], ['-d', 'Ubuntu', '--exec', 'getent', 'passwd', 'alice'],
+    ])
+    expect(run.mock.calls.every(call => call[1] === WSL_TIMEOUTS_MS.shell)).toBe(true)
+  })
+
+  it.each(['al ice', '$(id)', 'alice;x', '-n', 'Alice', '', 'a'.repeat(40), 'alice\nmallory'])('never asks about the account name %j', async (name) => {
+    const run = vi.fn(async () => answer(`${name}\n`))
+    expect(await findLoginShell('Ubuntu', run)).toBeUndefined()
+    expect(run).toHaveBeenCalledOnce()
+  })
+
+  it('runs a hostile login shell never: an entry outside the list gives no shell to run', async () => {
+    const run = vi.fn(async (args: readonly string[]) => args.includes('id') ? answer('alice\n') : answer('alice:x:1:1::/home/alice:/tmp/evil\n'))
+    expect(await findLoginShell('Ubuntu', run)).toBeUndefined()
+  })
+
+  it('starts the shell with a fixed script and the arguments as positional parameters, so nothing is parsed', () => {
+    expect(delorunArgs('Ubuntu', 'work', ['open', '--print'], BASH)).toEqual([
+      '-d', 'Ubuntu', '--exec', '/bin/bash', '-l', '-i', '-c', 'exec delorun $@', 'delorun', 'open', '--print', '--profile', 'work',
+    ])
+    expect(delorunArgs('Ubuntu', 'work', ['status', '--json'], FISH)).toEqual([
+      '-d', 'Ubuntu', '--exec', '/usr/bin/fish', '-l', '-i', '-c', 'exec delorun $argv', 'status', '--json', '--profile', 'work',
+    ])
+  })
+
+  it.each(['work', 'default', 'a-b_c9'])('puts nothing but plain words after the script, for the profile %s', (profile) => {
+    for (const launcher of [BASH, FISH]) {
+      const args = delorunArgs('Ubuntu', profile, ['status', '--json'], launcher)
+      const script = args.indexOf('-c') + 1
+      expect(args[script]).toMatch(/^exec delorun \$(@|argv)$/u)
+      expect(args[script]).not.toMatch(/["'`;&|<>\\(){}]/u)
+      for (const word of args.slice(script + 1)) expect(word).toMatch(/^[A-Za-z0-9._-]+$/u)
+      expect(args).not.toContain('--')
+    }
+  })
+
+  it('selects the direct start when it works, and asks no shell anything', async () => {
+    const run = vi.fn().mockResolvedValue(answer(status('0.1.0')))
+    expect(await selectLauncher('Ubuntu', 'default', run)).toMatchObject({ launcher: { kind: 'direct' }, status: { state: 'running' } })
+    expect(run).toHaveBeenCalledOnce()
+  })
+
+  it('falls back to the login shell when the direct start finds no delorun, and ignores the noise the shell start-up prints', async () => {
+    const noisy = `Welcome to the distribution\nnvm is ready\n${status('0.1.0')}\n`
+    const run = vi.fn(async (args: readonly string[]) => {
+      if (args.includes('id')) return answer('alice\n')
+      if (args.includes('getent')) return answer('alice:x:1000:1000::/home/alice:/bin/bash\n')
+      return args[2] === '--exec' && args[3] === 'delorun' ? answer('', 127) : answer(noisy)
+    })
+    const chosen = await selectLauncher('Ubuntu', 'default', run)
+    expect(chosen.launcher).toEqual({ kind: 'login-shell', shell: { path: '/bin/bash', flavour: 'posix' } })
+    expect(chosen.status).toMatchObject({ state: 'running', version: '0.1.0' })
+  })
+
+  it('reports delorun-missing when neither start finds delorun, and the direct error when the account has no accepted shell', async () => {
+    const missing = vi.fn(async (args: readonly string[]) => {
+      if (args.includes('id')) return answer('alice\n')
+      if (args.includes('getent')) return answer('alice:x:1000:1000::/home/alice:/bin/bash\n')
+      return answer('', 127)
+    })
+    await expect(selectLauncher('Ubuntu', 'default', missing)).rejects.toMatchObject({ code: 'delorun-missing' })
+    const noShell = vi.fn(async (args: readonly string[]) => {
+      if (args.includes('id')) return answer('alice\n')
+      if (args.includes('getent')) return answer('alice:x:1000:1000::/home/alice:/usr/sbin/nologin\n')
+      return answer('', 127)
+    })
+    await expect(selectLauncher('Ubuntu', 'default', noShell)).rejects.toMatchObject({ code: 'delorun-missing' })
+    expect(noShell.mock.calls.some(call => (call[0] as string[]).includes('-c'))).toBe(false)
+  })
+
+  it('does not fall back for a timeout or a missing distribution', async () => {
+    const stuck = vi.fn().mockRejectedValue(new WslHomeError('wsl-timeout'))
+    await expect(selectLauncher('Ubuntu', 'default', stuck)).rejects.toMatchObject({ code: 'wsl-timeout' })
+    expect(stuck).toHaveBeenCalledOnce()
+  })
+
+  it('reads the link as the last line that is a link for the studio, ignoring what a start-up file prints', async () => {
+    const decoy = 'http://127.0.0.1:18999/?token=SECRET-DECOY'
+    const text = `Last login: today\n${decoy}\n${LINK}\nThis link signs in to the studio once.\nexport PATH ready\n`
+    const run = vi.fn().mockResolvedValue(answer(text))
+    expect(await readSignInLink('Ubuntu', 'default', STUDIO, run, BASH)).toBe(LINK)
+    expect(run.mock.calls[0]![0]).toEqual([
+      '-d', 'Ubuntu', '--exec', '/bin/bash', '-l', '-i', '-c', 'exec delorun $@', 'delorun', 'open', '--print', '--profile', 'default',
+    ])
+    const onlyNoise = vi.fn().mockResolvedValue(answer(`motd\n${decoy}\n`))
+    await expect(readSignInLink('Ubuntu', 'default', STUDIO, onlyNoise, BASH)).rejects.toMatchObject({ code: 'link-unusable' })
   })
 })

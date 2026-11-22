@@ -6,7 +6,7 @@
 
 import { checkHomeVersion } from './version-skew.ts'
 import { INDEX_INJECTIONS_PATH, parseHomeInjections, type HomeInjection } from './home-injections.ts'
-import { readHomeStatus, readSignInLink, requireListedDistro, runWsl, WslHomeError, type WslRunner } from './wsl-home.ts'
+import { readSignInLink, requireListedDistro, runWsl, selectLauncher, WslHomeError, type WslRunner } from './wsl-home.ts'
 import { authenticateWebHost } from './web-document.ts'
 
 /** What a connected home gives the main process. */
@@ -59,14 +59,14 @@ async function fetchHomeRows(origin: string, cookie: string): Promise<unknown> {
 export async function connectWslHome(distro: string, profile: string, deps: WslConnectionDeps): Promise<WslHomeConnection> {
   const run = deps.run ?? runWsl
   await requireListedDistro(distro, run)
-  const status = await readHomeStatus(distro, profile, run)
+  const { status, launcher } = await selectLauncher(distro, profile, run)
   if (status.state === 'not-running') throw new WslHomeError('home-not-running', { distro })
   const verdict = checkHomeVersion(status.version)
   if (verdict.kind === 'unreadable') throw new WslHomeError('version-unreadable', { distro, range: verdict.range })
   if (verdict.kind === 'older') throw new WslHomeError('home-too-old', { distro, version: verdict.version, range: verdict.range })
   if (verdict.kind === 'newer') throw new WslHomeError('home-too-new', { distro, version: verdict.version, range: verdict.range })
   // F24 (A604): the link is used once here and dropped; no command line, log, error or renderer holds it.
-  const link = await readSignInLink(distro, profile, status.studio, run)
+  const link = await readSignInLink(distro, profile, status.studio, run, launcher)
   const origin = new URL(link).origin
   let cookie: string
   try { cookie = await (deps.exchange ?? authenticateWebHost)(link) } catch (error) {

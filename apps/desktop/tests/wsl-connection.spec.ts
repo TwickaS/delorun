@@ -101,6 +101,38 @@ describe('connectWslHome', () => {
     expect(fetch.mock.calls[0]![0].href).toBe('http://127.0.0.1:18601/index-injections.json')
   })
 
+  it('reaches a delorun that only the login shell finds, reads the link past start-up noise and carries no link on any command line', async () => {
+    const shellStarts: (readonly string[])[] = []
+    const run = vi.fn(async (args: readonly string[], _deadline?: number) => {
+      if (args[0] === '-l') return { code: 0, stdout: listing('Ubuntu') }
+      if (args.includes('id')) return { code: 0, stdout: Buffer.from('alice\n') }
+      if (args.includes('getent')) return { code: 0, stdout: Buffer.from('alice:x:1000:1000::/home/alice:/bin/bash\n') }
+      if (args[3] === 'delorun') return { code: 127, stdout: Buffer.alloc(0) }
+      shellStarts.push(args)
+      const status = JSON.stringify({ ok: true, status: { state: 'ready', pid: 1, runtime: { current: '0.1.0-preview.4', running: '0.1.0-preview.4' }, chats: 0, studio: STUDIO } })
+      return { code: 0, stdout: Buffer.from(args.includes('status') ? `nvm ready\n${status}\n` : `nvm ready\n${LINK}\nhint\n`) }
+    })
+    const calls = deps({ run })
+    const connection = await connectWslHome('Ubuntu', 'default', calls)
+    expect(connection.origin).toBe('http://127.0.0.1:18601')
+    expect(calls.exchange).toHaveBeenCalledWith(LINK)
+    expect(shellStarts).toHaveLength(2)
+    for (const args of shellStarts) expect(args.slice(2, 8)).toEqual(['--exec', '/bin/bash', '-l', '-i', '-c', 'exec delorun $@'])
+    expect(JSON.stringify(run.mock.calls)).not.toContain('SECRET')
+  })
+
+  it('shows the delorun-missing page when neither start finds delorun', async () => {
+    const run = vi.fn(async (args: readonly string[]) => {
+      if (args[0] === '-l') return { code: 0, stdout: listing('Ubuntu') }
+      if (args.includes('id')) return { code: 0, stdout: Buffer.from('alice\n') }
+      if (args.includes('getent')) return { code: 0, stdout: Buffer.from('alice:x:1000:1000::/home/alice:/bin/bash\n') }
+      return { code: 127, stdout: Buffer.alloc(0) }
+    })
+    const calls = deps({ run })
+    await expect(connectWslHome('Ubuntu', 'default', calls)).rejects.toMatchObject({ code: 'delorun-missing', detail: { distro: 'Ubuntu' } })
+    expect(calls.exchange).not.toHaveBeenCalled()
+  })
+
   it('tells a missing port forward from a refused link', async () => {
     const unreachable = deps({ exchange: vi.fn(async () => { throw new TypeError('fetch failed') }) })
     await expect(connectWslHome('Ubuntu', 'default', unreachable)).rejects.toMatchObject({ code: 'forwarding-unreachable' })
