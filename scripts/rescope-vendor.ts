@@ -109,6 +109,7 @@ const GENERIC_SKIPS: readonly GenericSkip[] = [
   { file: 'apps/cli/tests/optional-bundle-transitions.e2e.ts', upstream: ['cordis'] },
   { file: 'apps/web/tests/agent-preset-selection.e2e.ts', upstream: ['cordis'] },
   { file: 'apps/web/tests/developer-tools-settings.e2e.ts', upstream: ['cordis'] },
+  { file: 'packages/bundle/web-app/tests/plugin-manager-presets.spec.ts', upstream: ['cordis'] },
   { file: 'apps/web/tests/creator-persona.e2e.ts', upstream: ['cordis'] },
   { file: 'docs/upgrade-guide/v0.2.2-rc.1/subagent-interrupt-default/guide.md', upstream: ['cordis'] },
   { file: 'docs/upgrade-guide/v0.2.2-rc.1/subagent-interrupt-default/guide.zh.md', upstream: ['cordis'] },

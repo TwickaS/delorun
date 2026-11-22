@@ -1602,7 +1602,7 @@
       "path": "scripts/rescope-vendor.ts",
       "class": "generic-fix",
       "feature": "vendor-rescope",
-      "reason": "The V17 postcondition matches the vendor README heading as it is now written, and the skip list keeps the Web ptc and cordis preset ids, which the rename would otherwise rewrite, in the tool catalog, its generator, the fs-observation-policy upgrade guide, the Creator persona e2e and the subagent-interrupt-default upgrade guide. Offer upstream."
+      "reason": "The V17 postcondition matches the vendor README heading as it is now written, and the skip list keeps the Web ptc and cordis preset ids, which the rename would otherwise rewrite, in the tool catalog, its generator, the fs-observation-policy upgrade guide, the Creator persona e2e, the subagent-interrupt-default upgrade guide and the plugin-manager presets spec. Offer upstream."
     },
     {
       "path": "scripts/test-non-loopback-address.ts",
