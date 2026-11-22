@@ -36,7 +36,7 @@ describe('the report row\'s configuration', () => {
 
   it('refuses an address that is not https on github.com, so the row does not load', () => {
     const ctx = { inject: () => {} } as never
-    for (const issueUrl of ['http://github.com/Delo-Run/delorun/issues/new', 'https://example.com/issues/new', 'https://github.com.evil.example/new', 'https://api.github.com/new', 'https://user@evil.example/', 'ftp://github.com/x']) {
+    for (const issueUrl of ['http://github.com/twickas/delorun/issues/new', 'https://example.com/issues/new', 'https://github.com.evil.example/new', 'https://api.github.com/new', 'https://user@evil.example/', 'ftp://github.com/x']) {
       expect(() => apply(ctx, { issueUrl, template: 'a.yml' }), issueUrl).toThrow('must be an https://github.com address')
     }
     expect(() => apply(ctx, { issueUrl: 'nope', template: 'a.yml' })).toThrow('is not a URL')

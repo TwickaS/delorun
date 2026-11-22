@@ -114,7 +114,7 @@ describe('the plugin browser with scripts', () => {
   it('opens the files disclosure with the repository count and a link to the folder', async () => {
     const aside = host.querySelector('[aria-live="polite"]')!
     expect(aside.querySelector('details')?.hasAttribute('open')).toBe(false)
-    expect(aside.querySelector('a')?.getAttribute('href')).toBe(`https://github.com/Delo-Run/delorun/tree/main/${data.plugins[0]!.folder}`)
+    expect(aside.querySelector('a')?.getAttribute('href')).toBe(`https://github.com/twickas/delorun/tree/main/${data.plugins[0]!.folder}`)
   })
 
   it('switches to Make your own and lists the files of the chosen kind', async () => {

@@ -381,7 +381,7 @@ By hand, include:
 - the smallest steps that repeat the problem;
 - the relevant lines of `delorun logs`. Read them first and remove anything private.
 
-Send it to [GitHub Discussions](https://github.com/Delo-Run/delorun/discussions) for a question, the [issue templates](https://github.com/Delo-Run/delorun/issues/new/choose) for a bug, or support@delorun.com. [SUPPORT.md](../../../SUPPORT.md) lists the routes. Report a suspected vulnerability only privately, as [SECURITY.md](../../../SECURITY.md) describes.
+Send it to [GitHub Discussions](https://github.com/twickas/delorun/discussions) for a question, the [issue templates](https://github.com/twickas/delorun/issues/new/choose) for a bug, or support@delorun.com. [SUPPORT.md](../../../SUPPORT.md) lists the routes. Report a suspected vulnerability only privately, as [SECURITY.md](../../../SECURITY.md) describes.
 
 <details>
 <summary>Go further</summary>

@@ -458,7 +458,7 @@ describe('the channel’s defaults', () => {
   it('fetches every file from the release host, with the version’s GitHub release and the spare host as mirrors', async () => {
     expect(RELEASE_SOURCE.metadata).toBe('https://releases.delorun.com')
     expect(RELEASE_SOURCE.files('0.1.0' as never, 'delorun-0.1.0.manifest.json')).toBe('https://releases.delorun.com/releases/download/v0.1.0/delorun-0.1.0.manifest.json')
-    expect(RELEASE_SOURCE.mirrors?.map(mirror => mirror.files?.('0.1.0' as never, 'a'))).toEqual(['https://github.com/Delo-Run/delorun/releases/download/v0.1.0/a', 'https://releases.delo.run/releases/download/v0.1.0/a'])
+    expect(RELEASE_SOURCE.mirrors?.map(mirror => mirror.files?.('0.1.0' as never, 'a'))).toEqual(['https://github.com/twickas/delorun/releases/download/v0.1.0/a', 'https://releases.delo.run/releases/download/v0.1.0/a'])
     const fixture = await fixtureRelease()
     const channel = new LauncherChannel({ home: await scratchHome(), platform: fixture.platform, roots: fixture.roots, channel: 'stable', log: logService(fixture.checkpoint) })
     expect(channel).toBeInstanceOf(LauncherChannel)
@@ -684,7 +684,7 @@ describe('the production origins and their mirrors', () => {
     const files = published(fixture)
     const { channel, events, asked } = await mirrored(fixture, (host, path) => {
       if (host === 'releases.delorun.com') return undefined
-      const bytes = files.get(path.replace('/Delo-Run/delorun', ''))
+      const bytes = files.get(path.replace('/twickas/delorun', ''))
       return bytes === undefined ? new Response(null, { status: 404 }) : ok(bytes)
     })
     const release = await channel.resolve()
@@ -700,7 +700,7 @@ describe('the production origins and their mirrors', () => {
     const archive = `/releases/download/v${VERSION}/delorun-${VERSION}-${fixture.platform}.tar.gz`
     const { channel } = await mirrored(fixture, (host, path) => {
       if (host === 'releases.delorun.com') return path === archive ? new Response(null, { status: 503 }) : ok(files.get(path)!)
-      const bytes = files.get(path.replace('/Delo-Run/delorun', ''))!
+      const bytes = files.get(path.replace('/twickas/delorun', ''))!
       return ok(path.endsWith(archive) ? Buffer.from(bytes).fill(1) : bytes)
     })
     const release = await channel.resolve()
@@ -712,7 +712,7 @@ describe('the production origins and their mirrors', () => {
     const files = published(fixture)
     const archive = `/releases/download/v${VERSION}/delorun-${VERSION}-${fixture.platform}.tar.gz`
     const { channel, events } = await mirrored(fixture, (host, path) => {
-      const bytes = files.get(path.replace('/Delo-Run/delorun', ''))!
+      const bytes = files.get(path.replace('/twickas/delorun', ''))!
       return ok(host === 'releases.delorun.com' && path === archive ? Buffer.from(bytes).fill(1) : bytes)
     })
     await channel.fill(await channel.resolve(), await staging())

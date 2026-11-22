@@ -142,7 +142,7 @@ CLI 不包含以下内容；[路线图](../../docs/guide/roadmap.zh.md)说明了
 - 登录时启动（`delorun start --at-login`、`delorun stop --at-login`）、`delorun status --follow`，以及启动序列的隔离探测。
 - chat 闸门不保持任何计划投递：更新等待期间到期的投递，其轮次会以 `UPDATE_PENDING` 被拒绝。报告不读取撤销列表，因为没有任何发布发布过撤销列表（[`@delorun/update`](../../packages/update/README.zh.md#not-implemented)）。
 - Setup 的远程访问问题。Setup 将远程访问记录为关闭。
-- Windows 的 DACL 检查（[#48](https://github.com/Delo-Run/delorun/issues/48)）：在 Windows 上，目录检查什么也不检查，受保护文件的检查只看文件类型。
+- Windows 的 DACL 检查（[#48](https://github.com/twickas/delorun/issues/48)）：在 Windows 上，目录检查什么也不检查，受保护文件的检查只看文件类型。
 - `reach`、`devices` 与 `dev`。
 - 在 studio 中打开已导入的 chat。
 - `delorun verify --mode`，以及除 `release-signature` 与 `runtime-files` 之外的每个已注册检查。`delorun verify` 报告默认模式 `warn`，因为没有任何东西读取 `integrity.mode`。

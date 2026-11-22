@@ -21,7 +21,7 @@ describe('the About section', () => {
     expect(within(licences).getByText(en['about.licences.body'])).toBeTruthy()
     const link = within(licences).getByRole('link', { name: en['about.licences.link'] })
     expect([link.getAttribute('href'), link.getAttribute('target'), link.getAttribute('rel')]).toEqual([LICENCE_URL, '_blank', 'noreferrer'])
-    expect(LICENCE_URL).toBe('https://github.com/Delo-Run/delorun/blob/main/LICENSE')
+    expect(LICENCE_URL).toBe('https://github.com/twickas/delorun/blob/main/LICENSE')
   })
 
   it('links the documentation, the source, the issue tracker and support, each in a new tab', () => {
@@ -29,8 +29,8 @@ describe('the About section', () => {
     const links = within(screen.getByRole('region', { name: en['about.links.heading'] })).getAllByRole('link')
     expect(links.map(link => [link.textContent, link.getAttribute('href')])).toEqual([
       [en['about.links.docs'], 'https://docs.delorun.com'],
-      [en['about.links.source'], 'https://github.com/Delo-Run/delorun'],
-      [en['about.links.issues'], 'https://github.com/Delo-Run/delorun/issues'],
+      [en['about.links.source'], 'https://github.com/twickas/delorun'],
+      [en['about.links.issues'], 'https://github.com/twickas/delorun/issues'],
       [en['about.links.support'], 'mailto:support@delorun.com'],
     ])
     for (const link of links) expect([link.getAttribute('target'), link.getAttribute('rel')]).toEqual(['_blank', 'noreferrer'])

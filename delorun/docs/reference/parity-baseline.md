@@ -215,7 +215,7 @@ The rc.4 triage classes resolved as follows.
 
 - **WebKit libraries.** The reference host lacks WebKit's GTK and WPE system libraries, so WebKit launches fail in the class (a) files. Chromium resolves fully.
 - **IPv6 loopback.** IPv6 loopback is disabled on the host, so `::1` listeners fail with `EADDRNOTAVAIL`.
-- **Owner decision.** The owner deferred the host fixes for both items on 2026-11-06. The class (a) failures are host-state results, and this page records them as the host stands. [Issue #58](https://github.com/Delo-Run/delorun/issues/58) tracks both fixes.
+- **Owner decision.** The owner deferred the host fixes for both items on 2026-11-06. The class (a) failures are host-state results, and this page records them as the host stands. [Issue #58](https://github.com/twickas/delorun/issues/58) tracks both fixes.
 - **Load.** Other jobs shared the host during both passes, as described in [Reference host and tree](#reference-host-and-tree). The solo reruns of pass 1 and the class (c) files show load-dependent failures.
 
 <a id="green-base-on-main"></a>
@@ -287,7 +287,7 @@ After the fixes, each of the 15 files ran alone once on Node `v24.22.0` with the
 
 ### Exclusion
 
-One test is excluded by name: `mock LLM server wire behaviors > formats an IPv6 listener as a valid base URL` in `packages/test-support/llm-mock-server/tests/server.spec.ts`. It fails on every run alone with `Error: listen EADDRNOTAVAIL: address not available ::1`, because IPv6 loopback is disabled on the reference host ([Host state](#host-state)). The exclusion ends when the host fix lands; [issue #58](https://github.com/Delo-Run/delorun/issues/58) tracks it and the WebKit libraries.
+One test is excluded by name: `mock LLM server wire behaviors > formats an IPv6 listener as a valid base URL` in `packages/test-support/llm-mock-server/tests/server.spec.ts`. It fails on every run alone with `Error: listen EADDRNOTAVAIL: address not available ::1`, because IPv6 loopback is disabled on the reference host ([Host state](#host-state)). The exclusion ends when the host fix lands; [issue #58](https://github.com/twickas/delorun/issues/58) tracks it and the WebKit libraries.
 
 <a id="contention"></a>
 ### Contention

@@ -1,13 +1,13 @@
 # Code owners receive review requests for the paths they own.
-* @Delo-Run/maintainers
+* @twickas/maintainers
 
 # Security-sensitive paths.
-packages/sandbox/ @Delo-Run/maintainers
-packages/shell/ @Delo-Run/maintainers
-packages/interaction/ @Delo-Run/maintainers
-packages/credentials/ @Delo-Run/maintainers
-packages/boot/plugin-manager/ @Delo-Run/maintainers
-delorun/upstream-patches.json @Delo-Run/maintainers
-.github/ @Delo-Run/maintainers
-scripts/ @Delo-Run/maintainers
-SECURITY.md @Delo-Run/maintainers
+packages/sandbox/ @twickas/maintainers
+packages/shell/ @twickas/maintainers
+packages/interaction/ @twickas/maintainers
+packages/credentials/ @twickas/maintainers
+packages/boot/plugin-manager/ @twickas/maintainers
+delorun/upstream-patches.json @twickas/maintainers
+.github/ @twickas/maintainers
+scripts/ @twickas/maintainers
+SECURITY.md @twickas/maintainers

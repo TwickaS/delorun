@@ -217,7 +217,7 @@ rc.4 的分诊类别解决如下。
 
 - **WebKit 库。** 参考主机缺少 WebKit 的 GTK 与 WPE 系统库，因此 (a) 类文件中的 WebKit 启动失败。Chromium 可完整解析。
 - **IPv6 loopback。** 主机上 IPv6 loopback 被禁用，因此 `::1` 监听失败，报 `EADDRNOTAVAIL`。
-- **负责人决定。** 负责人于 2026-11-06 推迟了这两项主机修复。(a) 类的失败属于主机状态的结果，本页按主机现状记录。[议题 #58](https://github.com/Delo-Run/delorun/issues/58) 跟踪这两项修复。
+- **负责人决定。** 负责人于 2026-11-06 推迟了这两项主机修复。(a) 类的失败属于主机状态的结果，本页按主机现状记录。[议题 #58](https://github.com/twickas/delorun/issues/58) 跟踪这两项修复。
 - **负载。** 两轮运行期间主机上还有其他任务，如[参考主机与代码树](#reference-host-and-tree)所述。第一轮的单独重跑以及 (c) 类文件显示出与负载相关的失败。
 
 <a id="green-base-on-main"></a>
@@ -289,7 +289,7 @@ P4 是针对参考主机的牵头人决定，作出于 2026-11-07：该设定重
 
 ### 排除项
 
-按名称排除一个测试：`packages/test-support/llm-mock-server/tests/server.spec.ts` 中的 `mock LLM server wire behaviors > formats an IPv6 listener as a valid base URL`。该测试单独运行时每次都因 `Error: listen EADDRNOTAVAIL: address not available ::1` 而失败，原因是参考主机上禁用了 IPv6 loopback（[主机状态](#host-state)）。主机修复落地时，排除项即告结束；[议题 #58](https://github.com/Delo-Run/delorun/issues/58) 跟踪该修复与 WebKit 库。
+按名称排除一个测试：`packages/test-support/llm-mock-server/tests/server.spec.ts` 中的 `mock LLM server wire behaviors > formats an IPv6 listener as a valid base URL`。该测试单独运行时每次都因 `Error: listen EADDRNOTAVAIL: address not available ::1` 而失败，原因是参考主机上禁用了 IPv6 loopback（[主机状态](#host-state)）。主机修复落地时，排除项即告结束；[议题 #58](https://github.com/twickas/delorun/issues/58) 跟踪该修复与 WebKit 库。
 
 <a id="contention"></a>
 ### 资源争用

@@ -62,7 +62,7 @@ describe('the desktop download button', () => {
       if (href !== '') expect(isAllowedDownload(href), `${platform}: ${href}`).toBe(true)
     }
     expect(isAllowedDownload('https://releases.delorun.com/desktop/Delorun.dmg')).toBe(true)
-    expect(isAllowedDownload('https://github.com/Delo-Run/delorun/releases/download/v0.1.0/Delorun.msi')).toBe(true)
+    expect(isAllowedDownload('https://github.com/twickas/delorun/releases/download/v0.1.0/Delorun.msi')).toBe(true)
     for (const refused of [
       'http://releases.delorun.com/desktop/Delorun.dmg',
       'ftp://releases.delorun.com/Delorun.dmg',
@@ -72,7 +72,7 @@ describe('the desktop download button', () => {
       'https://user@releases.delorun.com/Delorun.dmg',
       'https://releases.delorun.com:8443/Delorun.dmg',
       'https://github.com/someone-else/delorun/releases/download/v0.1.0/Delorun.msi',
-      'https://github.com/Delo-Run/delorun/archive/main.zip',
+      'https://github.com/twickas/delorun/archive/main.zip',
       '/Delorun.dmg',
     ]) {
       expect(isAllowedDownload(refused), refused).toBe(false)

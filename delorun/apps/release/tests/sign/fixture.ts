@@ -377,7 +377,7 @@ export async function releaseFixture(test: TestContext, options: FixtureOptions 
     },
     git,
     run,
-    record: () => run('record-rebuild.ts', ['--version', version, '--release', release, '--rebuild', rebuild, '--record', recordPath, '--builder', 'fixture-holder', '--compared-with', 'https://github.com/Delo-Run/delorun/actions/runs/1']),
+    record: () => run('record-rebuild.ts', ['--version', version, '--release', release, '--rebuild', rebuild, '--record', recordPath, '--builder', 'fixture-holder', '--compared-with', 'https://github.com/twickas/delorun/actions/runs/1']),
     sign: async (signEnv = {}, args = {}) => {
       feed.answer(args.advisories ?? {})
       try {
@@ -425,7 +425,7 @@ export function manifestContent(version: string, archive: Uint8Array): ReleaseMa
     version,
     dsh: '0.2.2-rc.1',
     channel: 'stable',
-    source: { repository: 'https://github.com/Delo-Run/delorun', tag: `v${version}`, commit: 'c'.repeat(40) },
+    source: { repository: 'https://github.com/twickas/delorun', tag: `v${version}`, commit: 'c'.repeat(40) },
     published: '2026-11-06T12:00:00Z',
     runtime: { 'linux-x64': runtime, 'linux-arm64': runtime, 'darwin-x64': runtime, 'darwin-arm64': runtime, 'win32-x64': runtime },
     desktop: { 'mac-arm64': desktop, 'mac-x64': desktop, 'win-x64': desktop },

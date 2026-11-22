@@ -10,7 +10,7 @@ import { REPO, runTsx, scratchRepo, type Scratch } from '../gates/support.ts'
 
 const ISSUES = join(REPO, 'delorun/apps/tools/src/issues/issues.ts')
 const FIXTURE_PATH = 'delorun/apps/tools/tests/issues/fixtures/briefs.valid.json'
-const REPOSITORY = 'Delo-Run/delorun'
+const REPOSITORY = 'twickas/delorun'
 const FIXTURE_TEXT = readFileSync(join(REPO, FIXTURE_PATH), 'utf8')
 const LABELS_TEXT = readFileSync(join(REPO, LABELS_PATH), 'utf8')
 
@@ -190,7 +190,7 @@ describe('issues.ts --dry-run', () => {
     const headings = result.output.split('\n').filter(line => line.startsWith('### ')).map(line => line.slice(4))
     expect(headings).toEqual([...BRIEF_FIELDS])
     expect(result.output).toContain('== Fixture: a brief that passes the generator ==')
-    expect(result.output).toContain('[`AGENTS.md`](https://github.com/Delo-Run/delorun/blob/main/AGENTS.md)')
+    expect(result.output).toContain('[`AGENTS.md`](https://github.com/twickas/delorun/blob/main/AGENTS.md)')
   })
 
   it('exits 1 and prints no body when a brief has a problem', (test) => {

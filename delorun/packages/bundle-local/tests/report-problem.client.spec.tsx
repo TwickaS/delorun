@@ -11,7 +11,7 @@ import { REPORT_CHAT_DRAFT, reportChatStarter } from '../src/client/ReportFooter
 
 const DETAILS: ReportDetails = {
   delorun: '0.1.0-rc.1', dsh: '0.2.2', os: 'Linux 6.6', platform: 'linux x64', excerpt: '2026-11-15T10:00:00.000Z home: failed',
-  issueUrl: 'https://github.com/Delo-Run/delorun/issues/new', template: 'bug_report.yml',
+  issueUrl: 'https://github.com/twickas/delorun/issues/new', template: 'bug_report.yml',
 }
 const t = makeTranslate(en)
 
@@ -55,7 +55,7 @@ describe('the report dialog', () => {
     fireEvent.click(button)
     expect(open).toHaveBeenCalledTimes(1)
     const [url, target, features] = open.mock.calls[0] as [string, string, string]
-    expect(new URL(url).origin + new URL(url).pathname).toBe('https://github.com/Delo-Run/delorun/issues/new')
+    expect(new URL(url).origin + new URL(url).pathname).toBe('https://github.com/twickas/delorun/issues/new')
     expect(new URL(url).searchParams.get('version')).toContain('studio on computer')
     expect([target, features]).toEqual(['_blank', 'noopener,noreferrer'])
     // The one request was the read of the home's own route, made before the click.
