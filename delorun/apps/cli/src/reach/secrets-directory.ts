@@ -21,6 +21,7 @@ import { profileDirectory } from '../profile.ts'
 const HOME_OWN_EXPRESSION = /^dshHomePath\(\s*(['"])secrets\1\s*,\s*(['"])home-auth\2\s*\)$/
 
 /**
+ * The directory the home would open for its paired devices' sessions.
  * @param home - the Delorun home.
  * @param profile - the CLI profile.
  * @param installAnchor - the installation's `package.json`, which the profile's bundles resolve from.

@@ -77,7 +77,7 @@ function world(options: Options = {}) {
     reach: () => reach,
     reloaded: options.reload ?? (() => Promise.resolve(options.hotReload !== false && options.reloadFails !== true)),
     signOutDevices: () => { signedOut += 1; options.onSignOut?.(); return Promise.resolve(1) },
-    reloadWaitMs: options.reloadWaitMs,
+    ...options.reloadWaitMs === undefined ? {} : { reloadWaitMs: options.reloadWaitMs },
     isPortFree: async port => !(options.busy ?? []).includes(port),
     tailscale: tailscale.run,
     now: () => now,
