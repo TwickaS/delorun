@@ -260,6 +260,37 @@ describe('delorun reach', () => {
     expect(out.stdout).toContain('Every paired device is signed out')
   })
 
+  it('signs out the sessions in the secrets directory the profile configures, not a fixed one', async () => {
+    const { old, live } = await pairedWithSession(join('secrets', 'configured-auth'))
+    await reach().run(['on', 'tailscale'], context)
+    const patch = join(delorunHome, 'profiles', 'default', 'cordis.patch.yml')
+    writeFileSync(patch, `${readFileSync(patch, 'utf8')}- id: delorun-home-auth\n  config:\n    secretsDirectory: ${join(delorunHome, 'secrets', 'configured-auth')}\n`)
+    expect(await live(old.token)).toBe(true)
+    await expect(reach({ running: () => false }).run(['off'], context)).resolves.toBe(EXIT.ok)
+    expect(await live(old.token)).toBe(false)
+  })
+
+  it('has a home that started while the stored sessions were removed sign out too', async () => {
+    const { old, live } = await pairedWithSession()
+    await reach().run(['on', 'tailscale'], context)
+    const sent: string[] = []
+    const send = (_home: string, _profile: string, request: UnsignedRequest): Promise<ResponseLine[]> => {
+      sent.push(request.op)
+      return Promise.resolve([{ ok: true, options: [{ option: 'tailscale-private', state: 'off' }] }] as ResponseLine[])
+    }
+    // The first look finds no home; by the time the stored sessions are gone, one runs.
+    let looks = 0
+    await expect(reach({ running: () => (looks += 1) > 1, send }).run(['off'], context)).resolves.toBe(EXIT.ok)
+    expect(await live(old.token)).toBe(false)
+    expect(sent).toEqual(['reach.apply'])
+    expect(out.stdout).toContain('Every paired device is signed out')
+    // One that started and does not answer is named, with the restart that ends its sessions.
+    out.stderr = ''
+    looks = 0
+    await expect(reach({ running: () => (looks += 1) > 1, send: () => Promise.reject(new Error('no socket')) }).run(['off'], context)).resolves.toBe(EXIT.failed)
+    expect(out.stderr).toContain('Restart Delorun to end every session')
+  })
+
   it('does not say the devices are signed out when the sign-out fails, and still removes the serve rule', async () => {
     const { directory } = await pairedWithSession()
     writeFileSync(join(directory, 'sessions.json'), 'not json')

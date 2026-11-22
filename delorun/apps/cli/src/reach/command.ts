@@ -11,10 +11,12 @@
  * - `off` turns the option off in the row, resets who may ask to pair without a window, removes whatever Tailscale
  *   serves on the serve port at once and confirms it is gone, then signs every paired device out (the device list stays).
  *   The sign-out does not depend on what Tailscale or the home answers: a running home does it itself, after its
- *   listener has stopped, when it applies the row; a home that does not answer, and one that does not run, have their
- *   stored sessions removed. "Every paired device is signed out" is printed only once that succeeded; a removal
- *   Tailscale cannot confirm, a sign-out that failed, or a home that did not apply the row exits non-zero with the
- *   reason. A home that did not answer keeps its sessions in memory until it restarts.
+ *   listener has stopped, when it applies the row; a home that does not answer, one that does not run, and one that
+ *   started meanwhile have their stored sessions removed (from the profile's configured secrets directory) or are asked
+ *   again. "Every paired device is signed out" is printed only once that succeeded; a removal Tailscale cannot confirm,
+ *   a sign-out that failed, or a home that did not apply the row exits non-zero with the reason. A sign-out failure never
+ *   stops the serve rule's removal, which comes first. What remains: a home that starts after the last look still
+ *   loads the sessions it finds, and a home that did not answer keeps its sessions in memory until it restarts.
  * - While the profile's home runs, `on` and `off` ask it over the update channel's `reach.apply` (C19) to restart its
  *   options from the row, and print the state it answers; a home that cannot apply it, or a start that is not
  *   `ready`, exits non-zero with the reason and the restart command.
@@ -28,7 +30,7 @@ import { pinOffHint } from '../devices/pin.ts'
 import { DEFAULT_SERVE_PORT } from '@delorun/contract-reach-providers'
 import type { ReachOptionStatus } from '@delorun/contract-home-process'
 import { checkServeAccess, ReachError, readTailscale, removeServe, serveTarget, systemTailscale, tailscaleAddress, type TailscaleRunner } from '@delorun/reach'
-import { listenerPortFor, readPairingAt, signInAddress, TRUST_STATEMENT, writeMayAskAt } from '@delorun/setup-apply'
+import { listenerPortFor, readPairingAt, readSecretsDirectoryAt, signInAddress, TRUST_STATEMENT, writeMayAskAt } from '@delorun/setup-apply'
 import { join } from 'node:path'
 import { processExists, readHomeLock, resolveDelorunHome, runDirectory } from '@delorun/home'
 import { sendHomeRequest, type ResponseLine, type UnsignedRequest } from '@delorun/home-process'
@@ -326,13 +328,25 @@ async function turnOff(args: readonly string[], context: CommandContext, depende
     }
   }
   if (!signedOut) {
+    let stored: string | undefined
     try {
-      await new HomeAuth({ directory: join(home, 'secrets', 'home-auth') }).signAllDevicesOut()
+      await new HomeAuth({ directory: readSecretsDirectoryAt(profilePatchPath(home, profile)) ?? join(home, 'secrets', 'home-auth') }).signAllDevicesOut()
       signedOut = true
     } catch (error) {
       if (!(error instanceof HomeAuthError)) throw error
-      problems.push(`the paired devices could not be signed out: ${error.message}`)
+      stored = `the paired devices could not be signed out: ${error.message}`
     }
+    // A home that started while the stored sessions were removed holds the old ones in memory: have it sign out too.
+    if (!running && dependencies.running(home, profile)) {
+      const answer = await askHome(dependencies, home, profile, 'reach.apply')
+      if (answer.kind === 'options') {
+        signedOut = true
+        live = answer.options
+      } else {
+        problems.push(`Delorun started while the devices were being signed out and did not answer: ${answer.reason}.\nRestart Delorun to end every session: ${restartCommand(profile)}.`)
+      }
+    }
+    if (!signedOut && stored !== undefined) problems.push(stored)
   }
   if (signedOut) lines.splice(1, 0, 'Every paired device is signed out and stays on the list; each signs in again when remote access is on.')
   context.stdout(`${[...lines, ...live.map(liveLine)].join('\n')}\n`)
