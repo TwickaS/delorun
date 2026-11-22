@@ -24,7 +24,7 @@ interface Row {
   error?: { code: string; message?: string; diagnostic?: string }
   readOnlyReason?: string
   installed?: boolean
-  meta?: { title?: string | { en: string }; description?: string }
+  meta?: { title?: string | { en: string; zh?: string }; description?: string }
 }
 
 const row = (change: Partial<Row> & { name: string }): Row => ({ availability: 'installation', enabled: false, ...change })
@@ -44,7 +44,7 @@ function bench(rows: readonly Row[] | 'refused' | 'rejects' | 'no-remote', optio
   if (rows !== 'no-remote') ctx.provide('remote.pluginManager', pluginManager as never)
   const openList = vi.fn()
   ctx.provide('pluginNavigation', { openList } as never)
-  const installer = createBundleInstaller(ctx, { addWaitMs: () => options.addWaitMs ?? 60_000, pollMs: 1000 })
+  const installer = createBundleInstaller(ctx, { addWaitMs: () => options.addWaitMs ?? 60_000, pollMs: 1000, resolveText: text => (typeof text === 'string' ? text : text.zh ?? text.en) })
   return { ctx, installer, pluginManager, openList, state: (name: string) => installer.views.getSnapshot()[name] }
 }
 
@@ -324,7 +324,7 @@ describe('opening Plugins', () => {
     const { installer, openList } = bench([])
     installer.openPlugins()
     expect(openList).toHaveBeenCalledOnce()
-    const bare = createBundleInstaller(new Context(), { addWaitMs: () => 1000, pollMs: 1000 })
+    const bare = createBundleInstaller(new Context(), { addWaitMs: () => 1000, pollMs: 1000, resolveText: text => (typeof text === 'string' ? text : text.en) })
     expect(() => { bare.openPlugins() }).not.toThrow()
   })
 })
@@ -492,9 +492,10 @@ describe('a pack the Host downloads', () => {
 })
 
 describe('the downloads panel during an add the plugin manager runs', () => {
-  it('lists a catalog install from the press until it ends, with the package\'s title', async () => {
+  it('lists a catalog install from the press until it ends, with the package\'s title in the studio\'s language', async () => {
     let answer: (value: { ok: true, value: { application: 'applied' } }) => void = () => undefined
-    const { installer, pluginManager } = bench([row({ name: 'a', availability: 'missing', installTarget: { spec: '@scope/a@1.2.3', version: '1.2.3' }, meta: { title: 'A' } })])
+    // The bench resolves titles as a studio in Chinese would.
+    const { installer, pluginManager } = bench([row({ name: 'a', availability: 'missing', installTarget: { spec: '@scope/a@1.2.3', version: '1.2.3' }, meta: { title: { en: 'English A', zh: 'A' } } })])
     pluginManager.installBundle.mockImplementationOnce(() => new Promise((resolve) => { answer = resolve }))
     installer.refresh(['a'])
     await flush()

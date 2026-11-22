@@ -55,6 +55,8 @@ export interface BundleInstallerOptions {
   readonly addWaitMs: () => number
   /** How often a slow add re-reads the plugin manager's state, in milliseconds. */
   readonly pollMs: number
+  /** A package's title in the studio's language, for the downloads panel's row of an add this page runs. */
+  readonly resolveText: (text: LocalizedText) => string
 }
 
 /** What the steps use to offer bundles. */
@@ -171,15 +173,6 @@ export function packReason(pack: PackView | undefined): string | undefined {
 function pluginManager(ctx: Context): ClientRemote['pluginManager'] | undefined {
   const namespace: ClientRemote['pluginManager'] | undefined = ctx.get('remote.pluginManager')
   return namespace
-}
-
-/**
- * A package's own title in English, for the downloads panel's row of an install this page runs.
- * @param title - the title the plugin manager lists, if any.
- * @returns the text, or undefined.
- */
-function textOf(title: LocalizedText | undefined): string | undefined {
-  return title === undefined ? undefined : typeof title === 'string' ? title : title.en
 }
 
 /**
@@ -388,7 +381,7 @@ export function createBundleInstaller(ctx: Context, options: BundleInstallerOpti
     const target = bundle.availability === 'missing' ? bundle.installTarget : undefined
     // The plugin manager's own install is not in the Host's install queue; the downloads panel shows it from this page.
     // Switching on a bundle the installation ships downloads nothing, so it shows as installing.
-    const shown = startPageDownload(name, { title: textOf(before.title), state: target === undefined ? 'installing' : 'downloading' })
+    const shown = startPageDownload(name, { title: before.title === undefined ? undefined : options.resolveText(before.title), state: target === undefined ? 'installing' : 'downloading' })
     let done = false
     const finish = (view: BundleView): void => {
       if (done) return
@@ -460,7 +453,7 @@ export function createBundleInstaller(ctx: Context, options: BundleInstallerOpti
       if (before?.state !== 'available' || entry === undefined || remote === undefined) return
       setRow(id, { ...before, state: 'installing' })
       // Turning on a row downloads nothing, so it shows as installing.
-      const shown = startPageDownload(id, { title: textOf(before.title), state: 'installing' })
+      const shown = startPageDownload(id, { title: before.title === undefined ? undefined : options.resolveText(before.title), state: 'installing' })
       inflightRows.add(id)
       try {
         const result = await remote.setPluginEnabled(entry, true)
