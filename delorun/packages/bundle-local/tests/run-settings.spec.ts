@@ -557,6 +557,46 @@ describe('the routes', () => {
     expect(w.files.recordText()).toBe(record)
   })
 
+  it('answer any prompts value but safer and stock with 400 at the computer, and change nothing', async () => {
+    // Pins `z.enum(['safer', 'stock'])`: widening it would turn dangerous mode on in one request, past the code and the phrase.
+    const w = world()
+    const routes = routesOver(w, 'loopback')
+    const patch = w.files.patchText()
+    const record = w.files.recordText()
+    for (const answer of ['dangerous', 'DANGEROUS', ' safer', ['safer']]) {
+      const response = await routes.studio(RUN_ROUTES.prompts, JSON.stringify({ answer }))
+      expect([JSON.stringify(answer), response.status, ((await response.json()) as { error: string }).error]).toEqual([JSON.stringify(answer), 400, 'BAD_REQUEST'])
+    }
+    expect(w.files.patchText()).toBe(patch)
+    expect(w.files.recordText()).toBe(record)
+    expect(await w.files.grant()).toBe('absent')
+  })
+
+  it('answer the dangerous body 400 even to a device that holds a grant for exactly that body, and 403 to one that holds none', async () => {
+    // Pins the enum behind the class gate: a grant admits the call, the route's schema still refuses the value.
+    const w = world()
+    const routes = routesOver(w, 'reach-tailscale-private')
+    const patch = w.files.patchText()
+    const record = w.files.recordText()
+    const body = JSON.stringify({ answer: 'dangerous' })
+    const grant = routes.face.grantFor('bundle-local/run-prompts', { path: RUN_ROUTES.prompts, body })
+    expect((await routes.device(RUN_ROUTES.prompts, body, grant)).status).toBe(400)
+    expect((await routes.device(RUN_ROUTES.prompts, body)).status).toBe(403)
+    expect(w.files.patchText()).toBe(patch)
+    expect(w.files.recordText()).toBe(record)
+    expect(await w.files.grant()).toBe('absent')
+  })
+
+  it('send a body that names the key twice through the class gate, which answers a device with no grant 403', async () => {
+    // Pins `saferOnly` reading the same value the route parses: the body is not read as `safer` by one and `stock` by the other.
+    const w = world({ record: { version: 1, prompts: 'stock', background: true } })
+    const routes = routesOver(w, 'reach-tailscale-private')
+    const refused = await routes.device(RUN_ROUTES.prompts, '{"answer":"safer","answer":"stock"}')
+    expect([refused.status, ((await refused.json()) as { error: string }).error]).toEqual([403, 'ELEVATION_REQUIRED'])
+    expect(w.files.record().prompts).toBe('stock')
+    expect(w.files.row('delorun-mcp-consent')).toBeUndefined()
+  })
+
   it('refuse a device without a PIN or a passkey the stock answer and the background', async () => {
     const w = world()
     const routes = routesOver(w, 'reach-tailscale-private', faceWorld('phone', 'reach-tailscale-private', false))
