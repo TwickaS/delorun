@@ -57,7 +57,7 @@ Delorun 修改了上游 DeepSeek Harness 的一些文件。差异台账记录其
 | `code-refusal-switch` | loader 的 `refuseCode` 选项以及引导对它的转发 | 一个开关，关闭；没有任何 Delorun 组合开启它 |
 | `settings-by-chat` | 配置编辑器的 `edited` 事件（C4）及其 `before-save` hook（C1） | 已发布的 `cli`，它拒绝密钥角色字段的值 |
 | `container-denial-marker` | 标记由环境造成的拒绝的沙箱、shell 和 PTC 字段 | 已发布的限制，位于 C16 开关之后 |
-| `contributor-templates` | The PR description skill's AI usage section, in place of upstream's AI-DECLARATION block | the repository's pull request template |
+| `contributor-templates` | The PR description skill's English text, the template's sections and a plain AI usage section, in place of upstream's AI-DECLARATION block | the repository's pull request template |
 | `custom-chat-display` | 自定义工作详情模式，以及 chat 渲染器读取的呈现策略 | studio 通道 |
 | `default-workspace-directory` | 首次使用的 Workspace 的、由运营者指名的路径 | 已发布的 `bundle-local` 和 `cli`（`delorun start`），位于 C16 开关之后 |
 | `delorun-launcher` | `runCli` 从启动器获取其参数，并且 CLI 的参数解析器和插件命令被构建为启动器所导入的入口 | 已发布的 `cli` |

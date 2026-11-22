@@ -3288,7 +3288,7 @@
       "path": ".agents/skills/dsh-pr-description/SKILL.md",
       "class": "delorun-feature",
       "feature": "contributor-templates",
-      "reason": "The PR description skill asks for a plain AI usage section instead of upstream's AI-DECLARATION block and stage table."
+      "reason": "The PR description skill asks for English descriptions in the pull request template's sections, with a plain AI usage section instead of upstream's AI-DECLARATION block and stage table."
     }
   ],
   "retired": []

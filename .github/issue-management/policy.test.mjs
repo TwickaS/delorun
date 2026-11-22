@@ -246,6 +246,20 @@ test('keeps the pull request template aligned with the dsh-pr-description skill'
   const responsibility =
     'The person who opens the pull request is responsible for it, whether or not an AI agent wrote it. A pull request written with an agent gets the same checks and review as any other.'
   const skillProse = skill.replace(/```[\s\S]*?```/g, '')
+  assert.deepEqual(
+    [...skill.matchAll(/^### (Problem|Change|Scope|Verification|Checklist)$/gm)].map(([, heading]) => heading),
+    ['Problem', 'Change', 'Scope', 'Verification', 'Checklist'],
+    'the skill describes the template sections in template order',
+  )
+  assert.ok(
+    skill.includes(
+      '`## Problem`, `## Change`, `## Scope`, `## Verification`, `## Checklist` and `## AI usage`',
+    ),
+    'the skill names the template headings',
+  )
+  assert.match(skillProse, /Write the description in English, in British English/, 'the skill asks for English')
+  assert.doesNotMatch(skill, /^### (Motivation|Changes|Testing)$/m, 'the skill has no old section guidance')
+  assert.doesNotMatch(skill, /Chinese unless/, 'the skill does not ask for Chinese')
   assert.match(skillProse, /^## AI usage$/m, 'the skill names the section AI usage')
   const sectionFormat = skill.match(/^## AI usage\n[\s\S]*?```markdown\n([\s\S]*?)```/m)?.[1]
   assert.ok(sectionFormat, 'the skill shows the section format')
