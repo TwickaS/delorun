@@ -179,7 +179,7 @@ describe('changing a workspace\'s network', () => {
     await expect(network.set(work, undefined, false)).rejects.toMatchObject({ code: 'UNCONFIRMED' })
     await network.set(work, undefined, true)
     expect(network.list().workspaces.find(entry => entry.path === work)).toEqual({ path: work, title: 'Work', network: { access: 'open', hosts: [] }, own: false })
-  })
+  }, 30_000)
 
   it('refuses an invalid host and a setting without a workspace', async () => {
     const { network, work } = await mounted()

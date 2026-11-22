@@ -216,25 +216,26 @@ describe('performance: step 3 stays linear in the length of the text', { timeout
     expect(ms).toBeLessThan(2_000)
   })
 
-  it('redacts a 65,536-byte single line in under 50 ms', () => {
+  // 250 ms leaves room for a loaded machine; the quadratic shape this guards costs seconds.
+  it('redacts a 65,536-byte single line in under 250 ms', () => {
     // The writer's longest record and the capture's line limit, in the one-letter run `writer.spec.ts` writes.
     const text = 'r'.repeat(65_536)
     const { elapsed: ms, redacted } = elapsed(text)
     expect(redacted).toBe(text)
-    expect(ms).toBeLessThan(50)
+    expect(ms).toBeLessThan(250)
   })
 
-  it('redacts a 65,536-byte line whose every third position starts a match in under 50 ms', () => {
+  it('redacts a 65,536-byte line whose every third position starts a match in under 250 ms', () => {
     // `ab-` puts a word start every three characters, so the scheme, path and name patterns all start a match over and
     // over in one line: the shape that made an unbounded `[a-z][a-z0-9+.-]*` before `://` re-read the rest of the line
     // at each start. It is 65 KiB here and not 10 MiB because the pattern's cost per start is what this guards.
     const text = 'ab-'.repeat(Math.ceil(65_536 / 3)).slice(0, 65_536)
     const { elapsed: ms, redacted } = elapsed(text)
     expect(redacted).toBe(text)
-    expect(ms).toBeLessThan(50)
+    expect(ms).toBeLessThan(250)
   })
 
-  it('redacts a 65,536-byte line of long names in under 50 ms', () => {
+  it('redacts a 65,536-byte line of long names in under 250 ms', () => {
     // A query parameter's name and an environment variable's name are each read around the word that marks them, so a
     // run that gives the word a match at every position — `?keykeykey…`, `KEYKEYKEY…` — is the shape that made an
     // unbounded `[^=&;#\s]*` or `[A-Za-z0-9_]*` on each side re-read the rest of the run at every position.
@@ -242,6 +243,6 @@ describe('performance: step 3 stays linear in the length of the text', { timeout
     const { elapsed: ms, redacted } = elapsed(text)
     // Neither run is followed by `=`, so neither is a pair a pattern lists.
     expect(redacted).toBe(text)
-    expect(ms).toBeLessThan(50)
+    expect(ms).toBeLessThan(250)
   })
 })

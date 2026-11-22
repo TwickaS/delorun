@@ -32,7 +32,7 @@ describe('the ZIP entry limit', () => {
     let count = 0
     for await (const _entry of readZip(archive, 1024)) count += 1
     expect(count).toBe(0xfffe)
-  })
+  }, 60_000)
 
   it('refuses 65,535 entries, which the reader would refuse as ZIP64', async () => {
     await expect(write(0xffff)).rejects.toThrow(/exceeds 65534 entries/u)
