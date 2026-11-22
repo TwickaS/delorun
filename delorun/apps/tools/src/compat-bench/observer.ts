@@ -11,7 +11,7 @@
 export type RunContext = Readonly<{ host: 'delorun' | 'delorun-prev' | 'stock'; package: string; outDir: string; runId: string; baseline: boolean; studioPort?: number; container?: string }>
 
 /** What an observer adds to the plugin container and its network. */
-export type ContainerAdditions = Readonly<{ env?: Readonly<Record<string, string>>; files?: ReadonlyArray<Readonly<{ path: string; content: string; mode?: number }>>; networkContainer?: string; caCertPath?: string; preloads?: ReadonlyArray<string>; testChatMarker?: string }>
+export type ContainerAdditions = Readonly<{ env?: Readonly<Record<string, string>>; files?: ReadonlyArray<Readonly<{ path: string; content: string; mode?: number }>>; networkContainer?: string; caCertPath?: string; preloads?: ReadonlyArray<string>; testChatMarker?: string; pidContainer?: string }>
 
 /** The stages of a run, in order. */
 export type StageName = 'install' | 'start' | 'harness' | 'screens' | 'feature' | 'restart' | 'update' | 'clashes' | 'cost' | 'uninstall'
@@ -19,8 +19,9 @@ export type StageName = 'install' | 'start' | 'harness' | 'screens' | 'feature' 
 /** One privacy marker: what the observer saw, in plain words, with the evidence behind it. */
 export type Marker = Readonly<{ state: 'not-seen' | 'seen' | 'declared' | 'not-checked'; summary: string; evidence: ReadonlyArray<string> }>
 
-/** The card's privacy section: the eight markers and whether the observer could read the traffic's contents. */
+/** The eight privacy markers, in the order the card shows them. */
 export type MarkerKey = 'code' | 'chats' | 'modelKeys' | 'otherSecrets' | 'sendsOut' | 'actsForYou' | 'opensADoor' | 'leavesBehind'
+/** The card's privacy section: the eight markers, whether the observer could read the traffic's contents, and what it saw that the author did not declare. */
 export type PrivacySection = Readonly<{ markers: Readonly<Record<MarkerKey, Marker>>; contentsChecked: boolean; findings?: ReadonlyArray<string>; declared?: Readonly<Partial<Record<MarkerKey, string>>> }>
 
 /** An observer the runner calls around a run. */
