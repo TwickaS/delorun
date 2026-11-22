@@ -155,6 +155,13 @@ getContextOrder(name: PromptContextOrderName): number
 context(context: PromptContext): () => void
 
 /**
+ * Turn Delorun's wording on in the calling context's scope until the returned disposer runs. Multiple
+ * registrations are independent.
+ * @returns the exact Cordis effect disposer.
+ */
+useDelorunWording(): () => void
+
+/**
  * Suppress optional dynamic runtime-context contributions in the calling
  * context's scope without changing the services that own or enforce those
  * facts. Multiple suppressors remain independently disposable.
