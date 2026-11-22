@@ -3,6 +3,9 @@
 /** Environment variable that supplies the Electron application identifier. */
 export const DESKTOP_APP_ID_ENV = 'DSH_DESKTOP_APP_ID'
 
+/** Application identifier of Delorun's desktop app, used when {@link DESKTOP_APP_ID_ENV} is not set. */
+export const DEFAULT_DESKTOP_APP_ID = 'com.delorun.desktop'
+
 /** Environment variable that supplies electron-builder's macOS certificate qualifier. */
 export const MACOS_SIGNING_IDENTITY_ENV = 'DSH_DESKTOP_MACOS_SIGNING_IDENTITY'
 
@@ -57,11 +60,12 @@ export function resolveNpmRegistry(env) {
 
 /**
  * Resolve and validate the application identifier shared by every platform target.
- * @param {NodeJS.ProcessEnv} env - Packaging environment.
+ * @param {NodeJS.ProcessEnv} env - Packaging environment; an unset or empty identifier selects Delorun's own.
  * @returns {string} Reverse-DNS application identifier.
  */
 export function resolveDesktopAppId(env) {
-  const appId = requireEnvironmentValue(env, DESKTOP_APP_ID_ENV)
+  const appId = env[DESKTOP_APP_ID_ENV] === undefined || env[DESKTOP_APP_ID_ENV] === ''
+    ? DEFAULT_DESKTOP_APP_ID : requireEnvironmentValue(env, DESKTOP_APP_ID_ENV)
   if (!/^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/u.test(appId)) {
     throw new Error(`desktop release environment: ${DESKTOP_APP_ID_ENV} must be a reverse-DNS identifier`)
   }

@@ -44,8 +44,6 @@ function prepareCli({ platform, arch }: DesktopTarget): void {
     ], { encoding: 'utf8' }).trim()
     prepareCommandLink(cli, arch, minimumVersion)
   }
-  cpSync(join(import.meta.dirname, '..', 'lib', 'command-manager-entry.js'), join(cli, 'command-manager.js'))
-  cpSync(join(import.meta.dirname, 'command-path.ps1'), join(cli, 'command-path.ps1'))
 }
 
 async function main(): Promise<void> {

@@ -1745,14 +1745,14 @@
     {
       "path": "packages/host/frontend-static/src/index.ts",
       "class": "security",
-      "reason": "Every dist file but the install-time ones — the Web app manifest, the favicons, the icons it names and the touch icons — now passes Connection's fence and browser authentication before its bytes are read, as the index already did, so a rebound page and an unauthenticated caller cannot read the application's bytes. `/recovery` also renders the index, behind the same fence, while an index injection row names a distribution's recovery routes (the `dshRecoveryRoutes` global `@delorun/plugin-changes` adds), so the boot page can show C21's recovery screen there; without such a row it is an ordinary missing path. It moves no refusal. Lead verdict (2026-11-11): kept; before sign-in only the named install files directly under the dist root and the root-level icons the manifest lists are served, and any other spelling, case or subdirectory falls to the sign-in check. Lead verdict on the `/recovery` route: pending; no lead review of this change is recorded yet.",
-      "sha256": "66689443fe2bca52c001d45b0782b90891572161e877b2950549cf0d69a707df"
+      "reason": "Every dist file but the install-time ones — the Web app manifest, the favicons, the icons it names and the touch icons — now passes Connection's fence and browser authentication before its bytes are read, as the index already did, so a rebound page and an unauthenticated caller cannot read the application's bytes. `/recovery` also renders the index, behind the same fence, while an index injection row names a distribution's recovery routes (the `dshRecoveryRoutes` global `@delorun/plugin-changes` adds), so the boot page can show C21's recovery screen there; without such a row it is an ordinary missing path. It moves no refusal. Lead verdict (2026-11-11): kept; before sign-in only the named install files directly under the dist root and the root-level icons the manifest lists are served, and any other spelling, case or subdirectory falls to the sign-in check. Lead verdict on the `/recovery` route: pending; no lead review of this change is recorded yet. Adds the reserved dist-root route `/index-injections.json` (L159): it answers the structured index injection rows as JSON, for a client that boots from a Host reached over HTTP (Delorun's desktop app), only after the same `authorizeIndex` admission as the index and only for the Peer that may load the index (the browser Peer over HTTP, the caller's Peer in-process); it adds nothing the index does not render for that Peer, carries no raw `tapIndex` transform (no product plugin registers one, and upstream's desktop path hands the client rows only), and answers `cache-control: no-store`. Lead verdict: pending; no lead review of this change is recorded yet.",
+      "sha256": "763887de43b92eec5d16498567384e19edd80991c9efd27e311a1b477cebbf66"
     },
     {
       "path": "packages/host/frontend-static/tests/frontend-static.spec.ts",
       "class": "security",
-      "reason": "Specs of the gated dist: an unauthenticated or rebound request for a non-public asset is 401 or 403, the install-time files stay public, and the sign-in helper is shared across the specs. `/recovery` renders the index for a signed-in browser only while an index row names the recovery routes, is a 404 otherwise, and is refused without the credential. Lead verdict (2026-11-11): kept; drives the real fence: unauthenticated or rebound requests for non-public dist files are refused, and only the named install files are public. Lead verdict on the `/recovery` specs: pending; no lead review of this change is recorded yet.",
-      "sha256": "9887bc5dea72b56fcbf71369c40483a9bf67dc449bff96e68b8e246f6c23be9b"
+      "reason": "Specs of the gated dist: an unauthenticated or rebound request for a non-public asset is 401 or 403, the install-time files stay public, and the sign-in helper is shared across the specs. `/recovery` renders the index for a signed-in browser only while an index row names the recovery routes, is a 404 otherwise, and is refused without the credential. Lead verdict (2026-11-11): kept; drives the real fence: unauthenticated or rebound requests for non-public dist files are refused, and only the named install files are public. Lead verdict on the `/recovery` specs: pending; no lead review of this change is recorded yet. Specs of the injection-rows route: refused with no cookie, a wrong cookie and a foreign Host exactly as the index is, the admitted browser Peer gets exactly the rows the index renders, an in-process reader gets only its own Peer's rows, the path is reserved over a dist file, HEAD carries no body, other methods are 405. Lead verdict on the route's specs: pending.",
+      "sha256": "1e9c7de914ba67dca6b895308cd07325e7fdfa2d9fe63faa42a11c8084ac6517"
     },
     {
       "path": "packages/web/web-fetch-http/package.json",
@@ -3535,6 +3535,498 @@
       "class": "delorun-feature",
       "feature": "multiview",
       "reason": "Places the agents action's end slot (`conversation.session.header.actions.subagent.end`) close after the trigger so a contributed control reads as part of the same control, and lets an empty end take no room. `@delorun/plugin-multiview` puts its icon toggle there (A619)."
+    },
+    {
+      "path": "apps/desktop-host/src/index.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "The bundled Host starts with product analytics off through a loader overlay, because upstream's desktop profile turns them on; the person's live setting still changes it (S20, C11)."
+    },
+    {
+      "path": "apps/desktop/.env.macos.example",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Follows the removal of the welcome window, the mandatory-update policy and the `dsh` command: no packaging variable, bundle entry, preload bridge or update branch for them remains; the shell design tokens move to `lib/shell`."
+    },
+    {
+      "path": "apps/desktop/.env.windows.example",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Follows the removal of the welcome window, the mandatory-update policy and the `dsh` command: no packaging variable, bundle entry, preload bridge or update branch for them remains; the shell design tokens move to `lib/shell`."
+    },
+    {
+      "path": "apps/desktop/config/macos-packaging/production.env.example",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Follows the removal of the welcome window, the mandatory-update policy and the `dsh` command: no packaging variable, bundle entry, preload bridge or update branch for them remains; the shell design tokens move to `lib/shell`."
+    },
+    {
+      "path": "apps/desktop/config/macos-packaging/test.env.example",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Follows the removal of the welcome window, the mandatory-update policy and the `dsh` command: no packaging variable, bundle entry, preload bridge or update branch for them remains; the shell design tokens move to `lib/shell`."
+    },
+    {
+      "path": "apps/desktop/config/windows-packaging/production.env.example",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Follows the removal of the welcome window, the mandatory-update policy and the `dsh` command: no packaging variable, bundle entry, preload bridge or update branch for them remains; the shell design tokens move to `lib/shell`."
+    },
+    {
+      "path": "apps/desktop/config/windows-packaging/test.env.example",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Follows the removal of the welcome window, the mandatory-update policy and the `dsh` command: no packaging variable, bundle entry, preload bridge or update branch for them remains; the shell design tokens move to `lib/shell`."
+    },
+    {
+      "path": "apps/desktop/installer/extract-report.h",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Product identity: the name Delorun, the app ID `com.delorun.desktop`, the `delorun://` scheme and the `delorun-desktop-*` artefact names, in place of DeepSeek Harness (L157)."
+    },
+    {
+      "path": "apps/desktop/installer/locales/de_DE.json",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Product identity: the name Delorun, the app ID `com.delorun.desktop`, the `delorun://` scheme and the `delorun-desktop-*` artefact names, in place of DeepSeek Harness (L157)."
+    },
+    {
+      "path": "apps/desktop/installer/locales/en_US.json",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Product identity: the name Delorun, the app ID `com.delorun.desktop`, the `delorun://` scheme and the `delorun-desktop-*` artefact names, in place of DeepSeek Harness (L157)."
+    },
+    {
+      "path": "apps/desktop/installer/locales/es_ES.json",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Product identity: the name Delorun, the app ID `com.delorun.desktop`, the `delorun://` scheme and the `delorun-desktop-*` artefact names, in place of DeepSeek Harness (L157)."
+    },
+    {
+      "path": "apps/desktop/installer/locales/fr_FR.json",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Product identity: the name Delorun, the app ID `com.delorun.desktop`, the `delorun://` scheme and the `delorun-desktop-*` artefact names, in place of DeepSeek Harness (L157)."
+    },
+    {
+      "path": "apps/desktop/installer/locales/ja_JP.json",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Product identity: the name Delorun, the app ID `com.delorun.desktop`, the `delorun://` scheme and the `delorun-desktop-*` artefact names, in place of DeepSeek Harness (L157)."
+    },
+    {
+      "path": "apps/desktop/installer/locales/pt_BR.json",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Product identity: the name Delorun, the app ID `com.delorun.desktop`, the `delorun://` scheme and the `delorun-desktop-*` artefact names, in place of DeepSeek Harness (L157)."
+    },
+    {
+      "path": "apps/desktop/installer/locales/ru_RU.json",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Product identity: the name Delorun, the app ID `com.delorun.desktop`, the `delorun://` scheme and the `delorun-desktop-*` artefact names, in place of DeepSeek Harness (L157)."
+    },
+    {
+      "path": "apps/desktop/installer/locales/zh_CN.json",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Product identity: the name Delorun, the app ID `com.delorun.desktop`, the `delorun://` scheme and the `delorun-desktop-*` artefact names, in place of DeepSeek Harness (L157)."
+    },
+    {
+      "path": "apps/desktop/installer/restart-banner.h",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Product identity: the name Delorun, the app ID `com.delorun.desktop`, the `delorun://` scheme and the `delorun-desktop-*` artefact names, in place of DeepSeek Harness (L157)."
+    },
+    {
+      "path": "apps/desktop/installer/restart-status.h",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Product identity: the name Delorun, the app ID `com.delorun.desktop`, the `delorun://` scheme and the `delorun-desktop-*` artefact names, in place of DeepSeek Harness (L157)."
+    },
+    {
+      "path": "apps/desktop/renderer/assets/welcome-brand.svg",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Removed: upstream's DeepSeek account welcome window and API-key onboarding page, with their renderer, preload, styles and sign-in backend. The Delorun app opens the studio directly and setup happens in the home's own studio (A584, L157)."
+    },
+    {
+      "path": "apps/desktop/renderer/assets/window-material.css",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Removed: upstream's DeepSeek account welcome window and API-key onboarding page, with their renderer, preload, styles and sign-in backend. The Delorun app opens the studio directly and setup happens in the home's own studio (A584, L157)."
+    },
+    {
+      "path": "apps/desktop/renderer/mandatory-update-frame.js",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Removed: the mandatory-update policy that DeepSeek's server decided, with its window, overlay, test login, packaging environment and attention notice. No request goes to DeepSeek's origin and no window can block the app (L157)."
+    },
+    {
+      "path": "apps/desktop/renderer/mandatory-update.css",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Removed: the mandatory-update policy that DeepSeek's server decided, with its window, overlay, test login, packaging environment and attention notice. No request goes to DeepSeek's origin and no window can block the app (L157)."
+    },
+    {
+      "path": "apps/desktop/renderer/mandatory-update.html",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Removed: the mandatory-update policy that DeepSeek's server decided, with its window, overlay, test login, packaging environment and attention notice. No request goes to DeepSeek's origin and no window can block the app (L157)."
+    },
+    {
+      "path": "apps/desktop/renderer/mandatory-update.js",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Removed: the mandatory-update policy that DeepSeek's server decided, with its window, overlay, test login, packaging environment and attention notice. No request goes to DeepSeek's origin and no window can block the app (L157)."
+    },
+    {
+      "path": "apps/desktop/renderer/policy-login-loading.html",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Removed: the mandatory-update policy that DeepSeek's server decided, with its window, overlay, test login, packaging environment and attention notice. No request goes to DeepSeek's origin and no window can block the app (L157)."
+    },
+    {
+      "path": "apps/desktop/renderer/welcome.css",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Removed: upstream's DeepSeek account welcome window and API-key onboarding page, with their renderer, preload, styles and sign-in backend. The Delorun app opens the studio directly and setup happens in the home's own studio (A584, L157)."
+    },
+    {
+      "path": "apps/desktop/renderer/welcome.html",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Removed: upstream's DeepSeek account welcome window and API-key onboarding page, with their renderer, preload, styles and sign-in backend. The Delorun app opens the studio directly and setup happens in the home's own studio (A584, L157)."
+    },
+    {
+      "path": "apps/desktop/scripts/command-path.ps1",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Removed: the `dsh` command registration and its \"Manage dsh Command\" dialog. `delorun` lives in the home's distribution; the app registers no terminal command."
+    },
+    {
+      "path": "apps/desktop/scripts/desktop-package-environment.d.mts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Follows the removal of the welcome window, the mandatory-update policy and the `dsh` command: no packaging variable, bundle entry, preload bridge or update branch for them remains; the shell design tokens move to `lib/shell`."
+    },
+    {
+      "path": "apps/desktop/scripts/desktop-package-environment.mjs",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Follows the removal of the welcome window, the mandatory-update policy and the `dsh` command: no packaging variable, bundle entry, preload bridge or update branch for them remains; the shell design tokens move to `lib/shell`."
+    },
+    {
+      "path": "apps/desktop/scripts/desktop-policy-environment.d.mts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Removed: the mandatory-update policy that DeepSeek's server decided, with its window, overlay, test login, packaging environment and attention notice. No request goes to DeepSeek's origin and no window can block the app (L157)."
+    },
+    {
+      "path": "apps/desktop/scripts/desktop-policy-environment.mjs",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Removed: the mandatory-update policy that DeepSeek's server decided, with its window, overlay, test login, packaging environment and attention notice. No request goes to DeepSeek's origin and no window can block the app (L157)."
+    },
+    {
+      "path": "apps/desktop/scripts/desktop-release-environment.d.mts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Product identity: the name Delorun, the app ID `com.delorun.desktop`, the `delorun://` scheme and the `delorun-desktop-*` artefact names, in place of DeepSeek Harness (L157)."
+    },
+    {
+      "path": "apps/desktop/scripts/desktop-release-environment.mjs",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Product identity: the name Delorun, the app ID `com.delorun.desktop`, the `delorun://` scheme and the `delorun-desktop-*` artefact names, in place of DeepSeek Harness (L157)."
+    },
+    {
+      "path": "apps/desktop/scripts/development-app.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Product identity: the name Delorun, the app ID `com.delorun.desktop`, the `delorun://` scheme and the `delorun-desktop-*` artefact names, in place of DeepSeek Harness (L157)."
+    },
+    {
+      "path": "apps/desktop/scripts/electron-builder-config.mjs",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Product identity: the name Delorun, the app ID `com.delorun.desktop`, the `delorun://` scheme and the `delorun-desktop-*` artefact names, in place of DeepSeek Harness (L157)."
+    },
+    {
+      "path": "apps/desktop/scripts/installed-update-builder.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Follows the removal of the welcome window, the mandatory-update policy and the `dsh` command: no packaging variable, bundle entry, preload bridge or update branch for them remains; the shell design tokens move to `lib/shell`."
+    },
+    {
+      "path": "apps/desktop/scripts/installed-update-package-content.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Follows the removal of the welcome window, the mandatory-update policy and the `dsh` command: no packaging variable, bundle entry, preload bridge or update branch for them remains; the shell design tokens move to `lib/shell`."
+    },
+    {
+      "path": "apps/desktop/scripts/package-macos.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Product identity: the name Delorun, the app ID `com.delorun.desktop`, the `delorun://` scheme and the `delorun-desktop-*` artefact names, in place of DeepSeek Harness (L157)."
+    },
+    {
+      "path": "apps/desktop/scripts/package-target.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Product identity: the name Delorun, the app ID `com.delorun.desktop`, the `delorun://` scheme and the `delorun-desktop-*` artefact names, in place of DeepSeek Harness (L157)."
+    },
+    {
+      "path": "apps/desktop/scripts/prepare-installed-update-application.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Follows the removal of the welcome window, the mandatory-update policy and the `dsh` command: no packaging variable, bundle entry, preload bridge or update branch for them remains; the shell design tokens move to `lib/shell`."
+    },
+    {
+      "path": "apps/desktop/scripts/prepare-runtime.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Follows the removal of the welcome window, the mandatory-update policy and the `dsh` command: no packaging variable, bundle entry, preload bridge or update branch for them remains; the shell design tokens move to `lib/shell`."
+    },
+    {
+      "path": "apps/desktop/scripts/smoke-packaged-runtime.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Product identity: the name Delorun, the app ID `com.delorun.desktop`, the `delorun://` scheme and the `delorun-desktop-*` artefact names, in place of DeepSeek Harness (L157)."
+    },
+    {
+      "path": "apps/desktop/scripts/test-local-updater.mjs",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Follows the removal of the welcome window, the mandatory-update policy and the `dsh` command: no packaging variable, bundle entry, preload bridge or update branch for them remains; the shell design tokens move to `lib/shell`."
+    },
+    {
+      "path": "apps/desktop/scripts/test-windows-installer.mjs",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Product identity: the name Delorun, the app ID `com.delorun.desktop`, the `delorun://` scheme and the `delorun-desktop-*` artefact names, in place of DeepSeek Harness (L157)."
+    },
+    {
+      "path": "apps/desktop/scripts/test-workspace-updates.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Follows the removal of the welcome window, the mandatory-update policy and the `dsh` command: no packaging variable, bundle entry, preload bridge or update branch for them remains; the shell design tokens move to `lib/shell`."
+    },
+    {
+      "path": "apps/desktop/scripts/verify-retained-desktop.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Product identity: the name Delorun, the app ID `com.delorun.desktop`, the `delorun://` scheme and the `delorun-desktop-*` artefact names, in place of DeepSeek Harness (L157)."
+    },
+    {
+      "path": "apps/desktop/src/account-backend.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Removed: upstream's DeepSeek account welcome window and API-key onboarding page, with their renderer, preload, styles and sign-in backend. The Delorun app opens the studio directly and setup happens in the home's own studio (A584, L157)."
+    },
+    {
+      "path": "apps/desktop/src/client/WelcomePage.tsx",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Removed: upstream's DeepSeek account welcome window and API-key onboarding page, with their renderer, preload, styles and sign-in backend. The Delorun app opens the studio directly and setup happens in the home's own studio (A584, L157)."
+    },
+    {
+      "path": "apps/desktop/src/client/styles.d.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Removed: upstream's DeepSeek account welcome window and API-key onboarding page, with their renderer, preload, styles and sign-in backend. The Delorun app opens the studio directly and setup happens in the home's own studio (A584, L157)."
+    },
+    {
+      "path": "apps/desktop/src/client/welcome.tsx",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Removed: upstream's DeepSeek account welcome window and API-key onboarding page, with their renderer, preload, styles and sign-in backend. The Delorun app opens the studio directly and setup happens in the home's own studio (A584, L157)."
+    },
+    {
+      "path": "apps/desktop/src/command-installation.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Removed: the `dsh` command registration and its \"Manage dsh Command\" dialog. `delorun` lives in the home's distribution; the app registers no terminal command."
+    },
+    {
+      "path": "apps/desktop/src/command-management.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Removed: the `dsh` command registration and its \"Manage dsh Command\" dialog. `delorun` lives in the home's distribution; the app registers no terminal command."
+    },
+    {
+      "path": "apps/desktop/src/command-manager-entry.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Removed: the `dsh` command registration and its \"Manage dsh Command\" dialog. `delorun` lives in the home's distribution; the app registers no terminal command."
+    },
+    {
+      "path": "apps/desktop/src/locale.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Product name Delorun in every language, the \"Windows preview, unsigned\" label (`previewLabel`, `previewWindowTitle`), and the copy of the removed welcome, mandatory-update and command dialogs dropped."
+    },
+    {
+      "path": "apps/desktop/src/main.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Home source and identity: the app connects to a Delorun home in WSL2 beside upstream's bundled Host (status, version guard, one-time link exchange, boot rows, error page, WebSocket credential for the home's exact origin), is named Delorun with its own data folder and `delorun://` scheme, carries the \"Windows preview, unsigned\" label, and no longer has the welcome window, the mandatory-update policy or the `dsh` command (L157, L158, L159)."
+    },
+    {
+      "path": "apps/desktop/src/mandatory-update-ipc.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Removed: the mandatory-update policy that DeepSeek's server decided, with its window, overlay, test login, packaging environment and attention notice. No request goes to DeepSeek's origin and no window can block the app (L157)."
+    },
+    {
+      "path": "apps/desktop/src/mandatory-update-policy.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Removed: the mandatory-update policy that DeepSeek's server decided, with its window, overlay, test login, packaging environment and attention notice. No request goes to DeepSeek's origin and no window can block the app (L157)."
+    },
+    {
+      "path": "apps/desktop/src/mandatory-update-window.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Removed: the mandatory-update policy that DeepSeek's server decided, with its window, overlay, test login, packaging environment and attention notice. No request goes to DeepSeek's origin and no window can block the app (L157)."
+    },
+    {
+      "path": "apps/desktop/src/policy-test-auth.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Removed: the mandatory-update policy that DeepSeek's server decided, with its window, overlay, test login, packaging environment and attention notice. No request goes to DeepSeek's origin and no window can block the app (L157)."
+    },
+    {
+      "path": "apps/desktop/src/preload-app.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Follows the removal of the welcome window, the mandatory-update policy and the `dsh` command: no packaging variable, bundle entry, preload bridge or update branch for them remains; the shell design tokens move to `lib/shell`."
+    },
+    {
+      "path": "apps/desktop/src/preload-mandatory-overlay.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Removed: the mandatory-update policy that DeepSeek's server decided, with its window, overlay, test login, packaging environment and attention notice. No request goes to DeepSeek's origin and no window can block the app (L157)."
+    },
+    {
+      "path": "apps/desktop/src/preload-mandatory.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Removed: the mandatory-update policy that DeepSeek's server decided, with its window, overlay, test login, packaging environment and attention notice. No request goes to DeepSeek's origin and no window can block the app (L157)."
+    },
+    {
+      "path": "apps/desktop/src/preload-welcome.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Removed: upstream's DeepSeek account welcome window and API-key onboarding page, with their renderer, preload, styles and sign-in backend. The Delorun app opens the studio directly and setup happens in the home's own studio (A584, L157)."
+    },
+    {
+      "path": "apps/desktop/src/update-attention.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Removed: the mandatory-update policy that DeepSeek's server decided, with its window, overlay, test login, packaging environment and attention notice. No request goes to DeepSeek's origin and no window can block the app (L157)."
+    },
+    {
+      "path": "apps/desktop/src/update-dialog.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Follows the removal of the welcome window, the mandatory-update policy and the `dsh` command: no packaging variable, bundle entry, preload bridge or update branch for them remains; the shell design tokens move to `lib/shell`."
+    },
+    {
+      "path": "apps/desktop/src/update-journal.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Follows the removal of the welcome window, the mandatory-update policy and the `dsh` command: no packaging variable, bundle entry, preload bridge or update branch for them remains; the shell design tokens move to `lib/shell`."
+    },
+    {
+      "path": "apps/desktop/src/update-schedule.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Follows the removal of the welcome window, the mandatory-update policy and the `dsh` command: no packaging variable, bundle entry, preload bridge or update branch for them remains; the shell design tokens move to `lib/shell`."
+    },
+    {
+      "path": "apps/desktop/src/welcome-api.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Removed: upstream's DeepSeek account welcome window and API-key onboarding page, with their renderer, preload, styles and sign-in backend. The Delorun app opens the studio directly and setup happens in the home's own studio (A584, L157)."
+    },
+    {
+      "path": "apps/desktop/src/welcome-backend.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Removed: upstream's DeepSeek account welcome window and API-key onboarding page, with their renderer, preload, styles and sign-in backend. The Delorun app opens the studio directly and setup happens in the home's own studio (A584, L157)."
+    },
+    {
+      "path": "apps/desktop/src/welcome-window.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Removed: upstream's DeepSeek account welcome window and API-key onboarding page, with their renderer, preload, styles and sign-in backend. The Delorun app opens the studio directly and setup happens in the home's own studio (A584, L157)."
+    },
+    {
+      "path": "apps/desktop/tsdown.config.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Follows the removal of the welcome window, the mandatory-update policy and the `dsh` command: no packaging variable, bundle entry, preload bridge or update branch for them remains; the shell design tokens move to `lib/shell`."
+    },
+    {
+      "path": "apps/desktop-host/src/analytics-overlay.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "The bundled Host starts with product analytics off through a loader overlay, because upstream's desktop profile turns them on; the person's live setting still changes it (S20, C11)."
+    },
+    {
+      "path": "apps/desktop/src/home-backend.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Delorun's own module of the desktop shell: choosing and connecting to a home (WSL2 first), the version guard, the plain error pages and the app identity (L157 to L159)."
+    },
+    {
+      "path": "apps/desktop/src/home-error-page.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Delorun's own module of the desktop shell: choosing and connecting to a home (WSL2 first), the version guard, the plain error pages and the app identity (L157 to L159)."
+    },
+    {
+      "path": "apps/desktop/src/home-injections.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Delorun's own module of the desktop shell: choosing and connecting to a home (WSL2 first), the version guard, the plain error pages and the app identity (L157 to L159)."
+    },
+    {
+      "path": "apps/desktop/src/home-source.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Delorun's own module of the desktop shell: choosing and connecting to a home (WSL2 first), the version guard, the plain error pages and the app identity (L157 to L159)."
+    },
+    {
+      "path": "apps/desktop/src/home-websocket.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Delorun's own module of the desktop shell: choosing and connecting to a home (WSL2 first), the version guard, the plain error pages and the app identity (L157 to L159)."
+    },
+    {
+      "path": "apps/desktop/src/identity.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Delorun's own module of the desktop shell: choosing and connecting to a home (WSL2 first), the version guard, the plain error pages and the app identity (L157 to L159)."
+    },
+    {
+      "path": "apps/desktop/src/version-skew.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Delorun's own module of the desktop shell: choosing and connecting to a home (WSL2 first), the version guard, the plain error pages and the app identity (L157 to L159)."
+    },
+    {
+      "path": "apps/desktop/src/wsl-connection.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Delorun's own module of the desktop shell: choosing and connecting to a home (WSL2 first), the version guard, the plain error pages and the app identity (L157 to L159)."
+    },
+    {
+      "path": "apps/desktop/src/wsl-home.ts",
+      "class": "delorun-feature",
+      "feature": "desktop-shell",
+      "reason": "Delorun's own module of the desktop shell: choosing and connecting to a home (WSL2 first), the version guard, the plain error pages and the app identity (L157 to L159)."
     }
   ],
   "retired": []

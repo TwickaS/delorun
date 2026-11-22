@@ -10,7 +10,7 @@ const state = vi.hoisted(() => ({
   root: '',
   target: 'mac-arm64' as 'mac-arm64' | 'mac-x64' | 'win-x64',
   pnpm: '11.7.0' as string | undefined,
-  failure: undefined as 'electron' | 'primary' | 'cli' | undefined,
+  failure: undefined as 'electron' | 'primary' | undefined,
   preparePrimary: vi.fn(),
   extractElectron: vi.fn(),
   commandLink: vi.fn(),
@@ -29,16 +29,6 @@ vi.mock('node:child_process', async importOriginal => ({
   execFileSync: (file: string) => file === '/usr/libexec/PlistBuddy' ? '12.0\n' : '24.18.1\n',
 }))
 vi.mock('../scripts/prepare-command-link.ts', () => ({ prepareCommandLink: state.commandLink }))
-// The compiled command manager is a build input; all source resource copies use real files.
-vi.mock('node:fs', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('node:fs')>()
-  return { ...actual, cpSync: (...args: Parameters<typeof actual.cpSync>) => {
-    if (String(args[0]).endsWith(join('lib', 'command-manager-entry.js'))) {
-      if (state.failure === 'cli') throw new Error('command manager copy failed')
-      actual.writeFileSync(args[1], 'command manager fixture')
-    } else actual.cpSync(...args)
-  } }
-})
 vi.mock('../scripts/prepare-primary-runtime.ts', () => ({
   preparePrimaryRuntime: state.preparePrimary,
 }))
@@ -87,8 +77,6 @@ it.each(['mac-arm64', 'mac-x64', 'win-x64'] as const)('prepares %s with one pnpm
   expect(existsSync(join(runtime, 'primary-runtime', 'dependencies', 'pnpm', 'bin', 'pnpm.mjs'))).toBe(true)
   expect(existsSync(join(runtime, 'bin', 'node'))).toBe(true)
   expect(existsSync(join(runtime, 'cli', 'bin', windows ? 'dsh.cmd' : 'dsh'))).toBe(true)
-  expect(readFileSync(join(runtime, 'cli', 'command-manager.js'), 'utf8')).toBe('command manager fixture')
-  expect(existsSync(join(runtime, 'cli', 'command-path.ps1'))).toBe(true)
   expect(JSON.parse(readFileSync(join(runtime, 'versions.json'), 'utf8'))).toEqual({
     schemaVersion: 1, node: '24.18.1', pnpm: '11.7.0',
   })
@@ -100,7 +88,6 @@ it.each(['mac-arm64', 'mac-x64', 'win-x64'] as const)('prepares %s with one pnpm
 it.each([
   ['electron', 'Electron extraction failed'],
   ['primary', 'primary preparation failed'],
-  ['cli', 'command manager copy failed'],
 ] as const)('does not publish versions when %s preparation fails', async (failure, error) => {
   state.failure = failure
   const runtime = join(state.root, 'runtime')
@@ -148,7 +135,7 @@ it.each(['electron', 'primary'] as const)('overlaps Windows payloads and waits f
     expect(existsSync(join(state.root, 'runtime', 'versions.json'))).toBe(false)
     ;(last === 'electron' ? electron : primary).resolve(undefined)
     expect(await outcome).toBeUndefined()
-    expect(existsSync(join(state.root, 'runtime', 'cli', 'command-manager.js'))).toBe(true)
+    expect(existsSync(join(state.root, 'runtime', 'cli', 'bin'))).toBe(true)
     expect(existsSync(join(state.root, 'runtime', 'versions.json'))).toBe(true)
   } finally {
     electron.resolve(undefined)

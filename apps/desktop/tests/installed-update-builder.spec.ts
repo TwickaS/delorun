@@ -19,8 +19,6 @@ vi.mock('../scripts/windows-sign.mjs', () => ({
 
 const versions = ['0.1.6-nightly.20260914.1', '0.1.6-nightly.20260914.2'] as const
 const environment = { DSH_DESKTOP_AUTO_UPDATE_ENV: 'test', DOWNLOAD_TEST_ORIGIN: 'https://download-test.deepseek.com', DOWNLOAD_TEST_RELEASE_ID: '0123456789abcdef0123456789abcdef',
-  DSH_DESKTOP_MANDATORY_UPDATE_TEST_ORIGIN: 'https://policy.example.com',
-  DSH_DESKTOP_MANDATORY_UPDATE_CONFIG: JSON.stringify({ allowedAuthOrigins: ['https://login.example.com'] }),
   DOWNLOAD_TEST_COS_BUCKET: 'bj-toc-download-test-1320056602' }
 const require = createRequire(import.meta.url)
 const { validateConfiguration } = require('app-builder-lib/out/util/config/config.js') as {
@@ -35,10 +33,10 @@ async function fixture<T>(body: (manifest: string, source: string) => Promise<T>
     await prepareInstalledUpdateBootstrap(manifest)
     const source = join(root, 'app')
     await mkdir(join(source, 'lib'), { recursive: true })
-    await mkdir(join(source, 'lib/welcome'), { recursive: true })
-    await writeFile(join(source, 'lib/welcome/design-platform.css'), 'body { --fixture-token: white; }\n')
+    await mkdir(join(source, 'lib/shell'), { recursive: true })
+    await writeFile(join(source, 'lib/shell/design-platform.css'), 'body { --fixture-token: white; }\n')
     await mkdir(join(source, 'renderer'))
-    for (const file of ['main.js', 'preload-app.cjs', 'preload-mandatory.cjs', 'preload-update-dialog.cjs']) {
+    for (const file of ['main.js', 'preload-app.cjs', 'preload-update-dialog.cjs']) {
       await writeFile(join(source, 'lib', file), '// inert fixture\n')
     }
     await writeFile(join(source, 'renderer', 'index.html'), '<p>fixture</p>')
@@ -59,7 +57,7 @@ describe('installed-update application inputs and builder configuration', () => 
         .toMatchObject({ dependenciesFrozen: false, signed: false, bootTested: false })
       const directory = await verifyInstalledUpdateApplication(join(manifest, '..'))
       expect((await readdir(directory)).sort()).toEqual(['installed-update-identity.mjs', 'lib', 'qualification-bootstrap.mjs', 'renderer'])
-      expect(await readFile(join(directory, 'lib/welcome/design-platform.css'), 'utf8')).toBe('body { --fixture-token: white; }\n')
+      expect(await readFile(join(directory, 'lib/shell/design-platform.css'), 'utf8')).toBe('body { --fixture-token: white; }\n')
       await writeFile(join(source, 'lib/main.js'), '// later checkout\n')
       expect(await readFile(join(directory, 'lib/main.js'), 'utf8')).toBe('// inert fixture\n')
       await expect(prepareInstalledUpdateApplication(manifest, source)).rejects.toMatchObject({ code: 'EEXIST' })
@@ -68,7 +66,7 @@ describe('installed-update application inputs and builder configuration', () => 
 
   it.each([
     ['modified', 'lib/main.js'], ['added', 'lib/unrecorded.js'], ['missing', 'lib/main.js'],
-    ['modified', 'lib/welcome/design-platform.css'], ['missing', 'lib/welcome/design-platform.css'],
+    ['modified', 'lib/shell/design-platform.css'], ['missing', 'lib/shell/design-platform.css'],
   ] as const)('rejects %s frozen application bytes in %s', async (failure, file) => {
     await fixture(async (manifest, source) => {
       await prepareInstalledUpdateApplication(manifest, source)

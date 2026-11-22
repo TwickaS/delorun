@@ -32,6 +32,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-host-webserver'
+import type { IndexInjection } from '@deepseek-ai/dsh-host-webserver'
 import { RECOVERY_ROUTES_GLOBAL } from './recovery.ts'
 
 /** Stable Cordis plugin name. */
@@ -51,6 +52,7 @@ export const Config: z<Config> = z.object({
 })
 
 const HTML_MIME = 'text/html; charset=utf-8'
+const JSON_MIME = 'application/json; charset=utf-8'
 
 const MIME: Record<string, string> = {
   '.html': HTML_MIME,
@@ -67,6 +69,14 @@ const MIME: Record<string, string> = {
   // leave it inflating an already-decoded archive.
   '.gz': 'application/gzip',
 }
+
+/**
+ * The dist-root path that answers the structured index injection rows as JSON, for a client that boots from a Host it
+ * reaches over HTTP (Delorun's desktop app) instead of reading the rows from the page the Host renders. It is reserved:
+ * a dist file with this name is never served. It answers the rows the webserver's `collectIndexInjections`
+ * returns for the Peer that may load the index, so it exposes nothing the index does not already render for that Peer.
+ */
+export const INDEX_INJECTIONS_PATH = '/index-injections.json'
 
 /** The page path of the boot page's recovery screen, which renders the index while a distribution names its routes. */
 const RECOVERY_PATH = '/recovery'
@@ -186,6 +196,8 @@ interface StaticFences {
   index: () => Response | undefined
   /** Whether an index injection row names a distribution's recovery routes, so `/recovery` renders the index. */
   recovery: () => boolean
+  /** The structured injection rows of the Peer that may load the index; read only after {@link StaticFences.index} admitted the request. */
+  injections: () => IndexInjection[]
   /** Answers a non-public file request; the response to send instead of the bytes, or undefined to serve them. */
   asset: () => Response | undefined
 }
@@ -238,6 +250,13 @@ async function serveStatic(
       if (refusal !== undefined) return refusal
       body = renderIndex(await readFile(distIndex, 'utf8'))
       headers = { 'content-type': HTML_MIME }
+    } else if (target === join(distRoot, INDEX_INJECTIONS_PATH)) {
+      // The same admission as the index, then only the rows. The index carries no cache headers; this answer is per Peer,
+      // so it forbids storing as well. Raw `tapIndex` transforms act on whole pages and are not rows, so they are not carried.
+      const refusal = fences.index()
+      if (refusal !== undefined) return refusal
+      body = JSON.stringify(fences.injections())
+      headers = { 'content-type': JSON_MIME, 'cache-control': 'no-store' }
     } else {
       // Every dist file but the install-time ones belongs to the signed-in
       // application, so the fence decides before its bytes are read.
@@ -305,6 +324,7 @@ export function apply(ctx: Context, config: Config): void {
       {
         index: () => peer === undefined ? authorizeIndex(request) : undefined,
         asset: () => peer === undefined ? fenceAsset(request) : undefined,
+        injections: () => ctx.webServer.collectIndexInjections(peer ?? ctx.connection.browserPeer),
         recovery: () => ctx.webServer.collectIndexInjections(peer ?? ctx.connection.browserPeer)
           .some(row => row.kind === 'global' && row.name === RECOVERY_ROUTES_GLOBAL),
       },

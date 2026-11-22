@@ -19,6 +19,7 @@ import * as Connection from '@deepseek-ai/dsh-client-connection'
 import LocalCredentials from '@deepseek-ai/dsh-credentials-local'
 import HttpServer from '@deepseek-ai/dsh-host-webserver'
 import * as FrontendStatic from '../src/index.ts'
+import { INDEX_INJECTIONS_PATH } from '../src/index.ts'
 import { RECOVERY_ROUTES_GLOBAL } from '../src/recovery.ts'
 
 /** How many times the plugin read the dist manifest's bytes. */
@@ -415,6 +416,59 @@ describe('real Loader composition', () => {
     await expect(read('/bad%00path')).rejects.toThrow()
     await rm(join(root!, 'dist', 'index.html'))
     expect((await read('/')).status).toBe(404)
+  })
+
+  it('answers the injection rows as JSON only to the Peer that may load the index, and never to anyone else', { timeout: 60_000 }, async () => {
+    const loaded = await loadComposition()
+    const port = loaded.webServer.port
+    const reader = { principal: { kind: 'owner' } } as Connection.PeerScope
+    loaded.on('webserver/index-inject', (rows, peer) => {
+      rows.push({ kind: 'global', name: '__READER__', value: peer === reader })
+      rows.push({ kind: 'script-src', placement: 'head', src: '/plugins/a.js' })
+    })
+    const { authenticated } = await signIn(loaded)
+
+    // Denial: the same refusals as the index itself for no cookie, a wrong cookie and a foreign Host, with no rows in the body.
+    const index = await request(port, '/')
+    expect(index.status).toBe(401)
+    for (const init of [undefined, { headers: { cookie: 'dsh-auth-0=wrong' } }]) {
+      const refused = await request(port, INDEX_INJECTIONS_PATH, init)
+      expect(refused.status).toBe(index.status)
+      expect(refused.body).not.toContain('__READER__')
+    }
+    const cookie = new Headers(authenticated().headers).get('cookie')!
+    const foreign = await raw(port, INDEX_INJECTIONS_PATH, { host: 'evil.example', cookie })
+    expect(foreign.status).toBe((await raw(port, '/', { host: 'evil.example', cookie })).status)
+    expect(foreign.status).not.toBe(200)
+    expect(foreign.body).not.toContain('__READER__')
+
+    // The admitted browser Peer gets exactly the rows the index renders for it, uncached.
+    const answer = await fetch(`http://127.0.0.1:${String(port)}${INDEX_INJECTIONS_PATH}`, authenticated())
+    expect(answer.status).toBe(200)
+    expect(answer.headers.get('content-type')).toBe('application/json; charset=utf-8')
+    expect(answer.headers.get('cache-control')).toBe('no-store')
+    const browserRows = loaded.webServer.collectIndexInjections(loaded.connection.browserPeer)
+    expect(await answer.json()).toEqual(browserRows)
+    expect(browserRows).toEqual(expect.arrayContaining([
+      { kind: 'global', name: '__READER__', value: false },
+      { kind: 'script-src', placement: 'head', src: '/plugins/a.js' },
+    ]))
+    const page = await request(port, '/', authenticated())
+    expect(page.body).toContain('globalThis["__READER__"] = false')
+
+    // A reader that its caller admitted gets only its own Peer's rows, not the browser Peer's.
+    const read = await loaded.webServer.readResource(new Request(`http://reader.invalid${INDEX_INJECTIONS_PATH}`), reader)
+    const readerRows = loaded.webServer.collectIndexInjections(reader)
+    expect(await read.json()).toEqual(readerRows)
+    expect(readerRows).toContainEqual({ kind: 'global', name: '__READER__', value: true })
+    expect(readerRows).not.toContainEqual({ kind: 'global', name: '__READER__', value: false })
+
+    // The path is reserved, answers only GET and HEAD, and a HEAD carries no rows.
+    await writeFile(join(root!, 'dist', 'index-injections.json'), '["dist file"]')
+    expect(await (await fetch(`http://127.0.0.1:${String(port)}${INDEX_INJECTIONS_PATH}`, authenticated())).json()).toEqual(browserRows)
+    const head = await fetch(`http://127.0.0.1:${String(port)}${INDEX_INJECTIONS_PATH}`, authenticated({ method: 'HEAD' }))
+    expect({ status: head.status, body: await head.text() }).toEqual({ status: 200, body: '' })
+    expect((await loaded.webServer.readResource(new Request(`http://reader.invalid${INDEX_INJECTIONS_PATH}`, { method: 'POST', body: 'x' }), reader)).status).toBe(405)
   })
 
   it('lets browsers revalidate every file except the index', { timeout: 60_000 }, async () => {
