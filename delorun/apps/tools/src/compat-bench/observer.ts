@@ -8,10 +8,10 @@
  */
 
 /** A run's facts an observer can read. */
-export type RunContext = Readonly<{ host: 'delorun' | 'delorun-prev' | 'stock'; package: string; outDir: string; runId: string; baseline: boolean }>
+export type RunContext = Readonly<{ host: 'delorun' | 'delorun-prev' | 'stock'; package: string; outDir: string; runId: string; baseline: boolean; studioPort?: number; container?: string }>
 
 /** What an observer adds to the plugin container and its network. */
-export type ContainerAdditions = Readonly<{ env?: Readonly<Record<string, string>>; files?: ReadonlyArray<Readonly<{ path: string; content: string; mode?: number }>>; networkContainer?: string; caCertPath?: string; preloads?: ReadonlyArray<string> }>
+export type ContainerAdditions = Readonly<{ env?: Readonly<Record<string, string>>; files?: ReadonlyArray<Readonly<{ path: string; content: string; mode?: number }>>; networkContainer?: string; caCertPath?: string; preloads?: ReadonlyArray<string>; testChatMarker?: string }>
 
 /** The stages of a run, in order. */
 export type StageName = 'install' | 'start' | 'harness' | 'screens' | 'feature' | 'restart' | 'update' | 'clashes' | 'cost' | 'uninstall'
@@ -20,7 +20,8 @@ export type StageName = 'install' | 'start' | 'harness' | 'screens' | 'feature' 
 export type Marker = Readonly<{ state: 'not-seen' | 'seen' | 'declared' | 'not-checked'; summary: string; evidence: ReadonlyArray<string> }>
 
 /** The card's privacy section: the eight markers and whether the observer could read the traffic's contents. */
-export type PrivacySection = Readonly<{ markers: Readonly<Record<'code' | 'chats' | 'modelKeys' | 'otherSecrets' | 'sendsOut' | 'actsForYou' | 'opensADoor' | 'leavesBehind', Marker>>; contentsChecked: boolean }>
+export type MarkerKey = 'code' | 'chats' | 'modelKeys' | 'otherSecrets' | 'sendsOut' | 'actsForYou' | 'opensADoor' | 'leavesBehind'
+export type PrivacySection = Readonly<{ markers: Readonly<Record<MarkerKey, Marker>>; contentsChecked: boolean; findings?: ReadonlyArray<string>; declared?: Readonly<Partial<Record<MarkerKey, string>>> }>
 
 /** An observer the runner calls around a run. */
 export type Observer = Readonly<{
