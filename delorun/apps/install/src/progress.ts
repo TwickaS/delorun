@@ -74,38 +74,4 @@ export function isInstallerProgress(value: unknown): value is InstallerProgress 
   return typeof value === 'object' && value !== null && 'step' in value && typeof value.step === 'string' && STEPS.has(value.step)
 }
 
-/** Bytes in a megabyte as the line states sizes: decimal, as download tools do. */
-const MEGABYTE = 1_000_000
-
-/**
- * A download size for a person.
- * @param bytes - the size.
- * @returns the size in kB, MB or GB, with one decimal from a megabyte up.
- */
-export function formatSize(bytes: number): string {
-  if (bytes < MEGABYTE) return `${String(Math.max(1, Math.round(bytes / 1000)))} kB`
-  if (bytes < 1000 * MEGABYTE) return `${(bytes / MEGABYTE).toFixed(1)} MB`
-  return `${(bytes / (1000 * MEGABYTE)).toFixed(1)} GB`
-}
-
-/**
- * A speed for a person.
- * @param bytesPerSecond - the speed.
- * @returns the speed with {@link formatSize}'s unit, per second.
- */
-export function formatSpeed(bytesPerSecond: number): string {
-  return `${formatSize(bytesPerSecond)}/s`
-}
-
-/**
- * A length of time for a person.
- * @param ms - the time in milliseconds.
- * @returns tenths of a second below ten seconds, whole seconds below a minute, then minutes and seconds.
- */
-export function formatDuration(ms: number): string {
-  const seconds = Math.max(0, ms) / 1000
-  if (seconds < 10) return `${seconds.toFixed(1)}s`
-  const whole = Math.round(seconds)
-  if (whole < 60) return `${String(whole)}s`
-  return `${String(Math.floor(whole / 60))}m ${String(whole % 60).padStart(2, '0')}s`
-}
+export { formatDuration, formatSize, formatSpeed } from './transfer.ts'
