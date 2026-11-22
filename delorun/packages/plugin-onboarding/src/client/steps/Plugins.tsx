@@ -4,6 +4,7 @@
  * read from the registry only when the person asks.
  */
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
+import { BROWSER_BUNDLE } from '@delorun/browser-setup'
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
 import { fits, presentConnections } from '../guide.ts'
@@ -32,11 +33,13 @@ export function connectionName(id: string, t: StepServices['t'], providers: Read
 export { readableName }
 
 /**
- * The guide's own words for an offered plugin pack that is not in the profile yet, whose package the studio cannot read
- * before it downloads.
+ * The guide's own words for Delorun's plugin packs. They win over the package's own title, so the packs that touch Claude
+ * Code, Codex or a browser read apart from the Agents and Browser steps, and a pack not in the profile yet, whose
+ * package the studio cannot read before it downloads, still has a title.
  */
 const PACK_CARDS: Readonly<Record<string, { readonly title: OnboardingLocaleKey, readonly description: OnboardingLocaleKey }>> = {
   '@delorun/bundle-browser': { title: 'plugins.pack.browser.title', description: 'plugins.pack.browser.description' },
+  '@delorun/bundle-real-browser': { title: 'plugins.pack.realBrowser.title', description: 'plugins.pack.realBrowser.description' },
   '@delorun/bundle-code-intelligence': { title: 'plugins.pack.codeIntelligence.title', description: 'plugins.pack.codeIntelligence.description' },
   '@delorun/bundle-agent-hooks': { title: 'plugins.pack.agentHooks.title', description: 'plugins.pack.agentHooks.description' },
   '@delorun/bundle-webhooks': { title: 'plugins.pack.webhooks.title', description: 'plugins.pack.webhooks.description' },
@@ -73,7 +76,8 @@ export function PluginsStep({ services, guide }: StepProps): ReactNode {
   useEffect(() => { if (guide.recommendations.getSnapshot() === undefined) guide.recommend(false) }, [guide])
   const answer = recommendations?.status === 'ready' ? recommendations.value : undefined
   const present = presentConnections(keys, readiness)
-  const shown = fits(plugins, answer, present)
+  // The Browser pack has its own step wherever this step offers it, so it is not offered twice.
+  const shown = fits(plugins.filter(name => name !== BROWSER_BUNDLE), answer, present)
   useRefresh(services, shown.map(each => each.name))
   const rowKey = optionalRows.join('\n')
   useEffect(() => { if (rowKey !== '') bundles.refreshRows(rowKey.split('\n')) }, [bundles, rowKey])
@@ -100,8 +104,8 @@ export function PluginsStep({ services, guide }: StepProps): ReactNode {
           const pack = Object.hasOwn(PACK_CARDS, name) ? PACK_CARDS[name] : undefined
           return (
             <BundleCard key={name} name={name} services={services}
-              title={view?.title !== undefined ? resolveText(view.title) : !slow && (view === undefined || view.state === 'checking') ? undefined : pack === undefined ? readableName(name) : t(pack.title)}
-              description={view?.description !== undefined ? resolveText(view.description) : pack === undefined ? undefined : t(pack.description)}>
+              title={pack !== undefined ? t(pack.title) : view?.title !== undefined ? resolveText(view.title) : !slow && (view === undefined || view.state === 'checking') ? undefined : readableName(name)}
+              description={pack !== undefined ? t(pack.description) : view?.description !== undefined ? resolveText(view.description) : undefined}>
               {matches.length > 0 && <StateLine tone="success">{t('plugins.fits', { names: matches.map(id => connectionName(id, t, names)).join(', ') })}</StateLine>}
             </BundleCard>
           )

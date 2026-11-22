@@ -4,8 +4,8 @@
  */
 import { formatRemaining, formatSpeed, STALL_SHOWN_MS, TransferRate } from '@delorun/plugin-packs/transfer'
 import { useEffect, useRef, useState } from 'react'
-import { fallbackTranslate, type Translate } from './locales.ts'
-import { providedTranslate, type DownloadItem } from './source.ts'
+import type { Translate } from './locales.ts'
+import type { DownloadItem } from './source.ts'
 
 /** How often a running download's count is read again, so the speed follows a download that slows or stops. */
 export const RATE_READ_MS = 1000
@@ -79,14 +79,4 @@ export function rateText(rate: DownloadRate, t: Translate): string {
   if (rate.speed === undefined) return ''
   const speed = formatSpeed(rate.speed)
   return rate.secondsLeft === undefined ? speed : t('rate.speedLeft', { speed, time: formatRemaining(rate.secondsLeft) })
-}
-
-/**
- * The words for one download's rate, in the plugin's bound copy, for a surface outside the panel such as the setup
- * guide's cards.
- * @param item - the download, or undefined when the queue does not list it.
- * @returns the text, or an empty string while the speed is not known.
- */
-export function useDownloadRateText(item: DownloadItem | undefined): string {
-  return rateText(useDownloadRate(item), providedTranslate() ?? fallbackTranslate)
 }

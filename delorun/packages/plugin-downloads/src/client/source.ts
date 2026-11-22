@@ -25,6 +25,11 @@ export interface DownloadItem {
   readonly position?: number
   /** Present while `failed`: a sentence for the person. */
   readonly failure?: { readonly code: 'offline' | 'interrupted' | 'failed'; readonly message: string }
+  /**
+   * Present for a download this page runs itself, outside the Host's install queue ({@link startPageDownload}): it
+   * cannot be cancelled, and a failed one offers Try again only when its starter gave a way to.
+   */
+  readonly local?: { readonly retry: boolean }
 }
 
 /**
@@ -142,6 +147,18 @@ interface Hub {
   uninstall?: (name: string) => Promise<void>
   rows: number
   readonly listeners: Set<() => void>
+  /** The downloads this page runs itself, by key, in the order they started; created by the first that starts. */
+  page?: PageDownloads
+  /** The provided source with the page's downloads after its items, made again when the source changes. */
+  merged?: { readonly raw: DownloadsSource, readonly source: DownloadsSource }
+}
+
+/** The page's own downloads and who follows them. */
+interface PageDownloads {
+  readonly entries: Map<string, { readonly item: DownloadItem, readonly retry?: (() => void) | undefined }>
+  readonly listeners: Set<() => void>
+  /** Bumped on each change, so a merged snapshot is made again only after one. */
+  version: number
 }
 
 const HUB_KEY = Symbol.for('delorun.plugin-downloads.hub')
@@ -185,7 +202,113 @@ export function provideDownloadsSource(source: DownloadsSource): () => void {
  * @returns it, or an empty one before the plugin applies.
  */
 export function currentDownloadsSource(): DownloadsSource {
-  return hub().source
+  const shared = hub()
+  if (shared.merged?.raw !== shared.source) shared.merged = { raw: shared.source, source: withPageDownloads(shared.source) }
+  return shared.merged.source
+}
+
+/**
+ * The page's downloads, made on first use.
+ * @returns them.
+ */
+function pageDownloads(): PageDownloads {
+  const shared = hub()
+  shared.page ??= { entries: new Map(), listeners: new Set(), version: 0 }
+  return shared.page
+}
+
+/**
+ * A source that lists the Host's items, then the page's own downloads the Host does not list. The Host's actions
+ * serve its items; a page download is removed here, retried by its starter, and never cancelled.
+ * @param raw - the provided source.
+ * @returns the source.
+ */
+function withPageDownloads(raw: DownloadsSource): DownloadsSource {
+  let cache: { readonly host: readonly DownloadItem[], readonly version: number, readonly items: readonly DownloadItem[] } | undefined
+  const snapshot = (): readonly DownloadItem[] => {
+    const host = raw.snapshot()
+    const page = pageDownloads()
+    if (cache?.host === host && cache.version === page.version) return cache.items
+    const own = [...page.entries.values()].map(entry => entry.item).filter(item => !host.some(each => each.key === item.key))
+    cache = { host, version: page.version, items: own.length === 0 ? host : [...host, ...own] }
+    return cache.items
+  }
+  const ownEntry = (key: string) => (raw.snapshot().some(item => item.key === key) ? undefined : pageDownloads().entries.get(key))
+  return {
+    snapshot,
+    subscribe: (listener) => {
+      const stop = raw.subscribe(listener)
+      pageDownloads().listeners.add(listener)
+      return () => { stop(); pageDownloads().listeners.delete(listener) }
+    },
+    refresh: () => { raw.refresh() },
+    enqueue: (key) => { raw.enqueue(key) },
+    cancel: (key) => { if (ownEntry(key) === undefined) raw.cancel(key) },
+    retry: (key) => { const own = ownEntry(key); if (own === undefined) raw.retry(key); else own.retry?.() },
+    remove: (key) => { if (ownEntry(key) === undefined) raw.remove(key); else changePage(page => { page.entries.delete(key) }) },
+  }
+}
+
+/**
+ * Change the page's downloads and tell their followers.
+ * @param change - the change.
+ */
+function changePage(change: (page: PageDownloads) => void): void {
+  const page = pageDownloads()
+  change(page)
+  page.version += 1
+  for (const listener of [...page.listeners]) listener()
+}
+
+/** What a page download's starter reports as it goes. */
+export interface PageDownload {
+  /**
+   * Bytes received so far, and the total when known; without a total the panel draws a bar that moves without a measure.
+   * @param received - the bytes received.
+   * @param total - the size, when known.
+   */
+  bytes(received: number, total?: number): void
+  /** The download is over and the install runs. */
+  installing(): void
+  /**
+   * It finished.
+   * @param reload - whether the plugin runs only after the page reloads.
+   */
+  done(reload?: boolean): void
+  /**
+   * It failed.
+   * @param message - a sentence for the person, when there is one.
+   */
+  failed(message?: string): void
+}
+
+/**
+ * Show a download or install the page runs itself, outside the Host's install queue (the plugin manager's own install
+ * of a package that is not a plugin pack, or the browser download), in every downloads surface of this tab. It lives
+ * only in this tab: it is not persisted and other devices do not see it. A later start under the same key replaces it.
+ * @param key - the package name or another identity the panel names it by.
+ * @param options - the title to show, and how Try again starts it again.
+ * @returns what the starter reports.
+ */
+export function startPageDownload(key: string, options: { readonly title?: string | undefined, readonly retry?: (() => void) | undefined } = {}): PageDownload {
+  const { title, retry } = options
+  const start: DownloadItem = { key, state: 'downloading', receivedBytes: 0, local: { retry: retry !== undefined }, ...title === undefined ? {} : { title } }
+  changePage((page) => { page.entries.delete(key); page.entries.set(key, { item: start, retry }) })
+  const patch = (next: Partial<DownloadItem>): void => {
+    changePage((page) => {
+      const entry = page.entries.get(key)
+      // A newer start under the same key owns the entry, and a removed one stays removed.
+      if (entry?.item.local !== start.local) return
+      const { failure: _failure, ...rest } = entry.item
+      page.entries.set(key, { ...entry, item: { ...rest, ...next } })
+    })
+  }
+  return {
+    bytes: (received, total) => { patch({ state: 'downloading', receivedBytes: received, ...total === undefined ? {} : { totalBytes: total } }) },
+    installing: () => { patch({ state: 'installing' }) },
+    done: (reload = false) => { patch({ state: reload ? 'needs-reload' : 'ready' }) },
+    failed: (message) => { patch({ state: 'failed', ...message === undefined || message === '' ? {} : { failure: { code: 'failed', message } } }) },
+  }
 }
 
 /**

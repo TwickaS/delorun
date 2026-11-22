@@ -54,7 +54,7 @@ describe('the state slot of a row', () => {
   })
 
   it('puts the Adding words in the slot, not in a line under the description, and shows the download when the queue knows it', () => {
-    const { container } = render(<ul><AddableCard services={stepServices()} state="installing" progress={0.4} title="Pi" description="About it" onAdd={vi.fn()} /></ul>)
+    const { container } = render(<ul><AddableCard services={stepServices()} state="installing" download={{ progress: 0.4, status: '40%' }} title="Pi" description="About it" onAdd={vi.fn()} /></ul>)
     expect(container.querySelector('[class*="slot"]')?.textContent).toContain(en['bundle.adding'])
     expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('40')
   })
@@ -68,34 +68,57 @@ describe('the state slot of a row', () => {
   })
 })
 
-describe('the speed of a package being added', () => {
+describe('a package being added', () => {
   const MB = 1_000_000
 
-  it('shows the speed and the time left under the card once the queue reports bytes a second apart, keeping the line\'s height before', () => {
+  it('draws the download under the card with the panel\'s status, its speed and time left once bytes arrive a second apart', () => {
     vi.useFakeTimers()
     const source = createFakeDownloadsSource([{ key: 'pi', state: 'downloading', receivedBytes: 1 * MB, totalBytes: 20 * MB }])
     const withdraw = provideDownloadsSource(source)
     try {
       const bundles = installerFake({ pi: { state: 'installing' } })
       const { container } = render(<ul><BundleCard name="pi" title="Pi" description="About it" services={stepServices({ bundles: bundles.installer })} /></ul>)
-      const line = (): Element | null => container.querySelector('p[class*="rate"]')
-      expect(line()?.hasAttribute('data-empty')).toBe(true)
+      const line = (): string | null | undefined => container.querySelector('p[class*="rate"]')?.textContent
+      // The slot keeps the words; the bar has the card's width under it.
+      expect(container.querySelector('[class*="slot"]')?.textContent).toBe(en['bundle.adding'])
+      expect(container.querySelector('[class*="slot"] [role="progressbar"]')).toBeNull()
+      expect(screen.getByRole('progressbar', { name: 'Pi' }).getAttribute('aria-valuenow')).toBe('5')
+      expect(line()).toBe('5%')
       act(() => { vi.advanceTimersByTime(1000) })
       act(() => { source.update('pi', { receivedBytes: 5 * MB }) })
-      expect(line()?.textContent).toBe('4.0 MB/s · ~3.8s left')
-      expect(line()?.hasAttribute('data-empty')).toBe(false)
-      expect(screen.getByRole('progressbar').getAttribute('aria-valuenow')).toBe('25')
-      // A download that stands still shows no speed, and the line keeps its place.
+      expect(line()).toBe('25% · 4.0 MB/s · ~3.8s left')
+      expect(screen.getByRole('progressbar', { name: 'Pi' }).getAttribute('aria-valuetext')).toBe('25%')
+      // A download that stands still drops the speed and keeps its percentage.
       act(() => { vi.advanceTimersByTime(3000) })
-      expect(line()?.hasAttribute('data-empty')).toBe(true)
+      expect(line()).toBe('25%')
     } finally {
       withdraw()
       vi.useRealTimers()
     }
   })
 
-  it('shows no speed line once the package is added', () => {
-    const { container } = render(<ul><AddableCard services={stepServices()} state="installed" rate="4.0 MB/s" title="Pi" description={undefined} onAdd={vi.fn()} /></ul>)
-    expect(container.querySelector('p[class*="rate"]')).toBeNull()
+  it('says a package waits its turn while others download, with an empty track', () => {
+    const source = createFakeDownloadsSource([
+      { key: 'a', state: 'downloading', receivedBytes: 1, totalBytes: 10 },
+      { key: 'pi', state: 'queued', receivedBytes: 0, position: 2 },
+    ])
+    const withdraw = provideDownloadsSource(source)
+    try {
+      const bundles = installerFake({ pi: { state: 'installing' } })
+      const { container } = render(<ul><BundleCard name="pi" title="Pi" description={undefined} services={stepServices({ bundles: bundles.installer })} /></ul>)
+      expect(container.querySelector('p[class*="rate"]')?.textContent).toBe('Waiting · 1 ahead')
+      expect(container.querySelector('[class*="download"] [class*="bar"]')).not.toBeNull()
+      expect(screen.queryByRole('progressbar')).toBeNull()
+    } finally {
+      withdraw()
+    }
+  })
+
+  it('draws no download block for an add the install queue does not list, and none once the package is added', () => {
+    const adding = render(<ul><AddableCard services={stepServices()} state="installing" title="Pi" description={undefined} onAdd={vi.fn()} /></ul>)
+    expect(adding.container.querySelector('[class*="download"]')).toBeNull()
+    cleanup()
+    const { container } = render(<ul><AddableCard services={stepServices()} state="installed" download={{ progress: 1, status: 'Added' }} title="Pi" description={undefined} onAdd={vi.fn()} /></ul>)
+    expect(container.querySelector('[class*="download"]')).toBeNull()
   })
 })

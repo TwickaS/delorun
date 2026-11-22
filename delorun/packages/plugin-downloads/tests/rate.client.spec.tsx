@@ -58,7 +58,7 @@ describe('the speed of a download in the panel', () => {
     expect(status()).toBe('0%')
     act(() => { source.update('pi', { totalBytes: 0 }) })
     later(2000)
-    expect(status()).toBe('0%')
+    expect(status()).toBe('Downloading')
   })
 
   it('drops the speed and the time left once a download stands still, and brings them back when bytes arrive', () => {

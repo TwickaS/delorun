@@ -93,6 +93,25 @@
   background: var(--dsw-alias-brand-primary);
 }
 
+/* A download without a size: a short segment that travels the track, still and faint with reduced motion. */
+.fill[data-unmeasured] {
+  width: 30%;
+  animation: unmeasured 1.6s ease-in-out infinite;
+}
+
+@keyframes unmeasured {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(340%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fill[data-unmeasured] {
+    width: 100%;
+    opacity: 0.35;
+    animation: none;
+  }
+}
+
 .actions {
   display: inline-flex;
   flex: none;

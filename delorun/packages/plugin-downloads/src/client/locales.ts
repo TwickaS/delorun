@@ -17,6 +17,7 @@ export const en = {
   'expand': 'Show the downloads',
   'dismiss': 'Dismiss',
   'list': 'Plugins being installed',
+  'state.downloading': 'Downloading',
   'state.downloadingRate': '{percent}% · {rate}',
   'state.receivedRate': '{size} · {rate}',
   'rate.speedLeft': '{speed} · ~{time} left',
@@ -54,6 +55,7 @@ export const en = {
   'pack.computerUseDriver': 'Computer use (Cua Driver)',
   'pack.claudeCode': 'Claude Code',
   'pack.codex': 'Codex',
+  'pack.chromium': 'Chromium for Browser',
 }
 
 /** A key of the dictionary. */
@@ -73,6 +75,7 @@ export const zh: typeof en = {
   'expand': '显示下载',
   'dismiss': '关闭',
   'list': '正在安装的插件',
+  'state.downloading': '正在下载',
   'state.downloadingRate': '{percent}% · {rate}',
   'state.receivedRate': '{size} · {rate}',
   'rate.speedLeft': '{speed} · 约剩 {time}',
@@ -110,6 +113,7 @@ export const zh: typeof en = {
   'pack.computerUseDriver': '计算机使用（Cua Driver）',
   'pack.claudeCode': 'Claude Code',
   'pack.codex': 'Codex',
+  'pack.chromium': '浏览器使用的 Chromium',
 }
 
 /** The translate function the components take: the slot machinery's, or a stand-in. */
