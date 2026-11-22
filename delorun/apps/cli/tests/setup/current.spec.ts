@@ -4,11 +4,10 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { SETUP_DEFAULTS, type ModelProviderAnswer } from '@delorun/contract-setup-answers'
 import { currentAnswers } from '../../src/setup/current.ts'
-import { readPromptsRows, writePromptRows } from '../../src/setup/prompt-switches.ts'
+import { ANSWERS_FILENAME, readPromptsRows, setPatchRow, writePromptRows } from '@delorun/setup-apply'
 import { readProviderAnswer, writeProviderRows } from '../../src/setup/providers.ts'
 import { readUpdateCheckRow, writeUpdateCheckRow } from '../../src/setup/update-check.ts'
-import { ANSWERS_FILENAME } from '../../src/setup/progress.ts'
-import { setPatchRow, hasStoredCredential, storeCredential } from '../../src/setup/writes.ts'
+import { hasStoredCredential, storeCredential } from '../../src/setup/writes.ts'
 
 let directory: string
 let patch: string

@@ -1424,6 +1424,9 @@ importers:
       '@delorun/runtime-store':
         specifier: workspace:*
         version: link:../../packages/runtime-store
+      '@delorun/setup-apply':
+        specifier: workspace:*
+        version: link:../../packages/setup-apply
       '@delorun/supervisor':
         specifier: workspace:*
         version: link:../../packages/supervisor
@@ -5057,6 +5060,39 @@ importers:
       react:
         specifier: ^18.2.0
         version: 18.3.1
+
+  delorun/packages/setup-apply:
+    dependencies:
+      '@deepseek-ai/dsh-brand':
+        specifier: workspace:*
+        version: link:../../../packages/util/brand
+      '@delorun/contract-admission':
+        specifier: workspace:*
+        version: link:../contract-admission
+      '@delorun/contract-oidc-passkeys':
+        specifier: workspace:*
+        version: link:../contract-oidc-passkeys
+      '@delorun/contract-parity-composition':
+        specifier: workspace:*
+        version: link:../contract-parity-composition
+      '@delorun/contract-reach-providers':
+        specifier: workspace:*
+        version: link:../contract-reach-providers
+      '@delorun/contract-setup-answers':
+        specifier: workspace:*
+        version: link:../contract-setup-answers
+      '@delorun/home':
+        specifier: workspace:*
+        version: link:../home
+      '@delorun/home-auth':
+        specifier: workspace:*
+        version: link:../home-auth
+      '@delorun/reach':
+        specifier: workspace:*
+        version: link:../reach
+      yaml:
+        specifier: ^2.9.0
+        version: 2.9.0
 
   delorun/packages/site-design:
     dependencies:

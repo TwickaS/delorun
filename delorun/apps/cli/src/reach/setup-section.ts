@@ -15,12 +15,10 @@
 import { join } from 'node:path'
 import { DEFAULT_SERVE_PORT } from '@delorun/contract-reach-providers'
 import { checkServeAccess, ReachError, readTailscale, tailscaleAddress, type TailscaleRunner } from '@delorun/reach'
+import { listenerPortFor, readReachRowAt, TRUST_STATEMENT, writeMayAskAt, writeReachRowAt } from '@delorun/setup-apply'
 import { profileDirectory } from '../profile.ts'
 import type { SetupSection } from '../setup/sections.ts'
 import { BACK } from '../setup/steps.ts'
-import { writeMayAskAt } from './pairing-row.ts'
-import { listenerPortFor, readReachRowAt, writeReachRowAt } from './row.ts'
-import { TRUST_STATEMENT } from './trust.ts'
 
 /** The section's place in the flow: right after the privacy note. */
 export const REACH_SECTION_ORDER = 12

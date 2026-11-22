@@ -11,7 +11,7 @@
 import { fileURLToPath } from 'node:url'
 import { loadOverlayPatches } from '@deepseek-ai/dsh-app-boot'
 import { SETUP_DEFAULT_CREDENTIAL_VARIABLE, SETUP_PROVIDER_IDS, type ModelProviderAnswer, type SetupProviderId } from '@delorun/contract-setup-answers'
-import { readPatchRow, updateRowConfig, type InheritedRow } from './writes.ts'
+import { readPatchRow, updateRowConfig, type InheritedRow } from '@delorun/setup-apply'
 
 /**
  * The request that checks a key: `deepseek` is DeepSeek's model listing through upstream's listing client; `anthropic`

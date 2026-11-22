@@ -26,14 +26,13 @@ import { providerSection } from './provider-section.ts'
 import { installedCatalog, type ProviderCatalog } from './providers.ts'
 import { removeDangerousGrant, writeDangerousGrant } from '@delorun/plugin-permission-defaults/store'
 import { askDangerousConsent, hasDangerousGrant, refuseDangerousAsRoot } from './dangerous.ts'
-import { writePromptRows } from './prompt-switches.ts'
 import { BACK, type Back, type StepIO } from './steps.ts'
 import { writeUpdateCheckRow } from './update-check.ts'
 import { channelOriginOf } from './channel-origin.ts'
 import { isProductionChannel } from './ending.ts'
 import { choiceNote, RECOMMENDED, type ChoiceText } from './choices.ts'
-import { readPatchRow, setPatchRow } from './writes.ts'
 import { systemTailscale } from '@delorun/reach'
+import { readPatchRow, setPatchRow, STUDIO_ROW_ID, studioRow, writePromptRows } from '@delorun/setup-apply'
 import { homeRuns } from '../reach/command.ts'
 import { REACH_SECTION_ORDER, reachSection } from '../reach/setup-section.ts'
 import { CHANGES_PROTECTION_SECTION_ORDER, changesProtectionSection } from '../changes/setup-section.ts'
@@ -413,9 +412,6 @@ export function portProblem(value: string): string | undefined {
   return /^\d{1,5}$/u.test(value) && port >= 1024 && port <= 65535 ? undefined : 'Enter a port from 1024 to 65535; ports under 1024 need administrator rights.'
 }
 
-/** The id of the Web bundle's web server row, whose `port` the profile section sets. */
-export const STUDIO_ROW_ID = 'webserver'
-
 /**
  * The studio port a profile's own patch sets, as the profile section writes it.
  * @param directory - the profile's directory.
@@ -504,8 +500,7 @@ export const profileSection: SetupSection = {
   unchanged: (before, after) => before.profile.port === after.profile.port,
   apply(context, answers) {
     if (answers.profile.port !== null) {
-      // The patch replaces the web server row's config, so its other keys are restated from the Web bundle.
-      setPatchRow(join(context.directory, 'cordis.patch.yml'), { id: STUDIO_ROW_ID, config: { host: '127.0.0.1', port: answers.profile.port, compression: 'gzip', compressionLevel: 1, compressionThresholdBytes: 1024 } })
+      setPatchRow(join(context.directory, 'cordis.patch.yml'), studioRow(answers.profile.port))
     }
     return Promise.resolve(undefined)
   },

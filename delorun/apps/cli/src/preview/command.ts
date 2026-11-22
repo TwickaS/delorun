@@ -25,7 +25,7 @@ import { closestMatch } from '../output.ts'
 import { composedRow, isRecord, patchLayers } from '../patch-layers.ts'
 import { profileDirectory } from '../profile.ts'
 import { homeRuns } from '../reach/command.ts'
-import { readPatchRow, setPatchRow } from '../setup/writes.ts'
+import { readPatchRow, setPatchRow } from '@delorun/setup-apply'
 import { printable } from '../terminal-text.ts'
 
 /** The row's id in `@delorun/bundle-studio`'s patch; a spec holds it equal to the package's own constant. */

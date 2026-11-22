@@ -1,12 +1,12 @@
 /**
- * The `pairing` choices of a profile's `delorun-home-auth` row (contract C5, "Pop-up pairing"): `delorun setup reach` writes
+ * The `pairing` choices of a profile's `delorun-home-auth` row (contract C5, "Pop-up pairing"): `delorun setup reach` and the studio's phone access control write
  * who may ask without an approval window, and `delorun reach status` reads the row and says who may ask.
  *
- * @module @delorun/cli/reach/pairing-row
+ * @module @delorun/setup-apply/pairing-row
  */
 import { PAIRING_DEFAULTS, resolvePairing, type PairingConfig, type PairingSpec, type WindowlessMode } from '@delorun/home-auth'
-import { CliError, EXIT } from '../exit.ts'
-import { readPatchRow, setPatchRow } from '../setup/writes.ts'
+import { readPatchRow, setPatchRow } from './patch-file.ts'
+import { SetupApplyError } from './errors.ts'
 
 /** The row's id in `@delorun/bundle-local`'s patch. */
 export const HOME_AUTH_ROW_ID = 'delorun-home-auth'
@@ -15,7 +15,7 @@ export const HOME_AUTH_ROW_ID = 'delorun-home-auth'
  * Read the pairing values a profile's patch sets.
  * @param path - the profile's `cordis.patch.yml`.
  * @returns the resolved values, Delorun's defaults where the profile sets none.
- * @throws {CliError} `EXIT.failed` when the patch is not a patch list, or a value is out of bounds.
+ * @throws {SetupApplyError} when the patch is not a patch list, or a value is out of bounds.
  */
 export function readPairingAt(path: string): PairingSpec {
   const config = readPatchRow(path, HOME_AUTH_ROW_ID, 'delorun reach')
@@ -24,7 +24,7 @@ export function readPairingAt(path: string): PairingSpec {
   try {
     return resolvePairing(pairing as PairingConfig)
   } catch (error) {
-    throw new CliError(EXIT.failed, `delorun reach: ${path} sets a pairing value Delorun refuses (${error instanceof Error ? error.message : String(error)}); fix it, then run the command again`)
+    throw new SetupApplyError(`delorun reach: ${path} sets a pairing value Delorun refuses (${error instanceof Error ? error.message : String(error)}); fix it, then run the command again`)
   }
 }
 
@@ -33,7 +33,7 @@ export function readPairingAt(path: string): PairingSpec {
  * restates no `secretsDirectory`: the plugin takes the Delorun home's own when the row omits it.
  * @param path - the profile's `cordis.patch.yml`.
  * @param mayAskWithoutWindow - the mode.
- * @throws {CliError} `EXIT.failed` when the file is not a YAML patch list; it is left unchanged.
+ * @throws {SetupApplyError} when the file is not a YAML patch list; it is left unchanged.
  */
 export function writeMayAskAt(path: string, mayAskWithoutWindow: WindowlessMode): void {
   const current = readPatchRow(path, HOME_AUTH_ROW_ID, 'delorun setup')?.['pairing']

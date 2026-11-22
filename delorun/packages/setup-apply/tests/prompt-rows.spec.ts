@@ -2,9 +2,9 @@ import { readFileSync } from 'node:fs'
 import { parse } from 'yaml'
 import { describe, expect, it } from 'vitest'
 import { PARITY_SWITCHES, type ParitySwitchEntry } from '@delorun/contract-parity-composition'
-import { promptRows, PROMPT_SWITCH_ROWS } from '../../src/setup/prompt-switches.ts'
+import { promptRows, PROMPT_SWITCH_ROWS } from '../src/prompt-rows.ts'
 
-const BUNDLE_PATCH = parse(readFileSync(new URL('../../../../packages/bundle-local/cordis.patch.yml', import.meta.url), 'utf8')) as ({ id?: string, insert?: { id: string, name: string, config?: Record<string, unknown> }[] })[]
+const BUNDLE_PATCH = parse(readFileSync(new URL('../../bundle-local/cordis.patch.yml', import.meta.url), 'utf8')) as ({ id?: string, insert?: { id: string, name: string, config?: Record<string, unknown> }[] })[]
 const BUNDLE_ROWS = new Map(BUNDLE_PATCH.flatMap(patch => patch.insert ?? []).map(row => [row.id, row]))
 
 describe('the prompts answer as switch values', () => {

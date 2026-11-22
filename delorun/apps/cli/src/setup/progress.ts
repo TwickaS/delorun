@@ -10,6 +10,7 @@ import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from 'nod
 import { join } from 'node:path'
 import { z } from 'zod'
 import type { SetupAnswers } from '@delorun/contract-setup-answers'
+import { ANSWERS_FILENAME } from '@delorun/setup-apply'
 import { CliError, EXIT } from '../exit.ts'
 import { parseAnswers } from './answers.ts'
 
@@ -52,9 +53,6 @@ const progressSchema = z.strictObject({
 
 /** The run record's file name inside the profile's run directory. */
 export const PROGRESS_FILENAME = 'setup-progress.json'
-
-/** The answers record's file name inside the profile's directory. */
-export const ANSWERS_FILENAME = 'setup-answers.json'
 
 /**
  * Write a file atomically at mode 0600.

@@ -22,7 +22,7 @@ import { CliError, EXIT } from '../src/exit.ts'
 import { NO_RELEASE_PACKS } from '../src/release-packs.ts'
 import { main } from '../src/main.ts'
 import { composedRow, isRecord } from '../src/patch-layers.ts'
-import { promptRows } from '../src/setup/prompt-switches.ts'
+import { promptRows } from '@delorun/setup-apply'
 import { upstreamAddHeadlessBundle, upstreamDependencies } from '../src/start.ts'
 import { HEADLESS_BUNDLE } from '@delorun/bundle-local/profile'
 

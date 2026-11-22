@@ -2,7 +2,7 @@
  * What remote access over the person's tailnet lets a device do and what protects the home, as `delorun reach on`
  * prints it, setup shows it and the user guide states it (contract C14, "Tailnet membership").
  *
- * @module @delorun/cli/reach/trust
+ * @module @delorun/setup-apply/trust
  */
 
 /** The trust statement, one sentence per line. */

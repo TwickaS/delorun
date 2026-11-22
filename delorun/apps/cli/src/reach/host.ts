@@ -5,23 +5,12 @@
  * @module @delorun/cli/reach/host
  */
 import type { Context } from '@deepseek-ai/cordis'
-import { brandString } from '@deepseek-ai/dsh-brand'
-import type { StudioAddress } from '@delorun/contract-admission'
 import type { ReachOptionStatus } from '@delorun/contract-home-process'
 import type { ReachConfigRows } from '@delorun/contract-reach-providers'
 import type { LocalReach } from '@delorun/home-process'
 import type { ReachStatus } from '@delorun/reach'
+import type { TailscalePrivateRow } from '@delorun/setup-apply'
 import { isRecord } from '../patch-layers.ts'
-import type { TailscalePrivateRow } from './row.ts'
-
-/**
- * The reach service's rows of a profile's Tailscale private row.
- * @param row - the row, as `readReachRow` reads it.
- * @returns the rows the service resolves.
- */
-export function reachRowsOf(row: TailscalePrivateRow): ReachConfigRows {
-  return { tailscalePrivate: { ...row, address: brandString<StudioAddress>(row.address) } }
-}
 
 /**
  * The `delorun-reach` row's config as a running Host holds it after a `reach.apply`: its boot config with

@@ -23,6 +23,7 @@ import { pinOffHint } from '../devices/pin.ts'
 import { DEFAULT_SERVE_PORT } from '@delorun/contract-reach-providers'
 import type { ReachOptionStatus } from '@delorun/contract-home-process'
 import { checkServeAccess, ReachError, readTailscale, removeServe, serveTarget, systemTailscale, tailscaleAddress, type TailscaleRunner } from '@delorun/reach'
+import { listenerPortFor, readPairingAt, signInAddress, TRUST_STATEMENT } from '@delorun/setup-apply'
 import { processExists, readHomeLock, resolveDelorunHome, runDirectory } from '@delorun/home'
 import { sendHomeRequest, type ResponseLine, type UnsignedRequest } from '@delorun/home-process'
 import type { PairingSpec } from '@delorun/home-auth'
@@ -32,9 +33,7 @@ import { hasCliProfile, selectProfile } from '../profile.ts'
 import { profileFlag } from '../open/studio.ts'
 import { printable } from '../terminal-text.ts'
 import { askOnTerminal, isYes } from '../trash/terminal.ts'
-import { readPairingAt } from './pairing-row.ts'
-import { listenerPortFor, profilePatchPath, readReachRow, signInAddress, writeReachRow } from './row.ts'
-import { TRUST_STATEMENT } from './trust.ts'
+import { profilePatchPath, readReachRow, writeReachRow } from './row.ts'
 
 /** What the command runs against. */
 export interface ReachDependencies {

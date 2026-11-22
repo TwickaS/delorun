@@ -8,7 +8,7 @@
 import { fileURLToPath } from 'node:url'
 import { loadOverlayPatches } from '@deepseek-ai/dsh-app-boot'
 import { SETUP_UPDATE_CHECK_ROW } from '@delorun/contract-setup-answers'
-import { readPatchRow, setRowFields, type InheritedRow } from './writes.ts'
+import { readPatchRow, setRowFields, type InheritedRow } from '@delorun/setup-apply'
 
 /**
  * The release-check row as `@delorun/bundle-local` inserts it.

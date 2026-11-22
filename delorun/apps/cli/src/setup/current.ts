@@ -10,12 +10,9 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { PAIRING_ASKERS, SETUP_DEFAULT_PORT, SETUP_DEFAULTS, type ReachAnswer, type SetupAnswers } from '@delorun/contract-setup-answers'
-import { readPairingAt } from '../reach/pairing-row.ts'
-import { readReachRowAt } from '../reach/row.ts'
+import { ANSWERS_FILENAME, readPairingAt, readPromptsRows, readReachRowAt } from '@delorun/setup-apply'
 import { parseAnswers } from './answers.ts'
-import { readPromptsRows } from './prompt-switches.ts'
 import { readProviderAnswer } from './providers.ts'
-import { ANSWERS_FILENAME } from './progress.ts'
 import { profileStudioPort } from './sections.ts'
 import { readUpdateCheckRow } from './update-check.ts'
 

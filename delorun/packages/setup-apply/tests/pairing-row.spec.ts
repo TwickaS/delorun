@@ -9,8 +9,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { PAIRING_DEFAULTS } from '@delorun/home-auth'
-import { CliError } from '../../src/exit.ts'
-import { readPairingAt, writeMayAskAt } from '../../src/reach/pairing-row.ts'
+import { SetupApplyError } from '../src/errors.ts'
+import { readPairingAt, writeMayAskAt } from '../src/pairing-row.ts'
 
 let directory = ''
 let path = ''
@@ -62,7 +62,7 @@ describe('the pairing row', () => {
 
   it('refuses a file that is not a patch list and leaves it unchanged', () => {
     writeFileSync(path, 'a: b\n')
-    expect(() => { writeMayAskAt(path, 'tailnet') }).toThrow(CliError)
+    expect(() => { writeMayAskAt(path, 'tailnet') }).toThrow(SetupApplyError)
     expect(readFileSync(path, 'utf8')).toBe('a: b\n')
   })
 
