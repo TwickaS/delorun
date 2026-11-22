@@ -290,16 +290,6 @@
       "path": "delorun/packages/plugin-permission-defaults/tests/egress-proxy.spec.ts",
       "value": "192.168.0.9",
       "reason": "A private-network address a listed name resolves to in the egress proxy's spec, which the proxy must refuse; no deployment uses it."
-    },
-    {
-      "path": "delorun/apps/cli/tests/start-host.spec.ts",
-      "value": "home.example-tailnet.ts.net",
-      "reason": "A made-up Tailscale name in a spec of the reach setup, which only accepts a name ending in .ts.net; it names no deployment."
-    },
-    {
-      "path": "delorun/apps/cli/tests/update/host.spec.ts",
-      "value": "home.example-tailnet.ts.net",
-      "reason": "A made-up Tailscale name in a spec of the reach setup, which only accepts a name ending in .ts.net; it names no deployment."
     }
   ]
 }

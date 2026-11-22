@@ -717,7 +717,7 @@ describe('checkHealth', () => {
     // The owner's timeline: the predecessor booted with @delorun/bundle-local's row, then `delorun reach on` wrote the
     // profile's own row, which restates the switch and the whole option, and the running Host applied the option.
     const boot = { enabled: true, tailscalePrivate: { enabled: false, address: '', servePort: 443 } }
-    const option = { enabled: true, address: 'https://home.example-tailnet.ts.net', servePort: 443, listenerPort: 31318, serveCheckIntervalMs: 60000, elevationMinutes: 15 }
+    const option = { enabled: true, address: 'https://home.example.ts.net', servePort: 443, listenerPort: 31318, serveCheckIntervalMs: 60000, elevationMinutes: 15 }
     const written = { enabled: true, tailscalePrivate: option }
     const handed = withAppliedConfig(bootRowsOf([manager, reach(boot)]), 'delorun-reach', appliedReachConfig(boot, option))
     // The successor's release adds rows elsewhere and changes nothing of the reach row.
