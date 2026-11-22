@@ -339,7 +339,7 @@ Run `delorun reach off`.
 
 You should see "Remote access is off for the profile default." and "Tailscale no longer serves this computer's studio." A running Delorun closes the remote listener at once, and none opens at its next start. While Delorun runs, it rechecks Tailscale every minute and stops serving if Funnel is turned on for your address.
 
-Turning remote access off also signs every approved device out and ends its Face ID pass, in the terminal and in Settings → General → How Delorun runs alike. The devices stay on the list, so turning remote access on again does not ask you to approve them again, but each one signs in again first, and an old session or pass is never accepted. Remove a device if you no longer want it. If Delorun is not running, `delorun reach off` removes the stored sessions itself, so none is there when it starts again.
+Turning remote access off also signs every approved device out and ends its Face ID pass, in the terminal and in Settings → General → How Delorun runs alike. The devices stay on the list, so turning remote access on again does not ask you to approve them again, but each one signs in again first, and an old session or pass is never accepted. Remove a device if you no longer want it. If Delorun is not running, `delorun reach off` removes the stored sessions itself, so none is there when it starts again. If `delorun reach off` reports a failure, restart Delorun before turning access on again.
 
 <details>
 <summary>Edge cases</summary>
