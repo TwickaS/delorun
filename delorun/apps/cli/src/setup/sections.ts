@@ -1,10 +1,10 @@
 /**
- * The sections of `delorun setup`. A section is one topic of the terminal flow with its question, its review line
- * and the writes it produces, and the registry lists them in order. The use case the person picks first decides, per
- * section, whether it is asked in the main flow, left to the review screen's "More settings", or not asked at all.
- * Each section is also `delorun setup <id>`. Later packages add their sections through
+ * The sections of `delorun setup`. A section is one topic of the terminal flow with its question and the writes it
+ * produces, and the registry lists them in order. Each section says whether the main flow asks it, shows its note, or
+ * leaves it to `delorun setup <id>` ({@link MainFlowPlacement}). Later packages add their sections through
  * {@link SectionRegistry.register}; this module registers privacy, the stock-home import, the model provider and key
- * ([provider section](./provider-section.ts)), prompts, background, remote access, changes protection and profile. Privacy shows its note in the main flow and asks about the release check under "More settings".
+ * ([provider section](./provider-section.ts)), prompts, background, remote access, changes protection and profile.
+ * Privacy shows a one-line note in the main flow and asks about the release check only as `delorun setup privacy`.
  *
  * @module @delorun/cli/setup/sections
  */
@@ -12,7 +12,6 @@ import { join } from 'node:path'
 import {
   SETUP_DEFAULT_PORT,
   type PromptsAnswer,
-  type SetupUseCase,
   type SectionRecord,
   type SectionStatus,
   type SetupAnswers,
@@ -39,17 +38,14 @@ import { homeRuns } from '../reach/command.ts'
 import { REACH_SECTION_ORDER, reachSection } from '../reach/setup-section.ts'
 import { CHANGES_PROTECTION_SECTION_ORDER, changesProtectionSection } from '../changes/setup-section.ts'
 
-/**
- * Where a section's question is asked: `main` is the flow every use case follows, `more` the review screen's "More
- * settings", and `single` a section run again with `delorun setup <section>`.
- */
-export type SetupPhase = 'main' | 'more' | 'single'
+/** Where a section's question is asked: `main` is the flow of `delorun setup`, and `single` a section run again with `delorun setup <section>`. */
+export type SetupPhase = 'main' | 'single'
 
 /**
- * What a use case does with a section: `asked` asks it in the main flow, `note` shows its note there and asks the
- * question under "More settings", `more` asks it only under "More settings", and `never` leaves it out.
+ * What the main flow does with a section: `asked` asks it, `note` shows its note without a question, and `never`
+ * leaves it to `delorun setup <section>`.
  */
-export type SectionPlan = 'asked' | 'note' | 'more' | 'never'
+export type MainFlowPlacement = 'asked' | 'note' | 'never'
 
 /** The answers collected so far in an interactive run. */
 export interface Draft {
@@ -120,8 +116,11 @@ export interface SetupSection {
   readonly id: string
   /** The heading shown by `delorun setup --list`. */
   readonly title: string
-  /** What each use case does with the section. */
-  readonly plan: Readonly<Record<SetupUseCase, SectionPlan>>
+  /**
+   * What the main flow does with the section: one value, or a function of the answers so far for a section that
+   * depends on an earlier answer.
+   */
+  readonly inMainFlow: MainFlowPlacement | ((draft: Draft) => MainFlowPlacement)
   /**
    * Whether the section asks a question in a phase; a section that only shows a note is passed over when going back.
    * @param phase - where the section is asked.
@@ -142,12 +141,6 @@ export interface SetupSection {
    */
   ask(io: StepIO, draft: Draft, environment: SectionEnvironment): Promise<SectionAnswer | Back>
   /**
-   * @param answers - the answers.
-   * @param draft - the run's answers so far, with what the questions found, such as a failed key check.
-   * @returns the section's line of the review screen. A section without one omits the method.
-   */
-  review?(answers: SetupAnswers, draft?: Draft): string
-  /**
    * Whether a re-run changes nothing the section writes, so the run reports it as kept and writes nothing.
    * A section without the method always writes.
    * @param before - the answers the profile holds now.
@@ -163,6 +156,16 @@ export interface SetupSection {
    * @returns a note for the person, if any.
    */
   apply(context: ApplyContext, answers: SetupAnswers): Promise<string | undefined>
+}
+
+/**
+ * What the main flow does with a section for the answers so far.
+ * @param section - the section.
+ * @param draft - the answers so far.
+ * @returns the section's placement.
+ */
+export function placementOf(section: SetupSection, draft: Draft): MainFlowPlacement {
+  return typeof section.inMainFlow === 'function' ? section.inMainFlow(draft) : section.inMainFlow
 }
 
 /** Where a section sits in the flow. */
@@ -238,9 +241,6 @@ export function unattendedRecord(sections: readonly SetupSection[]): readonly Se
  */
 const asksWhenRun = (): boolean => true
 
-/** A section's plan for every use case. */
-const samePlan = (plan: SectionPlan): Readonly<Record<SetupUseCase, SectionPlan>> => ({ local: plan, remote: plan, automation: plan })
-
 /**
  * The update-check statement on the production channel: the check reads files from releases.delorun.com, and the newest
  * release's manifest and log record from GitHub, once a day and at start when a day has passed; those hosts see this
@@ -268,11 +268,8 @@ export function localUpdateStatement(channelOrigin: string): string {
   return `Once a day, and at start when a day has passed, Delorun checks whether a newer release exists: it fetches timestamp.json, a new root file when Delorun's signing keys change, and the newest release's manifest and log record, all from ${host}, the release channel this launcher was built for. It sends nothing about this installation or its plugins; that host sees this computer's address. Turn it off in Settings → General → Updates.`
 }
 
-/** The line the privacy note ends with in the main flow, by the release-check answer: the main flow does not ask, so the line says where to change it. */
-export const MAIN_UPDATE_CHECK_LINES: Readonly<Record<'on' | 'off', string>> = {
-  on: 'Delorun checks for new releases once a day. To turn that off before Delorun first starts, choose More settings on the last screen, or run delorun setup privacy later.',
-  off: 'This setup turns the release check off, so Delorun makes no release check request.',
-}
+/** The privacy note of the main flow: one line and the page that holds the facts. */
+export const MAIN_PRIVACY_LINE = 'Delorun sends nothing about you. Details: https://delorun.com/privacy'
 
 /**
  * What the release-check question's choices mean.
@@ -289,18 +286,18 @@ function updateCheckText(channelOrigin?: string): readonly ChoiceText[] {
 
 /**
  * The privacy section: the note, where the two upstream opt-ins are changed, and the update check. The main flow shows
- * the note; "More settings", and `delorun setup privacy`, ask whether to check for new releases. Turned off, the
+ * one line; `delorun setup privacy` shows the statements and asks whether to check for new releases. Turned off, the
  * check's row is disabled before Delorun first starts, so no check request is made.
  */
 export const privacySection: SetupSection = {
   id: 'privacy',
   title: 'Privacy',
-  plan: samePlan('note'),
+  inMainFlow: 'note',
   asks: phase => phase !== 'main',
   appliesTo: () => true,
   async ask(io, draft, environment) {
     if (draft.phase === 'main') {
-      io.note([...statementLines(await channelOriginOf(environment.home)), MAIN_UPDATE_CHECK_LINES[draft.answers.updateCheck ? 'on' : 'off']].join('\n'), en.title)
+      io.note(MAIN_PRIVACY_LINE, en.title)
       return { answers: {}, status: 'seen' }
     }
     if (draft.phase === 'single') io.note(statementLines(await channelOriginOf(environment.home)).join('\n'), en.title)
@@ -311,7 +308,6 @@ export const privacySection: SetupSection = {
     ], draft.answers.updateCheck ? 'on' : 'off')
     return check === BACK ? BACK : { answers: { updateCheck: check === 'on' }, status: 'answered' }
   },
-  review: answers => `Release check: ${answers.updateCheck ? 'on, once a day' : 'off'}`,
   unchanged: (before, after) => before.updateCheck === after.updateCheck,
   apply(context, answers) {
     writeUpdateCheckRow(join(context.directory, 'cordis.patch.yml'), answers.updateCheck)
@@ -333,7 +329,7 @@ const PROMPTS_TEXT: readonly ChoiceText[] = [
 export const promptsSection: SetupSection = {
   id: 'prompts',
   title: 'Prompts',
-  plan: samePlan('asked'),
+  inMainFlow: 'never',
   asks: asksWhenRun,
   appliesTo: () => true,
   async ask(io, draft, environment) {
@@ -359,7 +355,6 @@ export const promptsSection: SetupSection = {
       return { answers: { prompts: choice }, status: 'answered' }
     }
   },
-  review: answers => `Prompts: ${PROMPT_LABELS[answers.prompts]}`,
   unchanged: (before, after) => before.prompts === after.prompts,
   async apply(context, answers) {
     refuseDangerousAsRoot(answers.prompts, 'delorun setup')
@@ -382,7 +377,7 @@ const BACKGROUND_TEXT: readonly ChoiceText[] = [
 export const backgroundSection: SetupSection = {
   id: 'background',
   title: 'Background',
-  plan: { local: 'more', remote: 'more', automation: 'never' },
+  inMainFlow: 'never',
   asks: asksWhenRun,
   appliesTo: () => true,
   async ask(io, draft) {
@@ -390,7 +385,6 @@ export const backgroundSection: SetupSection = {
     const keep = await io.confirm('Keep Delorun running in the background after the terminal closes?', draft.answers.background)
     return keep === BACK ? BACK : { answers: { background: keep }, status: 'answered' }
   },
-  review: answers => `Keep running in the background: ${answers.background ? 'yes' : 'no'}`,
   unchanged: (before, after) => before.background === after.background,
   // The answer is read from the answers record that setup writes at its end.
   apply: () => Promise.resolve(undefined),
@@ -414,7 +408,7 @@ function nameProblem(value: string, environment: SectionEnvironment): string | u
  * @param value - the entry.
  * @returns the message to show, or `undefined` for a usable port.
  */
-function portProblem(value: string): string | undefined {
+export function portProblem(value: string): string | undefined {
   const port = Number(value)
   return /^\d{1,5}$/u.test(value) && port >= 1024 && port <= 65535 ? undefined : 'Enter a port from 1024 to 65535; ports under 1024 need administrator rights.'
 }
@@ -439,14 +433,63 @@ export function profileStudioPort(directory: string, command: string): number | 
   return port
 }
 
-/** The profile section: the profile's name and the studio's port, which must be free. */
+/** How many ports after a busy one the profile section looks through for the one it offers. */
+const OFFERED_PORT_SEARCH = 100
+
+/**
+ * The first free port after a busy one.
+ * @param after - the busy port.
+ * @param environment - what the section may look at.
+ * @returns the port, or `undefined` when none in the search range is free.
+ */
+async function nextFreePort(after: number, environment: SectionEnvironment): Promise<number | undefined> {
+  for (let port = after + 1; port <= Math.min(after + OFFERED_PORT_SEARCH, 65535); port++) {
+    if (await environment.portIsFree(port)) return port
+  }
+  return undefined
+}
+
+/**
+ * Ask for a free port until the person enters one.
+ * @param io - the questions.
+ * @param initial - the port offered at first.
+ * @param environment - what the section may look at.
+ * @returns the port, or {@link BACK}.
+ */
+async function enteredPort(io: StepIO, initial: number, environment: SectionEnvironment): Promise<number | Back> {
+  for (;;) {
+    const entered = await io.text('Port for the studio', String(initial), portProblem)
+    if (entered === BACK) return BACK
+    if (await environment.portIsFree(Number(entered))) return Number(entered)
+    io.note(`Port ${entered} is in use on this computer. Choose another.`, 'Port')
+  }
+}
+
+/**
+ * The profile section: the profile's name and the studio's port, which must be free. The main flow asks only when the
+ * port is busy, and not at all for a profile that is set up, whose own studio may be using it.
+ */
 export const profileSection: SetupSection = {
   id: 'profile',
   title: 'Profile name and port',
-  plan: samePlan('more'),
+  inMainFlow: 'asked',
   asks: asksWhenRun,
   appliesTo: () => true,
   async ask(io, draft, environment) {
+    if (draft.phase === 'main') {
+      const wanted = draft.answers.profile.port ?? SETUP_DEFAULT_PORT
+      if (environment.profileExists || await environment.portIsFree(wanted)) return { answers: {}, status: 'skipped' }
+      const offered = await nextFreePort(wanted, environment)
+      const choice = offered === undefined ? 'other' : await io.select(`Port ${String(wanted)} is in use. Use ${String(offered)}?`, [
+        { value: 'use', label: 'Yes' },
+        { value: 'other', label: 'Enter another port' },
+      ], 'use')
+      if (choice === BACK) return BACK
+      if (choice === 'use') return { answers: { profile: { name: draft.answers.profile.name, port: offered as number } }, status: 'answered' }
+      io.note(`Port ${String(wanted)} is in use on this computer.`, 'Port')
+      const port = await enteredPort(io, offered ?? wanted, environment)
+      return port === BACK ? BACK : { answers: { profile: { name: draft.answers.profile.name, port: port === SETUP_DEFAULT_PORT ? null : port } }, status: 'answered' }
+    }
     let name: string | null = draft.answers.profile.name
     if (!environment.profileExists) {
       io.note('Keep "default" unless you want a second, separate Delorun on this computer, for example for work. The name cannot change after setup.', 'Name for this setup')
@@ -455,15 +498,9 @@ export const profileSection: SetupSection = {
       name = entered === environment.profile ? null : entered
     }
     io.note('The studio runs at 127.0.0.1 on this port. 3080 is fine unless another program uses it.\nChange later: delorun setup profile.', 'Port')
-    for (;;) {
-      const entered = await io.text('Port for the studio', String(draft.answers.profile.port ?? SETUP_DEFAULT_PORT), portProblem)
-      if (entered === BACK) return BACK
-      const port = Number(entered)
-      if (await environment.portIsFree(port)) return { answers: { profile: { name, port: port === SETUP_DEFAULT_PORT ? null : port } }, status: 'answered' }
-      io.note(`Port ${entered} is in use on this computer. Choose another.`, 'Port')
-    }
+    const port = await enteredPort(io, draft.answers.profile.port ?? SETUP_DEFAULT_PORT, environment)
+    return port === BACK ? BACK : { answers: { profile: { name, port: port === SETUP_DEFAULT_PORT ? null : port } }, status: 'answered' }
   },
-  review: answers => `Setup name: ${answers.profile.name ?? 'default'}, studio port ${String(answers.profile.port ?? SETUP_DEFAULT_PORT)}`,
   unchanged: (before, after) => before.profile.port === after.profile.port,
   apply(context, answers) {
     if (answers.profile.port !== null) {
@@ -492,11 +529,11 @@ function once(load: () => Promise<ProviderCatalog>): () => Promise<ProviderCatal
 export function defaultRegistry(catalog: () => Promise<ProviderCatalog> = installedCatalog): SectionRegistry {
   const registry = new SectionRegistry()
   registry.register(privacySection, { order: 10 })
+  registry.register(reachSection(systemTailscale(), homeRuns), { order: REACH_SECTION_ORDER })
   registry.register(importSection({ delorunBundles: [LOCAL_BUNDLE] }), { order: 15 })
   registry.register(providerSection(once(catalog)), { order: 20 })
   registry.register(promptsSection, { order: 30 })
   registry.register(backgroundSection, { order: 40 })
-  registry.register(reachSection(systemTailscale(), homeRuns), { order: REACH_SECTION_ORDER })
   registry.register(changesProtectionSection(process), { order: CHANGES_PROTECTION_SECTION_ORDER })
   registry.register(profileSection, { order: 50 })
   return registry

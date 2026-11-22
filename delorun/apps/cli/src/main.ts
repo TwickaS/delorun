@@ -5,7 +5,7 @@
  * | Command | What it does |
  * | --- | --- |
  * | `delorun [--profile <name>] [--foreground \| --background]` | runs setup on a home without the CLI profile; otherwise starts the home process detached from the terminal, or in this terminal, as `--background`, `--foreground` or else setup's answer says, and opens the studio |
- * | `delorun setup [<section>] [--profile <name>] [--list]` | setup by how you use Delorun, or one section again ([setup](./setup/index.ts)) |
+ * | `delorun setup [<section>] [--profile <name>] [--yes] [--phone] [--import-dsh] [--port <n>] [--list]` | setup, or one section again ([setup](./setup/index.ts)) |
  * | `delorun setup export --out <file>`, `delorun setup import <file> [--dry-run]` | the plugins, model choices and settings of a profile as one signed archive, and its import, which replaces the profile's setup after showing what changes ([transfer](./changes/setup-transfer.ts)) |
  * | `delorun start [--foreground \| --background] [--open] [--profile <name>] [--patch <file>]... [--inspect [--yes]]` | the home process detached from the terminal, or in this terminal, with the person's overlays and, once confirmed, a debugger port ([start](./start.ts), [inspector](./inspector.ts)) |
  * | `delorun open [--print] [--profile <name>]` | the studio in the browser with a link that signs in once, or that link printed ([open](./open/command.ts)) |
@@ -76,7 +76,7 @@ export interface CommandEntry {
  * release transpiler rewrites it to JavaScript.
  */
 export const COMMANDS: readonly CommandEntry[] = [
-  { name: 'setup', summary: 'Set up Delorun by how you use it, or run one section again: delorun setup <section>; --list lists them; export and import move a setup between computers', load: async () => (await import('./setup/index.ts')).setupCommand },
+  { name: 'setup', summary: 'Set up Delorun, or run one section again: delorun setup <section>; --list lists them; export and import move a setup between computers', load: async () => (await import('./setup/index.ts')).setupCommand },
   { name: 'start', summary: 'Start the home process: --background detaches it from the terminal, --foreground keeps it in this terminal; without either, setup\'s answer chooses; --patch adds overlays', load: async () => (await import('./start.ts')).startCommand },
   { name: 'open', summary: 'Open the studio in your browser, or print a link that signs in once with --print (--port for a forwarded port)', load: async () => (await import('./open/command.ts')).openCommand },
   { name: 'stop', summary: 'Stop the home process once running chats end, or at once with --now', load: async () => (await import('./stop.ts')).stopCommand },

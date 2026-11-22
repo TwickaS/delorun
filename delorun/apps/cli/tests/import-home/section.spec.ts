@@ -1,12 +1,12 @@
 /**
  * Setup's `import` section: asked only when the stock home is a directory and
  * not a link to one, and the Delorun home holds no chat; its question shown after
- * the preview of the data, defaulting to no; its answer applied by carrying
- * out exactly the plan that preview showed, with the data alone; and a refusal
- * reported with its code. A setup run with a stock home asks it between
- * the privacy note and the key.
+ * a summary of what copies and what stays behind, with Yes, Later and the full list; its
+ * answer applied by carrying out exactly the plan that summary came from, with the
+ * data alone; and a refusal reported with its code. A setup run with a stock home asks it
+ * after the phone question.
  */
-import { existsSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, readFileSync, realpathSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
@@ -21,7 +21,7 @@ import { runSetup } from '../../src/setup/index.ts'
 import { defaultRegistry, type Draft, type SectionEnvironment } from '../../src/setup/sections.ts'
 import { BACK, stepIO } from '../../src/setup/steps.ts'
 import { scriptedPrompter, type Answer, type Recording } from '../setup/support.ts'
-import { chatLog, fresh, put, removeScratch, snapshot, STOCK_SECRET, stockHome } from './support.ts'
+import { chat, chatLog, fresh, put, removeScratch, snapshot, STOCK_SECRET, stockHome } from './support.ts'
 
 let person: string
 let home: string
@@ -74,8 +74,8 @@ function context(env: Record<string, string | undefined> = { HOME: person }): Pa
 
 const YES = { ...SETUP_DEFAULTS, importStockHome: true }
 
-/** The question the section asks. */
-const QUESTION = 'select: Copy your DeepSeek Harness chats, attachments and workspace list? Your DeepSeek Harness folder is only read. You can also do this later with delorun import-home.'
+/** The question the section asks about the two chats of the fixture. */
+const QUESTION = 'select: Copy your 2 DeepSeek Harness chats?'
 
 describe('setup\'s import section', () => {
   it('applies only when the stock home is a directory and the Delorun home holds no chat', () => {
@@ -99,24 +99,62 @@ describe('setup\'s import section', () => {
     expect(section.appliesTo(environment({ HOME: linked }))).toBe(false)
   })
 
-  it('shows the preview of the data, names the command that copies the rest, and asks with no preselected', async () => {
-    stockHome(join(person, '.dsh'))
+  it('shows a summary of what copies and what stays behind, and asks Copy your N chats? with Yes preselected', async () => {
+    const source = join(person, '.dsh')
+    stockHome(source)
+    chat(source, '--work--', 's3', '/work', true)
     expect(await ask(['yes'])).toEqual({ answers: { importStockHome: true }, status: 'answered' })
     const screen = recording.screen.join('\n')
     expect(recording.screen).toContain('# Your DeepSeek Harness home')
-    expect(screen).toContain('Chats: 2 chats to copy')
-    expect(screen).toContain('run delorun import-home to review each and copy what you choose')
-    expect(screen).not.toContain('Asked about one by one')
+    expect(screen).toContain('  Will copy:    2 chats · 1 attachment · 1 workspace\n')
+    expect(screen).toMatch(/ {2}Stays behind: 1 unfinished chat · \d+ locks, caches and packages\n/u)
+    expect(screen).toContain('  Your DeepSeek Harness folder is only read.\n')
+    expect(screen).toContain(`  Full list: ${join(home, 'import-preview.txt')}\n`)
     expect(screen).not.toContain('"web"')
     expect(screen).not.toContain(STOCK_SECRET)
     expect(recording.asked).toEqual([QUESTION])
-    expect(recording.screen).toContain('> No')
-    expect(recording.screen).not.toContain('> Yes')
-    recording = { screen: [], asked: [] }
-    // The earlier answer does not preselect yes either: each run asks again with no preselected.
-    expect(await ask(['no'], { ...YES, sections: [{ id: 'import', status: 'answered' }] })).toEqual({ answers: { importStockHome: false }, status: 'answered' })
-    expect(recording.screen).toContain('> No')
+    expect(recording.screen).toContain('? Copy your 2 DeepSeek Harness chats?')
+    expect(recording.screen).toContain('> Yes')
+    expect(recording.screen).toContain('  Later (delorun import-home)')
+    expect(recording.screen).toContain('  Show what stays behind')
     expect(await ask(['← back'])).toBe(BACK)
+  })
+
+  it('writes the full list to import-preview.txt in the Delorun home, readable by the person alone', async () => {
+    stockHome(join(person, '.dsh'))
+    await ask(['later'])
+    const file = join(home, 'import-preview.txt')
+    expect(readFileSync(file, 'utf8')).toContain('Chats: 2 chats to copy')
+    expect(readFileSync(file, 'utf8')).toContain('What stays behind, and why:')
+    expect(statSync(file).mode & 0o777).toBe(0o600)
+    writeFileSync(file, 'an earlier list', { mode: 0o644 })
+    chmodSync(file, 0o644)
+    await ask(['later'])
+    expect(readFileSync(file, 'utf8')).toContain('Chats: 2 chats to copy')
+    expect(statSync(file).mode & 0o777).toBe(0o600)
+  })
+
+  it('says Stays behind: nothing when the stock home leaves nothing out', async () => {
+    const source = join(person, '.dsh')
+    chat(source, '--work--', 's1', '/work')
+    await ask(['later'])
+    expect(recording.screen.join('\n')).toContain('  Stays behind: nothing\n')
+  })
+
+  it('answers no and copies nothing on Later, and says where the command is', async () => {
+    stockHome(join(person, '.dsh'))
+    expect(await ask(['later'])).toEqual({ answers: { importStockHome: false }, status: 'answered' })
+    expect(recording.screen).toContain('  Later (delorun import-home)')
+    expect(await section.apply(context(), SETUP_DEFAULTS)).toBeUndefined()
+    expect(existsSync(join(home, 'sessions'))).toBe(false)
+  })
+
+  it('shows the full list on Show what stays behind and then asks the same question again', async () => {
+    stockHome(join(person, '.dsh'))
+    expect(await ask(['show', 'yes'])).toEqual({ answers: { importStockHome: true }, status: 'answered' })
+    expect(recording.asked).toEqual([QUESTION, QUESTION])
+    expect(recording.screen).toContain('# Everything the import covers')
+    expect(recording.screen.join('\n')).toContain('  What stays behind, and why:')
   })
 
   it('shows why a stock home cannot be imported instead of asking', async () => {
@@ -141,8 +179,6 @@ describe('setup\'s import section', () => {
     expect(readFileSync(join(home, 'sessions/--work--/s1/session.v4.jsonl.zstd'))).toEqual(chatLog('s1', '/work'))
     for (const absent of ['.credentials.yaml', 'profiles/web', 'cordis.patch.yml', 'AGENTS.md', 'skills']) expect(existsSync(join(home, absent))).toBe(false)
     expect(snapshot(source)).toEqual(before)
-    expect(section.review?.(YES)).toBe('Copy your DeepSeek Harness chats: yes')
-    expect(section.review?.(SETUP_DEFAULTS)).toBe('Copy your DeepSeek Harness chats: no')
   })
 
   it('refuses to write when a stock file changed after the preview, and nothing lands', async () => {
@@ -171,7 +207,7 @@ describe('setup\'s import section', () => {
     const resumed = importSection({ delorunBundles: ['@delorun/bundle-local'] })
     const refused = await resumed.apply(context(), YES).catch((error: unknown) => error)
     expect((refused as CliError).message).toBe('delorun setup: the DeepSeek Harness home was not imported, because this run did not show what it copies; run delorun import-home')
-    await ask(['no'])
+    await ask(['later'])
     expect(((await section.apply(context(), YES).catch((error: unknown) => error)) as CliError).message).toContain('did not show what it copies')
     expect(existsSync(join(home, 'sessions'))).toBe(false)
   })
@@ -194,24 +230,25 @@ describe('setup\'s import section', () => {
     await expect(failing.apply(context(), YES)).rejects.toThrow('the lock failed')
   })
 
-  it('sits between the privacy note and the key in the main flow, and copies the chats before the key is asked for', async () => {
+  it('is asked after the phone question in the main flow and copies the chats before the profile is written', async () => {
     stockHome(join(person, '.dsh'))
     const code = await runSetup({
       home,
       profile: 'default',
       output: { stdout: text => void recording.screen.push(text.trim()), stderr: () => undefined },
       env: { HOME: person, DEEPSEEK_API_KEY: 'env-key' },
-      form: { kind: 'interactive', prompter: scriptedPrompter(['local', 'yes', 'deepseek-official', 'environment', 'safer', 'save'], recording) },
+      form: { kind: 'interactive', prompter: scriptedPrompter(['no', 'yes'], recording) },
       registry: defaultRegistry(),
       keyCheck: async () => ({ ok: true }),
       portIsFree: async () => true,
     })
     expect(code).toBe(EXIT.ok)
-    expect(recording.asked.slice(0, 3)).toEqual(['select: How will you use Delorun?', QUESTION, 'select: Which model provider should Delorun use?'])
+    expect(recording.asked).toEqual(['select: Use it from your phone too?', QUESTION])
     expect(readFileSync(join(home, 'sessions/_no-cwd/s2/session.v4.jsonl.zstd'))).toEqual(chatLog('s2', undefined))
     expect(existsSync(join(home, 'profiles/web/package.json'))).toBe(false)
     const record = JSON.parse(readFileSync(join(profileDirectory(home, 'default'), 'setup-answers.json'), 'utf8')) as SetupAnswers
     expect(record.importStockHome).toBe(true)
-    expect(record.sections.slice(0, 2)).toEqual([{ id: 'privacy', status: 'seen' }, { id: 'import', status: 'answered' }])
+    expect(record.sections.slice(0, 3)).toEqual([{ id: 'privacy', status: 'seen' }, { id: 'reach', status: 'answered' }, { id: 'changes-protection', status: 'skipped' }])
+    expect(record.sections).toContainEqual({ id: 'import', status: 'answered' })
   }, 120_000)
 })

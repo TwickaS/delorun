@@ -43,15 +43,19 @@ const JSON_OUTPUT: HelpEntry = { name: '--json', text: 'Print the result as JSON
 /** Every command's help, by command name. */
 export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
   setup: {
-    usage: ['delorun setup [<section>] [--profile <name>] [--yes] [--list]'],
+    usage: ['delorun setup [<section>] [--profile <name>] [--yes] [--phone] [--import-dsh] [--port <n>] [--list]'],
     about: [
-      'Sets up Delorun: your model key, how careful prompts are, and the other first-run choices. Nothing is saved until you confirm at the end.',
-      'Name a section to answer one question again. delorun setup --list shows the sections.',
+      'Sets up Delorun with a few questions: whether to use it from your phone, whether to copy your DeepSeek Harness chats (only when you have some), and the studio port when 3080 is busy. You add your model key in the studio.',
+      'Without a terminal, delorun setup takes the safe defaults and asks nothing, as --yes does.',
+      'Name a section (key, prompts, background, privacy, reach, changes-protection, profile) to answer one question again. delorun setup --list shows the sections.',
     ],
     options: [
       PROFILE,
       { name: '--list', text: 'List the sections you can run again.' },
-      { name: '--yes', text: 'Accept the defaults without asking (for scripts).' },
+      { name: '--yes', text: 'Accept the defaults without asking (for scripts). Also the form without a terminal.' },
+      { name: '--phone', text: 'Turn on phone access over Tailscale. Fails with the reason when Tailscale is not ready. In a terminal it pre-selects Yes.' },
+      { name: '--import-dsh', text: 'Copy your DeepSeek Harness chats after printing what is copied and what stays behind. Only when a DeepSeek Harness home exists.' },
+      { name: '--port <n>', text: 'The studio port, from 1024 to 65535, instead of 3080 or the next free port.' },
       { name: '--config <file>', text: 'Take the answers from a JSON answers file instead of asking.' },
       { name: '--check-key', text: 'Check the typed key with the provider before saving it.' },
       { name: '--no-update-check', text: 'Turn off the daily check for new releases.' },

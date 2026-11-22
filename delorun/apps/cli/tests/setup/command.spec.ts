@@ -15,7 +15,7 @@ beforeEach(() => {
   osHome = realpathSync(mkdtempSync(join(tmpdir(), 'delorun-command-')))
   lines = []
   context = {
-    env: { DELORUN_HOME: join(osHome, '.delorun'), DEEPSEEK_API_KEY: 'command-spec-key' },
+    env: { DELORUN_HOME: join(osHome, '.delorun'), HOME: osHome, DEEPSEEK_API_KEY: 'command-spec-key' },
     stdout: text => void lines.push(text),
     stderr: text => void lines.push(text),
   }
@@ -88,7 +88,7 @@ describe('delorun setup', { timeout: 60_000 }, () => {
   })
 
   it('refuses provider flags outside --yes and delorun setup key, and without --provider', async () => {
-    expect((await refusal(['--provider', 'openai'])).message).toBe('delorun setup: --provider applies to --yes and to delorun setup key; a --config document names its provider in modelProvider')
+    expect((await refusal(['--config', 'x.json', '--provider', 'openai'])).message).toBe('delorun setup: --provider applies to --yes and to delorun setup key; a --config document names its provider in modelProvider')
     expect((await refusal(['prompts', '--model', 'x', '--provider', 'openai'])).message).toContain('--provider, --model apply to --yes and to delorun setup key')
     expect((await refusal(['--yes', '--model', 'x'])).message).toBe('delorun setup: --model needs --provider')
     expect((await refusal(['--yes', '--provider', 'acme'])).exit).toBe(EXIT.usage)
@@ -126,10 +126,37 @@ describe('delorun setup', { timeout: 60_000 }, () => {
     expect(readFileSync(join(osHome, '.delorun', 'profiles', 'default', 'cordis.patch.yml'), 'utf8')).toContain('- id: delorun-update-check\n  name: "@delorun/bundle-local/update-check"\n  config:\n    intervalHours: 24\n    timeoutSeconds: 15\n    enabled: false\n')
   })
 
-  it('a bare terminal-less run is refused with the usage code, as before', async () => {
-    const error = await refusal([])
-    expect(error.exit).toBe(EXIT.usage)
-    expect(error.message).toContain('the questions need a terminal')
+  it('a run without a terminal takes the safe defaults, as --yes does, instead of refusing', async () => {
+    expect(await setupCommand.run([], context)).toBe(EXIT.ok)
+    expect(lines.join('')).toContain('Delorun is set up. Nothing is running yet.')
+    expect(lines.join('')).toContain('Add a model key first: delorun setup key')
+  })
+
+  it('a run without a terminal takes --provider and its flags like --yes', async () => {
+    expect(await setupCommand.run(['--provider', 'deepseek-official'], context)).toBe(EXIT.ok)
+    expect(readFileSync(join(osHome, '.delorun', 'profiles', 'default', 'setup-answers.json'), 'utf8')).toContain('"id": "deepseek-official"')
+  })
+
+  it('--phone, --import-dsh and --port are refused for a section and for a --config document, and --port needs a usable port', async () => {
+    expect((await refusal(['privacy', '--phone'])).message).toContain('apply to a whole setup')
+    expect((await refusal(['--config', 'x.json', '--import-dsh'])).message).toContain('a --config document holds its own answers')
+    for (const value of ['abc', '80', '70000', '']) expect((await refusal(['--port', value])).exit).toBe(EXIT.usage)
+    expect((await refusal(['--port', '80'])).message).toBe('delorun setup: --port 80: Enter a port from 1024 to 65535; ports under 1024 need administrator rights.')
+  })
+
+  it('--port sets the studio port in a run without a terminal and with --yes', async () => {
+    expect(await setupCommand.run(['--port', '4123'], context)).toBe(EXIT.ok)
+    expect(readFileSync(join(osHome, '.delorun', 'profiles', 'default', 'cordis.patch.yml'), 'utf8')).toContain('port: 4123')
+  })
+
+  it('--import-dsh without a DeepSeek Harness home says so in one line', async () => {
+    expect(await setupCommand.run(['--yes', '--import-dsh'], context)).toBe(EXIT.ok)
+    expect(lines.join('')).toContain('delorun setup --import-dsh: there is no DeepSeek Harness home to copy, so nothing was imported.')
+  })
+
+  it('delorun setup <section> still needs a terminal when there is none', async () => {
+    expect(await setupCommand.run(['--yes'], context)).toBe(EXIT.ok)
+    expect((await refusal(['prompts'])).message).toContain('the questions need a terminal')
   })
 })
 

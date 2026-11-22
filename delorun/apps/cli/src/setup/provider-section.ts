@@ -11,7 +11,7 @@
  */
 import { join } from 'node:path'
 import { isDeepStrictEqual } from 'node:util'
-import { SETUP_DEFAULT_PROVIDER_ID, type ModelCredential, type ModelProviderAnswer, type SetupAnswers } from '@delorun/contract-setup-answers'
+import { SETUP_DEFAULT_PROVIDER_ID, type ModelCredential, type ModelProviderAnswer } from '@delorun/contract-setup-answers'
 import { CliError, EXIT } from '../exit.ts'
 import { choiceNote, ENVIRONMENT_VARIABLE_LINE, RECOMMENDED } from './choices.ts'
 import { baseURLProblem, baseURLWarning, modelIdProblem } from './answers.ts'
@@ -75,12 +75,10 @@ export function keyTarget(provider: SetupProvider, baseURL: string | null, catal
 /**
  * Whether the model question is asked in a run.
  * @param provider - the provider.
- * @param phase - where the section is asked.
- * @returns true for a provider without a default model in the profile, and for any provider whose models setup lists when the section runs on its own.
+ * @returns true for a provider whose models setup lists; an endpoint of the person's own names its model in its own question.
  */
-function asksModel(provider: SetupProvider, phase: Draft['phase']): boolean {
-  if (provider.adapter === 'custom') return false
-  return phase === 'single' || provider.adapter === 'catalog'
+function asksModel(provider: SetupProvider): boolean {
+  return provider.adapter !== 'custom'
 }
 
 /**
@@ -165,7 +163,7 @@ function pickProvider(next: SetupProvider, earlier: ModelProviderAnswer | null, 
 async function ask(question: Exclude<Question, 'done'>, io: StepIO, choice: Choice, draft: Draft, environment: SectionEnvironment, catalog: ProviderCatalog): Promise<{ readonly choice: Choice, readonly next: Question } | Back> {
   const earlier = draft.answers.modelProvider
   const provider = choice.provider as SetupProvider
-  const afterKey = (): Question => (asksModel(provider, draft.phase) ? 'model' : 'done')
+  const afterKey = (): Question => (asksModel(provider) ? 'model' : 'done')
   switch (question) {
     case 'provider': {
       io.note(choiceNote([
@@ -253,15 +251,6 @@ function answerOf(choice: Choice): ModelProviderAnswer | null {
 }
 
 /**
- * The review line's description of a key.
- * @param answer - the provider answer.
- * @returns where the key comes from.
- */
-function keySource(answer: ModelProviderAnswer): string {
-  return answer.credential.source === 'prompt' ? 'pasted now' : `read from ${answer.credential.name} at each start`
-}
-
-/**
  * The section.
  * @param catalog - the installed catalogues, loaded when the section first needs them.
  * @returns the `key` section.
@@ -270,7 +259,7 @@ export function providerSection(catalog: () => Promise<ProviderCatalog>): SetupS
   return {
     id: 'key',
     title: 'Model provider and key',
-    plan: { local: 'asked', remote: 'asked', automation: 'asked' },
+    inMainFlow: 'never',
     asks: () => true,
     appliesTo: () => true,
     async ask(io, draft, environment): Promise<SectionAnswer | Back> {
@@ -298,14 +287,6 @@ export function providerSection(catalog: () => Promise<ProviderCatalog>): SetupS
         keepSavedKey: choice.keep === true,
         status: 'answered',
       }
-    },
-    review(answers: SetupAnswers, draft?: Draft) {
-      const answer = answers.modelProvider
-      if (answer === null) return 'Model: chosen later; chats cannot answer until delorun setup key'
-      const provider = SETUP_PROVIDERS[answer.id]
-      const endpoint = answer.baseURL === null ? '' : ` at ${answer.baseURL}`
-      const model = answer.model === null ? 'default model' : answer.model
-      return `Model: ${provider.label}${endpoint}, ${model}. Key: ${keySource(answer)}${draft?.keyCheckFailure === undefined ? '.' : `, not verified: ${draft.keyCheckFailure}`}`
     },
     unchanged: (before, after, typedKey) => !typedKey && isDeepStrictEqual(before.modelProvider, after.modelProvider),
     async apply(context, answers) {

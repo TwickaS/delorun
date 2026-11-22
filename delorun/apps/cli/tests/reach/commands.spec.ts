@@ -711,7 +711,8 @@ describe('delorun devices elevate', () => {
 })
 
 describe('setup\'s reach section', () => {
-  const draft = { mode: 'full', answers: { reach: { option: 'none', identityFactor: null } }, secret: undefined } as never
+  const draft = { phase: 'single', answers: { reach: { option: 'none', identityFactor: null } }, secret: undefined } as never
+  const mainDraft = { phase: 'main', answers: { reach: { option: 'none', identityFactor: null } }, secret: undefined } as never
   const io = (answers: readonly (boolean | string | typeof BACK)[], notes: string[], initials: string[] = []) => {
     const queue = [...answers]
     return {
@@ -733,8 +734,6 @@ describe('setup\'s reach section', () => {
     expect(notes.some(note => note.includes(TRUST_STATEMENT[0]!))).toBe(true)
     const directory = join(delorunHome, 'profiles', 'default')
     const answers = { reach: { option: 'tailscale-private', identityFactor: 'tailnet-membership', pairing: 'tailnet' } } as never
-    expect(section.review?.(answers)).toBe('Remote access: from your phone over Tailscale; any device on your tailnet may ask to pair')
-    expect(section.review?.({ reach: { option: 'tailscale-private', identityFactor: 'tailnet-membership' } } as never)).toBe('Remote access: from your phone over Tailscale; only your own Tailscale user may ask to pair')
     await expect(section.apply({ home: delorunHome, env: {}, directory, secret: undefined }, answers)).resolves.toContain('ask to pair')
     expect(readPairingAt(join(directory, 'cordis.patch.yml')).mayAskWithoutWindow).toBe('tailnet')
     const row = readReachRow(delorunHome, 'default')
@@ -742,6 +741,34 @@ describe('setup\'s reach section', () => {
     // Applying again keeps the port chosen once.
     await section.apply({ home: delorunHome, env: {}, directory, secret: undefined }, answers)
     expect(readReachRow(delorunHome, 'default').listenerPort).toBe(row.listenerPort)
+  })
+
+  it('asks "Use it from your phone too?" in the main flow with No preselected, runs the checks on Yes and keeps the safe pairing without asking', async () => {
+    const notes: string[] = []
+    const initials: string[] = []
+    const asked: string[] = []
+    const mainIo = (answers: readonly (string | typeof BACK)[]) => {
+      const queue = [...answers]
+      return {
+        confirm: (message: string) => { asked.push(message); return Promise.resolve(queue.shift()) },
+        select: (message: string, options: { value: string, label: string }[], initial: string) => { asked.push(`${message} ${options.map(option => option.label).join(' / ')}`); initials.push(initial); return Promise.resolve(queue.shift()) },
+        note: (body: string) => { notes.push(body) },
+      } as never
+    }
+    const section = reachSection(tailscale(), () => false)
+    const environment = { home: delorunHome, profile: 'default' } as never
+    await expect(section.ask(mainIo(['no']), mainDraft, environment)).resolves.toEqual({ answers: { useCase: 'local', reach: { option: 'none', identityFactor: null } }, status: 'answered' })
+    expect(asked).toEqual(['Use it from your phone too? No, just this computer / Yes, over Tailscale'])
+    expect(initials).toEqual(['no'])
+    await expect(section.ask(mainIo(['yes']), mainDraft, environment)).resolves.toEqual({ answers: { useCase: 'remote', reach: { option: 'tailscale-private', identityFactor: 'tailnet-membership', pairing: 'own-user' } }, status: 'answered' })
+    expect(asked).toHaveLength(2)
+    expect(notes.some(note => note.includes(TRUST_STATEMENT[0]!))).toBe(true)
+    await expect(section.ask(mainIo([BACK]), mainDraft, environment)).resolves.toBe(BACK)
+    await expect(reachSection(tailscale({ version: { code: null, stdout: '', stderr: '' } }), () => false).ask(mainIo(['yes']), mainDraft, environment)).resolves.toEqual({ answers: { useCase: 'remote', reach: { option: 'none', identityFactor: null } }, status: 'answered' })
+    expect(notes.at(-1)).toContain('Remote access stays off')
+    const earlier = { phase: 'main', answers: { reach: { option: 'tailscale-private', identityFactor: 'tailnet-membership', pairing: 'tailnet' } }, secret: undefined } as never
+    await expect(section.ask(mainIo(['yes']), earlier, environment)).resolves.toMatchObject({ answers: { reach: { pairing: 'tailnet' } } })
+    expect(initials.at(-1)).toBe('yes')
   })
 
   it('leaves remote access off when the person says no, goes back, or a check fails', async () => {
@@ -758,7 +785,6 @@ describe('setup\'s reach section', () => {
     expect(notes.at(-1)).toContain('tailscale funnel --https=443 off, then try again\nRemote access stays off')
     await expect(reachSection(() => Promise.reject(new Error('broken')), () => false).ask(io([true], notes), draft, { home: delorunHome, profile: 'default' } as never)).rejects.toThrow('broken')
     const none = { reach: { option: 'none', identityFactor: null } } as never
-    expect(reachSection(tailscale(), () => false).review?.(none)).toBe('Remote access: off')
     await expect(reachSection(tailscale(), () => false).apply({ home: delorunHome, env: {}, directory: delorunHome, secret: undefined }, none)).resolves.toBeUndefined()
   })
 })

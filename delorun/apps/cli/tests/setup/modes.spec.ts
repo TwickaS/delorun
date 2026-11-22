@@ -16,7 +16,7 @@ import type { KeyTarget } from '../../src/setup/key-check.ts'
 import { installedCatalog } from '../../src/setup/providers.ts'
 import { readProgress } from '../../src/setup/progress.ts'
 import { defaultRegistry, privacySection, SectionRegistry, type SetupSection } from '../../src/setup/sections.ts'
-import { SetupCancelled } from '../../src/setup/prompts.ts'
+import { SetupCancelled, type Prompter } from '../../src/setup/prompts.ts'
 import { BACK_CHOICE } from '../../src/setup/steps.ts'
 import { scriptedPrompter, type Answer, type Recording } from './support.ts'
 
@@ -54,6 +54,30 @@ async function interactive(script: readonly Answer[], options: Partial<SetupRequ
     portIsFree: () => Promise.resolve(true),
     ...rest,
   })
+}
+
+/**
+ * Set up the profile with the main flow's own answer on a home without a stock home: no phone.
+ * @param options - extra request fields.
+ * @returns the exit code.
+ */
+function setUp(options: Partial<SetupRequest> = {}): Promise<number> {
+  return interactive(['no'], options)
+}
+
+/**
+ * Run one section again on the profile that is set up.
+ * @param id - the section.
+ * @param script - the answers in order.
+ * @param options - extra request fields.
+ * @returns the exit code.
+ */
+function section(id: string, script: readonly Answer[], options: Partial<SetupRequest> = {}): Promise<number> {
+  return runSection({
+    home, profile: PROFILE, env: {}, output: { stdout: text => void recording.screen.push(text.trim()), stderr: () => undefined },
+    form: { kind: 'interactive', prompter: scriptedPrompter(script, recording) }, keyCheck: () => Promise.resolve({ ok: true }), portIsFree: () => Promise.resolve(true),
+    ...options,
+  }, id)
 }
 
 /**
@@ -96,12 +120,12 @@ afterEach(() => {
   rmSync(osHome, { recursive: true, force: true })
 })
 
-const QUICK_SCRIPT: readonly Answer[] = ['local', DS, 'prompt', TYPED_KEY, 'safer', 'save']
+const KEY_SCRIPT: readonly Answer[] = [DS, 'prompt', TYPED_KEY, MODEL]
 
 describe('the main flow', { timeout: TIMEOUT_MS }, () => {
-  it('stores the key, writes the safer prompt rows and records what was asked', async () => {
-    expect(await interactive(QUICK_SCRIPT)).toBe(EXIT.ok)
-    expect(parse(readFileSync(join(home, '.credentials.yaml'), 'utf8'))).toEqual({ version: 1, refs: { DEEPSEEK_API_KEY: TYPED_KEY } })
+  it('writes the safer prompt rows from the defaults and records what was asked, with the model key left for the studio', async () => {
+    expect(await setUp()).toBe(EXIT.ok)
+    expect(existsSync(join(home, '.credentials.yaml'))).toBe(false)
     expect(patchOf()).toEqual([
       { id: 'delorun-permission-defaults', config: { enabled: true, fullAccessEverywhere: false } },
       { id: 'delorun-instruction-consent', config: { enabled: true, approvedPluginWrites: true } },
@@ -109,10 +133,13 @@ describe('the main flow', { timeout: TIMEOUT_MS }, () => {
       { id: 'delorun-schedule-consent', config: { enabled: true } },
     ])
     expect(readBackgroundAnswer(profileDirectory(home, PROFILE))).toBe(true)
+    expect(recordOf().modelProvider).toBeNull()
+    expect(screen()).toContain('Add a model key first: delorun setup key')
   })
 
   it('writes "Ask less" as the parity value of every prompt switch', async () => {
-    expect(await interactive(['local', DS, 'environment', 'stock', 'save'])).toBe(EXIT.ok)
+    expect(await setUp()).toBe(EXIT.ok)
+    expect(await section('prompts', ['stock'])).toBe(EXIT.ok)
     const byId = new Map(patchOf().map(row => [row.id, row.config]))
     const parityOf = (id: string): boolean => {
       const entry = PARITY_SWITCHES.find(candidate => candidate.id === id)
@@ -131,10 +158,11 @@ describe('the main flow', { timeout: TIMEOUT_MS }, () => {
   })
 
   it.each([
-    ['DeepSeek', QUICK_SCRIPT],
-    ['a pi-ai provider', ['local', 'more', 'anthropic', 'prompt', TYPED_KEY, 'claude-sonnet-5-5', 'safer', 'save']],
+    ['DeepSeek', KEY_SCRIPT],
+    ['a pi-ai provider', ['more', 'anthropic', 'prompt', TYPED_KEY, 'claude-sonnet-5-5']],
   ] as const)('typed key is never printed, and for %s no file under the home holds it but the credentials document', async (_, script) => {
-    expect(await interactive(script)).toBe(EXIT.ok)
+    expect(await setUp()).toBe(EXIT.ok)
+    expect(await section('key', script)).toBe(EXIT.ok)
     expect(recording.screen.join('\n')).not.toContain(TYPED_KEY)
     expect(recording.asked.join('\n')).not.toContain(TYPED_KEY)
     const files = filesUnder(home).filter(file => file !== join(home, '.credentials.yaml'))
@@ -145,60 +173,37 @@ describe('the main flow', { timeout: TIMEOUT_MS }, () => {
     expect(existsSync(join(runDirectory(home, PROFILE), 'setup-progress.json'))).toBe(false)
   })
 
-  it('writes nothing when the person cancels at the review', async () => {
-    await expect(interactive(['local', DS, 'environment', 'safer', 'cancel'])).rejects.toBeInstanceOf(SetupCancelled)
+  it('writes nothing when the person cancels the phone question', async () => {
+    const cancelling: Prompter = { ...scriptedPrompter([], recording), select: () => Promise.reject(new SetupCancelled()) }
+    await expect(runSetup({ home, profile: PROFILE, env: {}, output: { stdout: () => undefined, stderr: () => undefined }, form: { kind: 'interactive', prompter: cancelling } })).rejects.toBeInstanceOf(SetupCancelled)
     expect(hasCliProfile(home, PROFILE)).toBe(false)
     expect(readProgress(runDirectory(home, PROFILE))).toBeUndefined()
   })
 })
 
-describe('the way back', { timeout: TIMEOUT_MS }, () => {
-  it('returns to the previous question and keeps the answers of the earlier ones', async () => {
-    expect(await interactive(['local', DS, 'prompt', TYPED_KEY, BACK_CHOICE, DS, 'environment', 'stock', 'save'])).toBe(EXIT.ok)
+describe('the way back inside the key section', { timeout: TIMEOUT_MS }, () => {
+  it('treats an empty key as "go back" to the source question and keeps the earlier answers', async () => {
+    expect(await setUp()).toBe(EXIT.ok)
+    expect(await section('key', [DS, 'prompt', '', 'environment', MODEL])).toBe(EXIT.ok)
     expect(recording.asked.filter(question => question.startsWith('select: How should Delorun get'))).toHaveLength(2)
-    expect(recordOf().modelProvider).toEqual({ id: 'deepseek-official', credential: { source: 'environment', name: 'DEEPSEEK_API_KEY' }, baseURL: null, model: null })
-    expect(recordOf().prompts).toBe('stock')
+    expect(recordOf().modelProvider).toEqual({ id: 'deepseek-official', credential: { source: 'environment', name: 'DEEPSEEK_API_KEY' }, baseURL: null, model: MODEL })
     expect(existsSync(join(home, '.credentials.yaml'))).toBe(false)
-  })
-
-  it('treats an empty key as "go back" to the source question, and returns from the provider question to the first screen, which has no back choice', async () => {
-    expect(await interactive(['local', DS, 'prompt', '', BACK_CHOICE, BACK_CHOICE, 'local', DS, 'environment', 'safer', 'save'])).toBe(EXIT.ok)
-    expect(recording.asked.filter(question => question.startsWith('select: How should Delorun get'))).toHaveLength(3)
-    expect(recording.asked.filter(question => question.startsWith('select: How will you'))).toHaveLength(2)
-    const first = screen().split('# Privacy')[0] ?? ''
-    expect(first).not.toContain('← Back')
-  })
-
-  it('lets the use case change after two steps back, and the new one sets its defaults', async () => {
-    expect(await interactive(['local', DS, 'environment', BACK_CHOICE, BACK_CHOICE, 'automation', DS, 'environment', 'safer', 'save'])).toBe(EXIT.ok)
-    expect(recordOf()).toMatchObject({ useCase: 'automation', background: false })
-    expect(recordOf().sections.find(record => record.id === 'reach')?.status).toBe('skipped')
-  })
-
-  it('goes back from the review to the last question that was asked, and skips passed-over sections', async () => {
-    expect(await interactive(['local', DS, 'environment', 'safer', BACK_CHOICE, 'stock', 'save'])).toBe(EXIT.ok)
-    expect(recordOf().prompts).toBe('stock')
-    expect(recording.asked.filter(question => question.startsWith('select: How much should'))).toHaveLength(2)
-    expect(recording.asked.filter(question => question.includes('background'))).toEqual([])
-  })
-
-  it('does not show the privacy note again when the way back stops at a later question', async () => {
-    expect(await interactive(['local', DS, 'environment', BACK_CHOICE, DS, 'environment', 'safer', 'save'])).toBe(EXIT.ok)
-    expect(screen().split('# Privacy')).toHaveLength(2)
   })
 })
 
 describe('the key check', { timeout: TIMEOUT_MS }, () => {
   it('sends a typed key to one live check before it is stored, and never checks it again', async () => {
     const checkKey = vi.fn(() => Promise.resolve({ ok: true } as const))
-    expect(await interactive(QUICK_SCRIPT, { keyCheck: checkKey })).toBe(EXIT.ok)
+    expect(await setUp()).toBe(EXIT.ok)
+    expect(await section('key', KEY_SCRIPT, { keyCheck: checkKey })).toBe(EXIT.ok)
     expect(checkKey).toHaveBeenCalledTimes(1)
     expect(checkKey.mock.calls.map(call => call.at(1))).toEqual([TYPED_KEY])
   })
 
   it('says why a check failed and lets the person enter the key again', async () => {
     const checkKey = vi.fn((_target: KeyTarget, key: string) => Promise.resolve(key === TYPED_KEY ? { ok: true } as const : { ok: false, reason: 'api.example did not accept the key (HTTP 401).' } as const))
-    expect(await interactive(['local', DS, 'prompt', 'wrong-key-1', 'again', TYPED_KEY, 'safer', 'save'], { keyCheck: checkKey })).toBe(EXIT.ok)
+    expect(await setUp()).toBe(EXIT.ok)
+    expect(await section('key', [DS, 'prompt', 'wrong-key-1', 'again', TYPED_KEY, MODEL], { keyCheck: checkKey })).toBe(EXIT.ok)
     expect(screen()).toContain('The key was not checked successfully: api.example did not accept the key (HTTP 401).')
     expect(screen()).not.toContain('wrong-key-1')
     expect(parse(readFileSync(join(home, '.credentials.yaml'), 'utf8')).refs.DEEPSEEK_API_KEY).toBe(TYPED_KEY)
@@ -206,50 +211,26 @@ describe('the key check', { timeout: TIMEOUT_MS }, () => {
 
   it('stores a key that failed the check only when the person chooses to continue', async () => {
     const checkKey = (): Promise<{ ok: false, reason: string }> => Promise.resolve({ ok: false, reason: 'could not reach api.example.' })
-    expect(await interactive(['local', DS, 'prompt', 'unchecked-key-2', 'continue', 'safer', 'save'], { keyCheck: checkKey })).toBe(EXIT.ok)
+    expect(await setUp()).toBe(EXIT.ok)
+    expect(await section('key', [DS, 'prompt', 'unchecked-key-2', 'continue', MODEL], { keyCheck: checkKey })).toBe(EXIT.ok)
     expect(parse(readFileSync(join(home, '.credentials.yaml'), 'utf8')).refs.DEEPSEEK_API_KEY).toBe('unchecked-key-2')
-  })
-
-  it('says on the review that a key the person continued with was not verified, and why, without the key', async () => {
-    const checkKey = (): Promise<{ ok: false, reason: string }> => Promise.resolve({ ok: false, reason: 'could not reach api.example.' })
-    expect(await interactive(['local', DS, 'prompt', 'unchecked-key-4', 'continue', 'safer', 'save'], { keyCheck: checkKey })).toBe(EXIT.ok)
-    const review = screen().split('# Review\n')[1]?.split('\n?')[0]
-    expect(review).toContain('  Model: DeepSeek, default model. Key: pasted now, not verified: could not reach api.example.\n  Prompts: Ask me first')
-    expect(screen()).not.toContain('unchecked-key-4')
-  })
-
-  it('shows no failed check on the review once a later key passed, or the person went back and chose the environment', async () => {
-    const checkKey = vi.fn((_target: KeyTarget, key: string) => Promise.resolve(key === TYPED_KEY ? { ok: true } as const : { ok: false, reason: 'api.example did not accept the key (HTTP 401).' } as const))
-    expect(await interactive(['local', DS, 'prompt', 'wrong-key-5', 'again', TYPED_KEY, 'safer', 'save'], { keyCheck: checkKey })).toBe(EXIT.ok)
-    expect(screen()).toContain('  Model: DeepSeek, default model. Key: pasted now.\n')
-    rmSync(profileDirectory(home, PROFILE), { recursive: true })
-    recording.screen.length = 0
-    expect(await interactive(['local', DS, 'prompt', 'wrong-key-6', 'continue', BACK_CHOICE, DS, 'environment', 'safer', 'save'], { keyCheck: checkKey })).toBe(EXIT.ok)
-    expect(screen()).toContain('  Model: DeepSeek, default model. Key: read from DEEPSEEK_API_KEY at each start.\n')
-    expect(screen()).not.toContain('not verified')
-  })
-
-  it('says on the review that the environment\'s key failed its check with --check-key', async () => {
-    const checkKey = (): Promise<{ ok: false, reason: string }> => Promise.resolve({ ok: false, reason: 'api.example did not accept the key (HTTP 401).' })
-    expect(await interactive(['local', DS, 'environment', 'safer', 'save'], { keyCheck: checkKey, env: { DEEPSEEK_API_KEY: 'env-key-value-8' }, checkEnvironmentKey: true })).toBe(EXIT.ok)
-    expect(screen()).toContain('  Model: DeepSeek, default model. Key: read from DEEPSEEK_API_KEY at each start, not verified: api.example did not accept the key (HTTP 401).\n')
-    expect(screen()).not.toContain('env-key-value-8')
   })
 
   it('goes back from the failed-check choice to the source question', async () => {
     const checkKey = (): Promise<{ ok: false, reason: string }> => Promise.resolve({ ok: false, reason: 'could not reach api.example.' })
-    expect(await interactive(['local', DS, 'prompt', 'unchecked-key-3', BACK_CHOICE, 'environment', 'safer', 'save'], { keyCheck: checkKey })).toBe(EXIT.ok)
+    expect(await setUp()).toBe(EXIT.ok)
+    expect(await section('key', [DS, 'prompt', 'unchecked-key-3', BACK_CHOICE, 'environment', MODEL], { keyCheck: checkKey })).toBe(EXIT.ok)
     expect(existsSync(join(home, '.credentials.yaml'))).toBe(false)
   })
 
   it('checks a key from the environment only with --check-key', async () => {
     const checkKey = vi.fn(() => Promise.resolve({ ok: false, reason: 'api.example did not accept the key (HTTP 401).' } as const))
     const env = { DEEPSEEK_API_KEY: 'env-key-value-7' }
-    expect(await interactive(['local', DS, 'environment', 'safer', 'save'], { keyCheck: checkKey, env })).toBe(EXIT.ok)
+    expect(await setUp()).toBe(EXIT.ok)
+    expect(await section('key', [DS, 'environment', MODEL], { keyCheck: checkKey, env })).toBe(EXIT.ok)
     expect(checkKey).not.toHaveBeenCalled()
-    rmSync(profileDirectory(home, PROFILE), { recursive: true })
     recording.screen.length = 0
-    expect(await interactive(['local', DS, 'environment', 'safer', 'save'], { keyCheck: checkKey, env, checkEnvironmentKey: true })).toBe(EXIT.ok)
+    expect(await section('key', [DS, 'environment', MODEL], { keyCheck: checkKey, env, checkEnvironmentKey: true })).toBe(EXIT.ok)
     expect(checkKey.mock.calls.map(call => call.at(1))).toEqual(['env-key-value-7'])
     expect(screen()).toContain('The key in DEEPSEEK_API_KEY was not checked successfully: api.example did not accept the key (HTTP 401).')
     expect(screen()).not.toContain('env-key-value-7')
@@ -257,7 +238,8 @@ describe('the key check', { timeout: TIMEOUT_MS }, () => {
 
   it('does not check an unset environment variable even with --check-key', async () => {
     const checkKey = vi.fn(() => Promise.resolve({ ok: true } as const))
-    expect(await interactive(['local', DS, 'environment', 'safer', 'save'], { keyCheck: checkKey, checkEnvironmentKey: true })).toBe(EXIT.ok)
+    expect(await setUp()).toBe(EXIT.ok)
+    expect(await section('key', [DS, 'environment', MODEL], { keyCheck: checkKey, checkEnvironmentKey: true })).toBe(EXIT.ok)
     expect(checkKey).not.toHaveBeenCalled()
   })
 })
@@ -267,35 +249,31 @@ describe('sections', { timeout: TIMEOUT_MS }, () => {
     expect(sectionList(defaultRegistry())).toBe([
       'Sections (delorun setup <section> runs one again):',
       '  privacy             Privacy',
+      '  reach               Remote access',
+      '  changes-protection  Changes protection',
       '  import              Import a DeepSeek Harness home',
       '  key                 Model provider and key',
       '  prompts             Prompts',
       '  background          Background',
-      '  reach               Remote access',
-      '  changes-protection  Changes protection',
       '  profile             Profile name and port',
       '',
     ].join('\n'))
   })
 
   it('runs one section again on a profile that is set up and updates the answers record', async () => {
-    expect(await interactive(['local', DS, 'environment', 'safer', 'save'])).toBe(EXIT.ok)
+    expect(await setUp()).toBe(EXIT.ok)
     recording.screen.length = 0
-    const request: SetupRequest = {
-      home, profile: PROFILE, env: {}, output: { stdout: text => void recording.screen.push(text.trim()), stderr: () => undefined },
-      form: { kind: 'interactive', prompter: scriptedPrompter(['stock'], recording) },
-    }
-    expect(await runSection(request, 'prompts')).toBe(EXIT.ok)
+    expect(await section('prompts', ['stock'])).toBe(EXIT.ok)
     expect(patchOf().every(row => row.config['enabled'] === false)).toBe(true)
     expect(recordOf().prompts).toBe('stock')
     expect(recordOf().sections.find(record => record.id === 'prompts')?.status).toBe('answered')
-    expect(recordOf().sections.find(record => record.id === 'key')?.status).toBe('answered')
+    expect(recordOf().sections.find(record => record.id === 'key')?.status).toBe('skipped')
     expect(screen()).toContain('Updated the prompts section of the profile default.')
     expect(recording.screen.join('\n')).not.toContain('← Back')
   })
 
   it('stores a typed key from the key section and asks no profile name for a profile that exists', async () => {
-    expect(await interactive(['local', DS, 'environment', 'safer', 'save'])).toBe(EXIT.ok)
+    expect(await setUp()).toBe(EXIT.ok)
     const request = (script: readonly Answer[]): SetupRequest => ({
       home, profile: PROFILE, env: {}, output: { stdout: () => undefined, stderr: () => undefined },
       form: { kind: 'interactive', prompter: scriptedPrompter(script, recording) },
@@ -314,7 +292,7 @@ describe('sections', { timeout: TIMEOUT_MS }, () => {
     const prompter = scriptedPrompter([], recording)
     await expect(runSection(request({ kind: 'interactive', prompter }), 'nope')).rejects.toThrow('there is no section "nope"')
     await expect(runSection(request({ kind: 'interactive', prompter }), 'key')).rejects.toThrow('is not set up; run delorun setup first')
-    expect(await interactive(['local', DS, 'environment', 'safer', 'save'])).toBe(EXIT.ok)
+    expect(await setUp()).toBe(EXIT.ok)
     const registry = new SectionRegistry()
     registry.register({ ...privacySection, id: 'elsewhere', appliesTo: () => false }, { order: 1 })
     await expect(runSection(request({ kind: 'interactive', prompter }, registry), 'elsewhere')).rejects.toThrow('does not apply on this computer')
@@ -322,7 +300,7 @@ describe('sections', { timeout: TIMEOUT_MS }, () => {
   })
 
   it('reads an answers record that is missing or no longer valid as the defaults', async () => {
-    expect(await interactive(['local', DS, 'environment', 'safer', 'save'])).toBe(EXIT.ok)
+    expect(await setUp()).toBe(EXIT.ok)
     const record = join(profileDirectory(home, PROFILE), 'setup-answers.json')
     const request = (): SetupRequest => ({ home, profile: PROFILE, env: {}, output: { stdout: () => undefined, stderr: () => undefined }, form: { kind: 'interactive', prompter: scriptedPrompter(['safer'], recording) } })
     for (const content of ['not json', JSON.stringify({ version: 1, studioAdditions: true })]) {
@@ -342,7 +320,7 @@ describe('the section registry', () => {
    * @returns a section that asks nothing.
    */
   function stub(id: string): SetupSection {
-    return { ...privacySection, id, title: id, plan: { local: 'asked', remote: 'asked', automation: 'asked' } }
+    return { ...privacySection, id, title: id, inMainFlow: 'asked' }
   }
 
   it('orders sections by their order and then by registration, and finds one by id', () => {
@@ -369,12 +347,11 @@ describe('the section registry', () => {
       ...stub('example'),
       asks: () => true,
       ask: (io) => io.confirm('Example question?', false).then(answer => typeof answer === 'boolean' ? { answers: { background: answer }, status: 'answered' as const } : answer),
-      review: answers => `Example: ${answers.background ? 'yes' : 'no'}`,
     }, { order: 16 })
-    expect(await interactive(['local', 'yes', DS, 'environment', 'safer', 'save'], { registry })).toBe(EXIT.ok)
-    expect(recording.asked.slice(0, 3)).toEqual(['select: How will you use Delorun?', 'select: Example question?', 'select: Which model provider should Delorun use?'])
-    expect(recordOf().sections.map(record => record.id)).toEqual(['privacy', 'import', 'example', 'key', 'prompts', 'background', 'reach', 'changes-protection', 'profile'])
-    expect(screen()).toContain('  Example: yes')
+    expect(await interactive(['no', 'yes'], { registry })).toBe(EXIT.ok)
+    expect(recording.asked).toEqual(['select: Use it from your phone too?', 'select: Example question?'])
+    expect(recordOf().sections.map(record => record.id)).toEqual(['privacy', 'reach', 'changes-protection', 'import', 'example', 'key', 'prompts', 'background', 'profile'])
+    expect(recordOf().background).toBe(true)
   })
 })
 
@@ -401,12 +378,12 @@ describe('unattended forms', { timeout: TIMEOUT_MS }, () => {
     expect(await unattended({})).toBe(EXIT.ok)
     expect(recordOf().sections).toEqual([
       { id: 'privacy', status: 'seen' },
+      { id: 'reach', status: 'skipped' },
+      { id: 'changes-protection', status: 'skipped' },
       { id: 'import', status: 'skipped' },
       { id: 'key', status: 'skipped' },
       { id: 'prompts', status: 'skipped' },
       { id: 'background', status: 'skipped' },
-      { id: 'reach', status: 'skipped' },
-      { id: 'changes-protection', status: 'skipped' },
       { id: 'profile', status: 'skipped' },
     ])
     expect(screen()).toContain('Delorun is set up. Nothing is running yet.')
@@ -453,9 +430,9 @@ describe('what setup does around the sections', { timeout: TIMEOUT_MS }, () => {
       report.progress('done\n')
       return Promise.resolve()
     })
-    expect(await interactive(['local', DS, 'environment', 'safer', 'save'])).toBe(EXIT.ok)
+    expect(await interactive(['no'])).toBe(EXIT.ok)
     // The scripted output records each write on a line of its own.
-    expect(screen()).toContain(`${LINKING_PROGRESS}\ndone\nDelorun is set up. Nothing is running yet.`)
+    expect(screen()).toContain(`${LINKING_PROGRESS}\ndone\n`)
     expect(screen()).not.toContain('/abs/path/bundle')
     expect(readFileSync(join(home, 'logs', `home-${PROFILE}`, 'home.log'), 'utf8')).toContain('pnpm linked /abs/path/bundle')
   })
@@ -469,7 +446,7 @@ describe('what setup does around the sections', { timeout: TIMEOUT_MS }, () => {
       report.progress(`${LINKING_PROGRESS}done\n`)
       return Promise.resolve()
     })
-    expect(await interactive(['local', DS, 'environment', 'safer', 'save'])).toBe(EXIT.ok)
+    expect(await interactive(['no'])).toBe(EXIT.ok)
     expect(screen()).toContain(`${LINKING_PROGRESS}done`)
     expect(screen()).not.toContain('pnpm linked the bundle')
   })
@@ -477,7 +454,7 @@ describe('what setup does around the sections', { timeout: TIMEOUT_MS }, () => {
   it('stops with the cause when the profile cannot be created, and leaves the run to resume', async () => {
     mkdirSync(join(home, 'profiles'), { recursive: true })
     writeFileSync(profileDirectory(home, PROFILE), 'a file where the profile directory belongs')
-    const error = await interactive(['local', DS, 'environment', 'safer', 'save']).catch((caught: unknown) => caught)
+    const error = await interactive(['no']).catch((caught: unknown) => caught)
     expect(error).toBeInstanceOf(CliError)
     expect((error as Error).message).toContain(`could not create the CLI profile ${PROFILE} at ${profileDirectory(home, PROFILE)}`)
     expect(readProgress(runDirectory(home, PROFILE))?.completed).toEqual([])
@@ -485,7 +462,7 @@ describe('what setup does around the sections', { timeout: TIMEOUT_MS }, () => {
 
   it('resumes after a link failure with the profile that was already created', async () => {
     vi.mocked(linkDelorunBundles).mockRejectedValueOnce(new Error('pnpm failed'))
-    await expect(interactive(['local', DS, 'environment', 'safer', 'save'])).rejects.toThrow('pnpm failed')
+    await expect(interactive(['no'])).rejects.toThrow('pnpm failed')
     expect(hasCliProfile(home, PROFILE)).toBe(true)
     expect(readProgress(runDirectory(home, PROFILE))?.completed).toEqual([])
     expect(await interactive([false])).toBe(EXIT.ok)
@@ -495,7 +472,8 @@ describe('what setup does around the sections', { timeout: TIMEOUT_MS }, () => {
 
   it('says nothing about an environment key that passes --check-key', async () => {
     const checkKey = vi.fn(() => Promise.resolve({ ok: true } as const))
-    expect(await interactive(['local', DS, 'environment', 'safer', 'save'], { keyCheck: checkKey, env: { DEEPSEEK_API_KEY: 'passing-key-9' }, checkEnvironmentKey: true })).toBe(EXIT.ok)
+    expect(await setUp()).toBe(EXIT.ok)
+    expect(await section('key', [DS, 'environment', MODEL], { keyCheck: checkKey, env: { DEEPSEEK_API_KEY: 'passing-key-9' }, checkEnvironmentKey: true })).toBe(EXIT.ok)
     expect(checkKey).toHaveBeenCalledTimes(1)
     expect(screen()).not.toContain('Key check')
   })
@@ -511,7 +489,7 @@ describe('what setup does around the sections', { timeout: TIMEOUT_MS }, () => {
   it('prints a note a section returns from its writes, in a run and when the section runs again', async () => {
     const registry = defaultRegistry()
     registry.register({ ...privacySection, id: 'extra', title: 'Extra', asks: () => true, ask: () => Promise.resolve({ answers: {}, status: 'answered' as const }), apply: () => Promise.resolve('The extra section wrote its file.') }, { order: 60 })
-    expect(await interactive(['local', DS, 'environment', 'safer', 'save'], { registry })).toBe(EXIT.ok)
+    expect(await interactive(['no'], { registry })).toBe(EXIT.ok)
     expect(screen()).toContain('The extra section wrote its file.')
     expect(recordOf().sections.find(record => record.id === 'extra')?.status).toBe('answered')
     recording.screen.length = 0
@@ -520,24 +498,11 @@ describe('what setup does around the sections', { timeout: TIMEOUT_MS }, () => {
     expect(screen()).toContain('The extra section wrote its file.')
   })
 
-  it('leaves a section without a review line off the review screen', async () => {
-    const registry = defaultRegistry()
-    const { review: _review, ...withoutReview } = privacySection
-    registry.register({ ...withoutReview, id: 'quiet', title: 'Quiet', plan: { local: 'asked', remote: 'asked', automation: 'asked' }, asks: () => true, ask: () => Promise.resolve({ answers: {}, status: 'answered' as const }) }, { order: 60 })
-    expect(await interactive(['local', DS, 'environment', 'safer', 'save'], { registry })).toBe(EXIT.ok)
-    expect(screen()).toContain('  Model: DeepSeek, default model. Key: read from DEEPSEEK_API_KEY at each start.\n  Prompts: Ask me first\n')
-    expect(screen()).not.toContain('Quiet')
-  })
-
   it('stops a key write that has no typed key to store', async () => {
     const keySection = defaultRegistry().find('key') as SetupSection
     await expect(keySection.apply({ home, env: {}, directory: home, secret: undefined }, SETUP_DEFAULTS)).rejects.toThrow('the model key was not entered')
   })
 
-  it('reviews the key line without a draft as a key nothing is known to have failed to check', () => {
-    const keySection = defaultRegistry().find('key') as SetupSection
-    expect(keySection.review?.(SETUP_DEFAULTS)).toBe('Model: DeepSeek, default model. Key: pasted now.')
-  })
 })
 
 describe('the release check', { timeout: TIMEOUT_MS }, () => {
@@ -547,7 +512,7 @@ describe('the release check', { timeout: TIMEOUT_MS }, () => {
 
 
   it('delorun setup privacy shows the note, turns the check off, and turns it on again by removing the row', async () => {
-    expect(await interactive(['local', DS, 'environment', 'safer', 'save'])).toBe(EXIT.ok)
+    expect(await interactive(['no'])).toBe(EXIT.ok)
     const prompts = patchOf()
     const request = (answer: string): SetupRequest => ({
       home, profile: PROFILE, env: {}, output: { stdout: text => void recording.screen.push(text.trim()), stderr: () => undefined },
@@ -590,20 +555,21 @@ describe('the model provider question', { timeout: TIMEOUT_MS }, () => {
     const catalog = await installedCatalog()
     const model = catalog.models('anthropic')[0]?.id as string
     const checkKey = vi.fn((_target: KeyTarget, _key: string) => Promise.resolve({ ok: true } as const))
-    expect(await interactive(['local', 'more', 'anthropic', 'prompt', TYPED_KEY, model, 'safer', 'save'], { keyCheck: checkKey })).toBe(EXIT.ok)
+    expect(await setUp()).toBe(EXIT.ok)
+    expect(await section('key', ['more', 'anthropic', 'prompt', TYPED_KEY, model], { keyCheck: checkKey })).toBe(EXIT.ok)
     expect(checkKey.mock.calls.map(([target, key]) => [target.provider.id, target.baseURL, key])).toEqual([['anthropic', 'https://api.anthropic.com', TYPED_KEY]])
     expect(parse(readFileSync(join(home, '.credentials.yaml'), 'utf8'))).toEqual({ version: 1, refs: { ANTHROPIC_API_KEY: TYPED_KEY } })
     const byId = new Map(patchOf().map(row => [row.id, row.config]))
     expect(byId.get('llm-pi-ai')).toEqual({ providers: { anthropic: { apiKeyEnv: 'ANTHROPIC_API_KEY' } } })
     expect(byId.get('agent-default-model')).toEqual({ provider: 'anthropic', model })
     expect(recordOf().modelProvider).toEqual({ id: 'anthropic', credential: { source: 'prompt' }, baseURL: null, model })
-    expect(screen()).toContain(`  Model: Anthropic, ${model}. Key: pasted now.\n`)
     expect(screen()).not.toContain(TYPED_KEY)
   })
 
   it('asks an OpenAI-compatible endpoint\'s base URL and model in both modes, refusing a URL that is not http or https, and goes back inside the section', async () => {
-    const script = ['local', 'more', 'openai-compatible', 'ftp://host', 'http://127.0.0.1:11434/v1', 'qwen3:8b', BACK_CHOICE, '', 'http://127.0.0.1:11434/v1', 'llama3.3', 'environment', 'safer', 'save']
-    expect(await interactive(script, { env: { OPENAI_COMPATIBLE_API_KEY: 'local' } })).toBe(EXIT.ok)
+    const script = ['more', 'openai-compatible', 'ftp://host', 'http://127.0.0.1:11434/v1', 'qwen3:8b', BACK_CHOICE, '', 'http://127.0.0.1:11434/v1', 'llama3.3', 'environment']
+    expect(await setUp()).toBe(EXIT.ok)
+    expect(await section('key', script, { env: { OPENAI_COMPATIBLE_API_KEY: 'local' } })).toBe(EXIT.ok)
     expect(screen()).toContain('! Enter an http or https URL without a user name, password, query or fragment')
     expect(recordOf().modelProvider).toEqual({ id: 'openai-compatible', credential: { source: 'environment', name: 'OPENAI_COMPATIBLE_API_KEY' }, baseURL: 'http://127.0.0.1:11434/v1', model: 'llama3.3' })
     expect(new Map(patchOf().map(row => [row.id, row.config])).get('llm-pi-ai')).toEqual({
@@ -614,36 +580,39 @@ describe('the model provider question', { timeout: TIMEOUT_MS }, () => {
   it('goes back from the key source to the provider question and from the model to the key source', async () => {
     const catalog = await installedCatalog()
     const model = catalog.models('openai')[0]?.id as string
-    expect(await interactive(['local', 'more', 'groq', BACK_CHOICE, 'openai', 'environment', BACK_CHOICE, 'environment', model, 'safer', 'save'])).toBe(EXIT.ok)
+    expect(await setUp()).toBe(EXIT.ok)
+    expect(await section('key', ['more', 'groq', BACK_CHOICE, 'openai', 'environment', BACK_CHOICE, 'environment', model])).toBe(EXIT.ok)
     expect(recordOf().modelProvider).toEqual({ id: 'openai', credential: { source: 'environment', name: 'OPENAI_API_KEY' }, baseURL: null, model })
   })
 
   it('sets up no provider with "None for now", writes no provider row and says how to add one', async () => {
-    expect(await interactive(['local', 'none', 'safer', 'save'])).toBe(EXIT.ok)
+    expect(await setUp()).toBe(EXIT.ok)
+    expect(await section('key', ['none'])).toBe(EXIT.ok)
     expect(recordOf().modelProvider).toBeNull()
     expect(patchOf().map(row => row.id)).not.toContain('agent-default-model')
-    expect(screen()).toContain('  Model: chosen later; chats cannot answer until delorun setup key\n')
     expect(screen()).toContain('No model provider was set up now, and no provider setting changed. New chats still start on deepseek-flash from DeepSeek, which reads its key from DEEPSEEK_API_KEY unless the profile names another variable.')
     expect(existsSync(join(home, '.credentials.yaml'))).toBe(false)
   })
 
   it('starts the model question on the provider\'s recommended model, not the catalog\'s first', async () => {
-    expect(await interactive(['local', 'more', 'openai', 'environment', 'gpt-6.1-sol', 'safer', 'save'])).toBe(EXIT.ok)
+    expect(await setUp()).toBe(EXIT.ok)
+    expect(await section('key', ['more', 'openai', 'environment', 'gpt-6.1-sol'])).toBe(EXIT.ok)
     expect(screen()).toContain('> gpt-6.1-sol')
     expect(screen()).not.toContain('> gpt-4\n')
   })
 
   it('warns, without refusing, about an endpoint another computer serves over plain http', async () => {
-    expect(await interactive(['local', 'more', 'openai-compatible', 'http://192.0.2.20:8000/v1', 'local', 'environment', 'safer', 'save'])).toBe(EXIT.ok)
+    expect(await setUp()).toBe(EXIT.ok)
+    expect(await section('key', ['more', 'openai-compatible', 'http://192.0.2.20:8000/v1', 'local', 'environment'])).toBe(EXIT.ok)
     expect(screen()).toContain('# Plain http\n  http://192.0.2.20:8000 is reached over plain http')
     recording.screen.length = 0
-    rmSync(profileDirectory(home, PROFILE), { recursive: true })
-    expect(await interactive(['local', 'more', 'openai-compatible', 'http://127.0.0.1:8000/v1', 'local', 'environment', 'safer', 'save'])).toBe(EXIT.ok)
+    expect(await section('key', ['more', 'openai-compatible', 'http://127.0.0.1:8000/v1', 'local', 'environment'])).toBe(EXIT.ok)
     expect(screen()).not.toContain('Plain http')
   })
 
   it('leaves the provider rows as they are with "None for now" after another provider, and says which model new chats still use', async () => {
-    expect(await interactive(['local', 'more', 'groq', 'environment', 'openai/gpt-oss-120b', 'safer', 'save'])).toBe(EXIT.ok)
+    expect(await setUp()).toBe(EXIT.ok)
+    expect(await section('key', ['more', 'groq', 'environment', 'openai/gpt-oss-120b'])).toBe(EXIT.ok)
     const before = patchOf()
     recording.screen.length = 0
     const request: SetupRequest = {
@@ -657,7 +626,8 @@ describe('the model provider question', { timeout: TIMEOUT_MS }, () => {
   })
 
   it('offers the earlier answer again when the section runs again, and keeps the other routes when the provider changes', async () => {
-    expect(await interactive(['local', 'more', 'openai-compatible', 'http://127.0.0.1:8000/v1', 'local', 'environment', 'safer', 'save'])).toBe(EXIT.ok)
+    expect(await setUp()).toBe(EXIT.ok)
+    expect(await section('key', ['more', 'openai-compatible', 'http://127.0.0.1:8000/v1', 'local', 'environment'])).toBe(EXIT.ok)
     recording.screen.length = 0
     const request: SetupRequest = {
       home, profile: PROFILE, env: {}, output: { stdout: () => undefined, stderr: () => undefined },

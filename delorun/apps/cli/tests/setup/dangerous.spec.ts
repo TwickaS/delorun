@@ -7,7 +7,7 @@ import { ensureHomeTree } from '@delorun/home'
 import { DANGEROUS_PHRASE, PROMPTS_OPTIONS } from '@delorun/contract-setup-answers'
 import { dangerousModeCheck } from '../../src/doctor/index.ts'
 import { CliError, EXIT } from '../../src/exit.ts'
-import { profileDirectory } from '../../src/profile.ts'
+import { hasCliProfile, profileDirectory } from '../../src/profile.ts'
 import { DANGEROUS_WARNING_VERSION, dangerousGrantPath, removeDangerousGrant, writeDangerousGrant } from '@delorun/plugin-permission-defaults/store'
 import { DANGEROUS_ON_LINE, DANGEROUS_WARNING_LINES, dangerousModeLine, dangerousModeState, promptsFromFlags } from '../../src/setup/dangerous.ts'
 import { readAnswersDocument } from '../../src/setup/answers.ts'
@@ -30,20 +30,30 @@ let home: string
 let recording: Recording
 
 /**
- * Run an interactive setup against a script.
- * @param script - the answers in order.
+ * Set up the profile with the main flow's own answer, no phone.
  * @returns the exit code.
  */
-async function interactive(script: readonly Answer[]): Promise<number> {
+async function setUp(): Promise<number> {
   return runSetup({
     home,
     profile: PROFILE,
     output: { stdout: text => void recording.screen.push(...text.replace(/\n$/u, '').split('\n')), stderr: text => void recording.screen.push(`stderr: ${text.trim()}`) },
     env: {},
-    form: { kind: 'interactive', prompter: scriptedPrompter(script, recording) },
+    form: { kind: 'interactive', prompter: scriptedPrompter(['no'], recording) },
     keyCheck: () => Promise.resolve({ ok: true }),
     portIsFree: () => Promise.resolve(true),
   })
+}
+
+/**
+ * Set up the profile when it is not, then answer the prompts section.
+ * @param script - the answers of the prompts section, in order.
+ * @returns the exit code.
+ */
+async function interactive(script: readonly Answer[]): Promise<number> {
+  if (!hasCliProfile(home, PROFILE)) await setUp()
+  recording = { screen: [], asked: [] }
+  return again(script)
 }
 
 /**
@@ -103,7 +113,7 @@ function configFile(document: Record<string, unknown>): string {
   return path
 }
 
-const ACCEPT_DANGEROUS: readonly Answer[] = ['local', DS, 'environment', 'dangerous', 'yes', DANGEROUS_PHRASE, 'save']
+const ACCEPT_DANGEROUS: readonly Answer[] = ['dangerous', 'yes', DANGEROUS_PHRASE]
 
 beforeEach(async () => {
   osHome = realpathSync(mkdtempSync(join(tmpdir(), 'delorun-dangerous-')))
@@ -119,7 +129,7 @@ afterEach(() => {
 
 describe('the refusals of dangerous mode', { timeout: TIMEOUT_MS }, () => {
   it('writes no grant and no dangerous row when the person declines at the first step', async () => {
-    expect(await interactive(['local', DS, 'environment', 'dangerous', 'no', 'save'])).toBe(EXIT.ok)
+    expect(await interactive(['dangerous', 'no'])).toBe(EXIT.ok)
     expect(existsSync(dangerousGrantPath(home))).toBe(false)
     expect(recordedPrompts()).toBe('safer')
     expect(rows().get('delorun-permission-defaults')).toEqual({ enabled: true, fullAccessEverywhere: false })
@@ -132,26 +142,26 @@ describe('the refusals of dangerous mode', { timeout: TIMEOUT_MS }, () => {
     ['a trailing space', `${DANGEROUS_PHRASE} `],
     ['a yes', 'yes'],
   ])('writes no grant when the phrase is %s', async (_name, typed) => {
-    expect(await interactive(['local', DS, 'environment', 'dangerous', 'yes', typed, 'save'])).toBe(EXIT.ok)
+    expect(await interactive(['dangerous', 'yes', typed])).toBe(EXIT.ok)
     expect(existsSync(dangerousGrantPath(home))).toBe(false)
     expect(recordedPrompts()).toBe('safer')
     expect(rows().get('delorun-permission-defaults')).toEqual({ enabled: true, fullAccessEverywhere: false })
   })
 
   it('starts the first step on No', async () => {
-    await interactive(['local', DS, 'environment', 'dangerous', 'no', 'save'])
+    await interactive(['dangerous', 'no'])
     expect(screen()).toMatch(/\? Allow any chat to switch to full access without asking\?\n {2}Yes\n> No\n/u)
   })
 
   it('refuses a root user before the warning, writing nothing', async () => {
     vi.spyOn(process, 'getuid').mockReturnValue(0)
-    await expect(interactive(['local', DS, 'environment', 'dangerous'])).rejects.toThrow('dangerous mode is refused when running as root')
+    await expect(interactive(['dangerous'])).rejects.toThrow('dangerous mode is refused when running as root')
     expect(screen()).not.toContain('Dangerous mode lets any chat')
     expect(existsSync(dangerousGrantPath(home))).toBe(false)
   })
 
   it('refuses a root user again when the dangerous answer reaches the writes', async () => {
-    expect(await interactive(['local', DS, 'environment', 'safer', 'save'])).toBe(EXIT.ok)
+    expect(await setUp()).toBe(EXIT.ok)
     vi.spyOn(process, 'getuid').mockReturnValue(0)
     const request = (): SetupRequest => ({ home, profile: PROFILE, env: {}, output: { stdout: () => undefined, stderr: () => undefined }, form: { kind: 'interactive', prompter: scriptedPrompter(['dangerous'], recording) } })
     await expect(runSection(request(), 'prompts')).rejects.toThrow('refused when running as root')
@@ -219,7 +229,6 @@ describe('the accepted path', { timeout: TIMEOUT_MS }, () => {
     if (POSIX) expect(lstatSync(dangerousGrantPath(home)).mode & 0o777).toBe(0o600)
     expect(screen()).toContain('# Dangerous mode')
     for (const line of DANGEROUS_WARNING_LINES) expect(screen()).toContain(line)
-    expect(screen()).toContain('Prompts: Never ask (dangerous)')
   })
 
   it('writes the rows before the grant', async () => {
@@ -270,7 +279,7 @@ describe('the accepted path', { timeout: TIMEOUT_MS }, () => {
     ['the first confirmation', ['dangerous', 'no']],
     ['the phrase', ['dangerous', 'yes', 'nothing']],
   ])('leaves the mode off and writes no grant when %s is declined after Ask me first', async (_name, script) => {
-    expect(await interactive(['local', DS, 'environment', 'safer', 'save'])).toBe(EXIT.ok)
+    expect(await setUp()).toBe(EXIT.ok)
     expect(await again(script)).toBe(EXIT.ok)
     expect(existsSync(dangerousGrantPath(home))).toBe(false)
     expect(recordedPrompts()).toBe('safer')

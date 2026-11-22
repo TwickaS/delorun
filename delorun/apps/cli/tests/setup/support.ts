@@ -2,7 +2,10 @@
  * Shared helpers of the setup specs: a prompter that plays a script and records everything the person would see, and
  * what was typed.
  */
+import type { TailscaleRunner } from '@delorun/reach'
+import { reachSection } from '../../src/reach/setup-section.ts'
 import type { PromptOption, Prompter } from '../../src/setup/prompts.ts'
+import { defaultRegistry, SectionRegistry } from '../../src/setup/sections.ts'
 
 /** One scripted answer. A select answers with an option value, a confirm with a boolean, a text or key with a string. */
 export type Answer = string | boolean
@@ -73,4 +76,17 @@ export function scriptedPrompter(script: readonly Answer[], recording: Recording
       recording.screen.push(`# ${title}`, ...body.split('\n').map(line => `  ${line}`))
     },
   }
+}
+
+/**
+ * This build's sections with the reach section running a given `tailscale`, so a phone Yes does not look at the computer's own Tailscale.
+ * @param tailscale - the runner the reach section checks.
+ * @returns the registry.
+ */
+export function registryWithTailscale(tailscale: TailscaleRunner): SectionRegistry {
+  const registry = new SectionRegistry()
+  for (const [order, section] of defaultRegistry().all().entries()) {
+    registry.register(section.id === 'reach' ? reachSection(tailscale, () => false) : section, { order })
+  }
+  return registry
 }
