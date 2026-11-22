@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { HELPER_LIMITS, helperName, helperRunArgs } from '../../../src/compat-bench/privacy/helper/image.ts'
+import type { Docker } from '../../../src/compat-bench/privacy/docker.ts'
+import { HELPER_LIMITS, helperName, helperRunArgs, removeStaleHelpers } from '../../../src/compat-bench/privacy/helper/image.ts'
 
 const dockerfile = readFileSync(new URL('../../../src/compat-bench/privacy/helper/Dockerfile', import.meta.url), 'utf8')
 const args = helperRunArgs('bench-helper-r1', 'delorun-bench-helper:abc', { runId: 'r1', outDir: '/out', canaries: { 'chat word': 'w' }, publish: { host: 18755, container: 18755 } })
@@ -44,5 +45,21 @@ describe('the helper container\'s configuration', () => {
     expect(entry).toContain('--uid-owner 0 -j RETURN')
     expect(entry).toContain('--dst-type LOCAL -j RETURN')
     expect(entry).toContain('-p tcp -j REDIRECT --to-ports 8080')
+  })
+
+  it('ends itself when nobody stops it', () => {
+    const entry = readFileSync(new URL('../../../src/compat-bench/privacy/helper/entry.sh', import.meta.url), 'utf8')
+    expect(entry).toContain('BENCH_HELPER_MAX_SECONDS:-7200')
+  })
+
+  it('removes only stopped helpers of earlier runs', async () => {
+    const calls: string[][] = []
+    const docker: Docker = async (command) => {
+      calls.push([...command])
+      return { stdout: command[0] === 'ps' ? 'abc123\n\ndef456\n' : '', stderr: '', status: 0 }
+    }
+    expect(await removeStaleHelpers(docker)).toBe(2)
+    expect(calls[0]).toEqual(['ps', '--all', '--quiet', '--filter', 'label=delorun.bench.role=helper', '--filter', 'status=exited'])
+    expect(calls.slice(1)).toEqual([['rm', '--force', 'abc123'], ['rm', '--force', 'def456']])
   })
 })

@@ -28,6 +28,8 @@ for tool in iptables ip6tables; do
     || { [ "$tool" = ip6tables ] || { echo "$tool rules failed" >&2; exit 1; }; }
   set -e
 done
+# A helper nobody stops (its run crashed) ends itself; `removeStaleHelpers` then deletes the stopped container.
+( sleep "${BENCH_HELPER_MAX_SECONDS:-7200}"; kill -TERM $$ ) >/dev/null 2>&1 &
 python3 /bench/poll.py >/out/poll.log 2>&1 &
 POLL=$!
 trap 'kill -TERM "$PROXY" "$POLL" 2>/dev/null || true; wait "$PROXY" 2>/dev/null || true; exit 0' TERM INT
