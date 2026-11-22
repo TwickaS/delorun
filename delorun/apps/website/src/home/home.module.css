@@ -212,9 +212,17 @@
 }
 @media (max-width: 639px) {
   .header .nav { gap: 8px; }
-  .header .dotWrap { gap: 5px; padding: 0 5px 0 11px; }
+  .header .dotWrap { gap: 5px; padding: 0 5px; }
+  /* The pill's aria-label still names the look. */
+  .header .dotName { display: none; }
   .starButton { width: 38px; padding: 0; justify-content: center; }
   .starLabel { display: none; }
+}
+/* Below 380 px the nav and the wordmark step down so that "Why Delorun" and "Docs" fit on one line at 360 px. */
+@media (max-width: 379px) {
+  .header .nav { gap: 6px; }
+  .header .navLink { font-size: 14px; }
+  .header .brand { font-size: 18px; }
 }
 
 /* Shared type */
