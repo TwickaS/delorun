@@ -42,7 +42,7 @@ node native/system/scripts/verify-packed-install.mjs native/system/.release/npm 
 
 ## Publish
 
-Use the main repository's `Node Addon System Release` workflow so every binary is built on its matching native runner:
+This repository does not carry the `Node Addon System Release` workflow, which upstream's repository runs; this section describes it as upstream wrote it. Use the main repository's `Node Addon System Release` workflow so every binary is built on its matching native runner:
 
 1. Run it with `publish=false` (from the release commit) to build all platform binaries, assemble and verify the payloads, pack the tarballs in publish order, rehearse the packed install, and upload the `npm-tarballs` artifact for inspection.
 2. Create and push the `node-addon-system-vX.Y.Z` tag matching the package versions.
