@@ -51,12 +51,14 @@ def main() -> None:
                 out.write(key + "\n")
 
         while True:
-            for table in ("/proc/net/tcp", "/proc/net/tcp6"):
-                for local, remote, state in sockets(table):
-                    if state == "0A":
-                        emit({"t": "listen", "host": local[0], "port": local[1]})
-                    elif state in ("01", "02") and not is_local(remote[0]) and remote[1] != "8080":
-                        emit({"t": "connect", "host": remote[0], "port": remote[1]})
+            rows = [row for table in ("/proc/net/tcp", "/proc/net/tcp6") for row in sockets(table)]
+            listening = {local[1] for local, _remote, state in rows if state == "0A"}
+            for local, remote, state in rows:
+                if state == "0A":
+                    emit({"t": "listen", "host": local[0], "port": local[1]})
+                elif state in ("01", "02") and local[1] not in listening and not is_local(remote[0]):
+                    # A socket on a listening port is an accepted one (the proxy's, or a plugin server's): inbound, not a connect.
+                    emit({"t": "connect", "host": remote[0], "port": remote[1]})
             me = os.getpid()
             for entry in os.listdir("/proc"):
                 if not entry.isdigit() or entry in pids or int(entry) == me:
