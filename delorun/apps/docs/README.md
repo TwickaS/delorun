@@ -30,7 +30,8 @@ Pages that moved into a group keep their old addresses as permanent redirects, i
 Each relative link in a page resolves at build time. The build fails on a link that names no file.
 
 - A link to a published page becomes that page's route.
-- A link to an upstream repository file becomes its URL in [`deepseek-ai/deepseek-harness`](https://github.com/deepseek-ai/deepseek-harness).
+- A link to a file at the repository's top level, such as `SECURITY.md`, `GOVERNANCE.md` or `AGENTS.md`, becomes its URL in Delorun's GitHub repository: those are the project's own files, which upstream lacks or has in another form.
+- A link to any other upstream repository file becomes its URL in [`deepseek-ai/deepseek-harness`](https://github.com/deepseek-ai/deepseek-harness).
 - A link to another Delorun file, such as a contract or the threat model, becomes its URL in Delorun's GitHub repository, because the site publishes only the guide and the references.
 - A Chinese page takes the English page's heading ids, by position, so the table-of-contents links, which the pair's consistency record fixes, resolve in both locales.
 

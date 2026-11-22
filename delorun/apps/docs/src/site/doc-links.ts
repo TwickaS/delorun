@@ -1,8 +1,8 @@
 /**
  * Link resolution and heading ids for Delorun's pages, shared by the build's Markdown plugins and the Markdown routes.
  * Every relative link in `delorun/docs/guide` and `delorun/docs/reference` resolves here: a published page becomes its site
- * route, an upstream repository file becomes its upstream URL, a Delorun file outside the published pages becomes its URL
- * in Delorun's repository, and a target that exists nowhere fails the build.
+ * route, a Delorun file outside the published pages or a file at the repository's top level becomes its URL in Delorun's
+ * repository, any other upstream file becomes its upstream URL, and a target that exists nowhere fails the build.
  *
  * @module @delorun/docs/doc-links
  */
@@ -12,10 +12,10 @@ import GithubSlugger from 'github-slugger'
 import { plainText } from './headings.ts'
 import { isSection, routeOf, slugsOf } from './routes.ts'
 
-/** The upstream repository's default-branch URL prefix, for upstream files that Delorun's pages link. */
+/** The upstream repository's default-branch URL prefix, for upstream files below the top level that Delorun's pages link. */
 export const UPSTREAM_BLOB_URL = 'https://github.com/deepseek-ai/deepseek-harness/blob/master/'
 
-/** Delorun's repository's default-branch URL prefix, for Delorun files outside the published pages, such as a contract. */
+/** Delorun's repository's default-branch URL prefix, for Delorun files outside the published pages, such as a contract, and for top-level files. */
 export const DELORUN_BLOB_URL = 'https://github.com/twickas/delorun/blob/main/'
 
 /** How a link resolves: the URL to write into the page. */
@@ -73,8 +73,10 @@ export function resolveLink(filePath: string, href: string, root: string): Resol
 }
 
 /**
- * A target outside the published sections: a Delorun file becomes its URL in Delorun's repository, and an upstream file
- * becomes its upstream URL.
+ * A target outside the published sections: a Delorun file becomes its URL in Delorun's repository, and so does a file at
+ * the repository's top level, such as `SECURITY.md`, `GOVERNANCE.md` or `AGENTS.md`: those are the project's own files,
+ * which Delorun adds or rewrites, so upstream has no such file or a different one. An upstream file below the top level,
+ * such as upstream's glossary, becomes its upstream URL.
  * @param root - the repository root.
  * @param target - the repository-relative target.
  * @param fail - raises the error for a target that exists nowhere.
@@ -83,7 +85,7 @@ export function resolveLink(filePath: string, href: string, root: string): Resol
  */
 function publishedOrUnpublished(root: string, target: string, fail: (reason: string) => never, fragment = ''): ResolvedLink {
   if (!existsSync(resolve(root, target))) fail('names no file in the repository')
-  if (target.startsWith('delorun/')) return { kind: 'href', href: `${DELORUN_BLOB_URL}${target}${fragment}` }
+  if (target.startsWith('delorun/') || !target.includes('/')) return { kind: 'href', href: `${DELORUN_BLOB_URL}${target}${fragment}` }
   return { kind: 'href', href: `${UPSTREAM_BLOB_URL}${target}${fragment}` }
 }
 
