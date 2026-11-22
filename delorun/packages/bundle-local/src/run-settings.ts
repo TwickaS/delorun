@@ -525,7 +525,8 @@ async function boundedBytes(request: Request): Promise<Uint8Array | undefined> {
     if (done) break
     total += value.byteLength
     if (total > MAX_RUN_REQUEST_BYTES) {
-      await reader.cancel()
+      // Not cancelled: cancelling one branch of a cloned request's body stalls the other branch the gate still reads.
+      reader.releaseLock()
       return undefined
     }
     chunks.push(value)
