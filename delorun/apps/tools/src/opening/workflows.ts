@@ -60,12 +60,16 @@ export const REMOVED: Readonly<Record<string, string>> = {
 /**
  * Compare the workflow files in a directory with the two lists.
  * @param files - file names found.
- * @returns names that are in neither list, and names listed but missing.
+ * @returns names that are in neither list, kept names that are missing, and removed names still present.
  */
-export function classify(files: readonly string[]): { unclassified: string[]; missing: string[] } {
+export function classify(files: readonly string[]): { unclassified: string[]; missing: string[]; remaining: string[] } {
   const known = new Set([...Object.keys(KEPT), ...Object.keys(REMOVED)])
   const present = new Set(files)
-  return { unclassified: files.filter(name => !known.has(name)), missing: [...known].filter(name => !present.has(name)) }
+  return {
+    unclassified: files.filter(name => !known.has(name)),
+    missing: Object.keys(KEPT).filter(name => !present.has(name)),
+    remaining: Object.keys(REMOVED).filter(name => present.has(name)),
+  }
 }
 
 /**
@@ -105,15 +109,16 @@ function main(argv: readonly string[]): number {
   }
   const dir = join(values.repo, '.github', 'workflows')
   const files = readdirSync(dir).filter(name => name.endsWith('.yml'))
-  const { unclassified, missing } = classify(files)
+  const { unclassified, missing, remaining } = classify(files)
   if (unclassified.length > 0) console.error(`unclassified workflows: ${unclassified.join(', ')}`)
-  if (missing.length > 0) console.error(`listed but missing: ${missing.join(', ')}`)
+  if (missing.length > 0) console.error(`kept workflows that are missing: ${missing.join(', ')}`)
   if (values.apply && unclassified.length === 0) {
-    for (const name of Object.keys(REMOVED)) if (existsSync(join(dir, name))) rmSync(join(dir, name))
+    for (const name of remaining) rmSync(join(dir, name))
     const ci = join(dir, 'ci.yml')
-    writeFileSync(ci, keepJobs(readFileSync(ci, 'utf8'), KEPT_CI_JOBS))
+    if (existsSync(ci)) writeFileSync(ci, keepJobs(readFileSync(ci, 'utf8'), KEPT_CI_JOBS))
   }
-  console.log(`kept ${String(Object.keys(KEPT).length)}, removed ${String(Object.keys(REMOVED).length)}${values.apply ? ' (applied)' : ' (report only)'}`)
+  const left = values.apply ? [] : remaining
+  console.log(left.length === 0 ? `nothing left to remove${values.apply ? ' (applied)' : ''}` : `${String(left.length)} to remove (report only): ${left.join(', ')}`)
   return unclassified.length === 0 && missing.length === 0 ? 0 : 1
 }
 

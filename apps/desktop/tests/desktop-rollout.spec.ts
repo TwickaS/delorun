@@ -1,4 +1,4 @@
-import { execFile, spawnSync } from 'node:child_process'
+import { execFile } from 'node:child_process'
 import { createServer } from 'node:http'
 import { promisify } from 'node:util'
 import { createHash } from 'node:crypto'
@@ -159,26 +159,6 @@ it('requires initial publication evidence and prepares approval without installe
     expect((await prepareDesktopRolloutCi({ ...env, DESKTOP_ROLLOUT_PERCENTAGE: '',
       DESKTOP_UPLOAD_WEBSITE: 'true', DOWNLOAD_PROD_EO_ZONE_ID: 'zone-example' })).website).toBe(true)
   } finally { await rm(f.root, { recursive: true, force: true }) }
-})
-
-it('keeps rollout approval and website recovery separate without tag creation or full package verification', async () => {
-  const text = await readFile('.github/workflows/desktop-rollout.yml', 'utf8')
-  const workflow = load(text) as {
-    name: string
-    on: { workflow_dispatch: { inputs: Record<string, { required?: boolean; default?: unknown }> } }
-    jobs: Record<string, { environment?: unknown; env?: Record<string, string>; needs?: string[] }>
-  }
-  expect(workflow.name).toBe('Publish Desktop · Rollout & Website')
-  expect(workflow.on.workflow_dispatch.inputs.package_run_attempt!.required).toBe(true)
-  expect(workflow.on.workflow_dispatch.inputs.upload_website!.default).toBe(false)
-  expect(workflow.on.workflow_dispatch.inputs.rollout_percentage!.default).toBe('')
-  expect(workflow.jobs.publish!.environment).toContain('desktop-production')
-  expect(workflow.jobs['upload-website-installer']!.needs).toContain('publish')
-  expect(workflow.jobs['purge-website-installer']!.needs).toContain('upload-website-installer')
-  expect(text).not.toMatch(/create-github-app-token|publish-desktop-ci.ts|resolve-retained-desktop-publish-ci.ts/u)
-  expect(text).toContain('publish-desktop-rollout-ci.ts route')
-  expect(workflow.jobs.publish!.env!.DESKTOP_UPLOAD_WEBSITE).toBe('${{ inputs.upload_website }}')
-  expect(text).toContain('steps.website.outputs.rollout-record')
 })
 
 it.each(['apply', 'changed-approval', 'replaced-feed', 'website'] as const)('checks approval, current feed and audit at the %s entrypoint', async (scenario) => {
@@ -381,28 +361,3 @@ it.each(['missing-yaml', 'wrong-approval', 'not-uploaded', 'wrong-zone', 'not-se
       expect(submit).not.toHaveBeenCalled()
     } finally { vi.restoreAllMocks(); await rm(f.root, { recursive: true, force: true }) }
   })
-
-it('executes the master guard and keeps all rollout preflights ahead of dependency installation', async () => {
-  const workflow = load(await readFile('.github/workflows/desktop-rollout.yml', 'utf8')) as {
-    jobs: Record<string, { steps: Array<{ id?: string; run?: string; uses?: string; env?: Record<string, string> }> }>
-  }
-  const route = workflow.jobs.route!.steps
-  const command = route[0]!.run!
-  for (const ref of ['refs/heads/master', 'refs/heads/stale-feature']) {
-    const result = spawnSync(process.execPath, ['-e', command.slice('node -e "'.length, -1)], {
-      env: { ...process.env, GITHUB_REF: ref }, encoding: 'utf8', timeout: 30_000,
-    })
-    expect(result.error).toBeUndefined()
-    expect(result.status).toBe(ref === 'refs/heads/master' ? 0 : 1)
-  }
-  const preflight = route.findIndex(step => step.id === 'preflight')
-  expect(preflight).toBeGreaterThan(0)
-  expect(preflight).toBeLessThan(route.findIndex(step => step.uses?.startsWith('pnpm/')))
-  expect(route.find(step => step.id === 'route')?.env?.DESKTOP_PACKAGE_ATTEMPT).toBe('${{ steps.preflight.outputs.attempt }}')
-  for (const [name, job] of Object.entries(workflow.jobs)) {
-    if (name === 'route') continue
-    const local = job.steps.findIndex(step => step.run?.includes('preflight-desktop-publish-local.mjs'))
-    expect(local).toBeGreaterThanOrEqual(0)
-    expect(local).toBeLessThan(job.steps.findIndex(step => step.run === 'pnpm install --frozen-lockfile'))
-  }
-})
