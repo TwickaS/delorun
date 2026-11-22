@@ -9,7 +9,8 @@
  * @module @delorun/install/render
  */
 import { uncheckedWarning } from '@delorun/release-verify/start'
-import { formatDuration, formatSize, formatSpeed, type InstallerProgress } from './progress.ts'
+import type { InstallerProgress } from './progress.ts'
+import { formatDuration, formatRemaining, formatSize, formatSpeed, STALL_SHOWN_MS, TransferRate } from './transfer.ts'
 
 /** Runs a function every `ms` milliseconds until the returned function is called. */
 export type Every = (fn: () => void, ms: number) => () => void
@@ -32,12 +33,6 @@ export interface RendererOptions {
 
 /** How often the spinner turns and a stalled download's wait is redrawn. */
 const FRAME_MS = 100
-/** Bytes arrive over this long a window when the speed and the time left are worked out. */
-const SPEED_WINDOW_MS = 5000
-/** The least span of samples that gives a speed. */
-const SPEED_MIN_SPAN_MS = 1000
-/** A download that delivers no byte for this long shows that it waits. */
-const STALL_SHOWN_MS = 3000
 /** The column the durations of a terminal's checklist end at, at most. */
 const TIME_EDGE_MAX = 80
 /** The bar's widest and narrowest width. */
@@ -76,8 +71,8 @@ interface Measure {
   done: number
   /** What the phase expects. */
   readonly total: number
-  /** Samples of `done`, newest last, within the speed window; empty for files. */
-  readonly samples: Array<{ readonly at: number, readonly done: number }>
+  /** The speed over the recent window; unread for files. */
+  readonly rate: TransferRate
   /** When the last byte arrived. */
   lastAt: number
   /** The last whole ten percent a plain log reported. */
@@ -104,8 +99,7 @@ function sizePair(done: number, total: number): string {
  * @returns `~14s left`, `~2m 05s left` or `~1h 03m left`.
  */
 function formatLeft(seconds: number): string {
-  if (seconds >= 3600) return `~${String(Math.floor(seconds / 3600))}h ${String(Math.floor(seconds % 3600 / 60)).padStart(2, '0')}m left`
-  return `~${formatDuration(Math.max(1, seconds) * 1000)} left`
+  return `~${formatRemaining(seconds)} left`
 }
 
 /**
@@ -285,8 +279,7 @@ export class InstallRenderer {
     const now = this.now()
     measure.done = received
     measure.lastAt = now
-    measure.samples.push({ at: now, done: received })
-    while (measure.samples.length > 1 && now - measure.samples[0]!.at > SPEED_WINDOW_MS) measure.samples.shift()
+    measure.rate.add(now, received)
     // A terminal shows the count at the timer's next frame, so a fast stream of events does not become a stream of writes.
     if (!this.options.terminal) this.plainTenths(measure, `  ${sizePair(received, total)}${this.speed(measure) === undefined ? '' : `  ${formatSpeed(this.speed(measure)!)}`}`)
   }
@@ -322,11 +315,7 @@ export class InstallRenderer {
    * @returns the speed, or `undefined` while the window is too short or nothing arrived in it.
    */
   private speed(measure: Measure): number | undefined {
-    const first = measure.samples[0]
-    const last = measure.samples.at(-1)
-    if (first === undefined || last === undefined || last.at - first.at < SPEED_MIN_SPAN_MS) return undefined
-    const speed = (last.done - first.done) * 1000 / (last.at - first.at)
-    return speed > 0 ? speed : undefined
+    return measure.rate.speed()
   }
 
   /**
@@ -337,7 +326,9 @@ export class InstallRenderer {
   private begin(label: string, bar?: { readonly unit: Measure['unit'], readonly done: number, readonly total: number }): void {
     this.settle('✔')
     const at = this.now()
-    this.phase = { label, startedAt: at, ...bar === undefined ? {} : { bar: { ...bar, samples: [{ at, done: 0 }], lastAt: at, tenth: 0 } } }
+    const rate = new TransferRate()
+    rate.add(at, 0)
+    this.phase = { label, startedAt: at, ...bar === undefined ? {} : { bar: { ...bar, rate, lastAt: at, tenth: 0 } } }
     if (this.options.terminal) {
       this.resume()
     } else if (bar !== undefined) {
