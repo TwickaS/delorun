@@ -1,13 +1,20 @@
 // @vitest-environment jsdom
 import { Context } from '@deepseek-ai/cordis'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { currentDownloadsSource } from '@delorun/plugin-downloads/row'
 import { createBundleInstaller, stateOf } from '../src/client/bundles.ts'
 
 // The Host's packs routes publish no pack, so the bundles read as the plugin manager lists them.
 beforeEach(() => { vi.stubGlobal('fetch', () => Promise.resolve(Response.json({ supported: true, release: '0.1.0', packs: [], queue: [] }))) })
 /** Make the Host's packs routes answer that it has no plugin packs, with a reason. */
 const noPacks = (): void => { vi.stubGlobal('fetch', () => Promise.resolve(Response.json({ supported: false, reason: 'no packs here', packs: [], queue: [] }))) }
-afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
+afterEach(() => {
+  vi.restoreAllMocks()
+  vi.unstubAllGlobals()
+  for (const item of currentDownloadsSource().snapshot()) currentDownloadsSource().remove(item.key)
+})
+/** The downloads panel's row of a key, as every downloads surface reads it. */
+const panelRow = (key: string) => currentDownloadsSource().snapshot().find(item => item.key === key)
 
 interface Row {
   name: string
@@ -481,5 +488,32 @@ describe('a pack the Host downloads', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+describe('the downloads panel during an add the plugin manager runs', () => {
+  it('lists a catalog install from the press until it ends, with the package\'s title', async () => {
+    let answer: (value: { ok: true, value: { application: 'applied' } }) => void = () => undefined
+    const { installer, pluginManager } = bench([row({ name: 'a', availability: 'missing', installTarget: { spec: '@scope/a@1.2.3', version: '1.2.3' }, meta: { title: 'A' } })])
+    pluginManager.installBundle.mockImplementationOnce(() => new Promise((resolve) => { answer = resolve }))
+    installer.refresh(['a'])
+    await flush()
+    const adding = installer.install('a')
+    await flush()
+    expect(panelRow('a')).toMatchObject({ state: 'downloading', title: 'A', local: { retry: false } })
+    answer({ ok: true, value: { application: 'applied' } })
+    await adding
+    expect(panelRow('a')?.state).toBe('ready')
+  })
+
+  it('lists a shipped bundle switched on, and ends a refusal as failed in the plugin manager\'s words', async () => {
+    const { installer, pluginManager } = bench([row({ name: 'a' }), row({ name: 'b' })], { change: { application: 'restart-required' } })
+    installer.refresh(['a', 'b'])
+    await flush()
+    await installer.install('a')
+    expect(panelRow('a')?.state).toBe('needs-reload')
+    pluginManager.setBundleEnabled.mockResolvedValueOnce({ ok: false, error: { code: 'refused', message: 'no', diagnostic: 'Not allowed here' } } as never)
+    await installer.install('b')
+    expect(panelRow('b')).toMatchObject({ state: 'failed', failure: { message: 'Not allowed here' } })
   })
 })

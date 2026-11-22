@@ -4,4 +4,7 @@
  */
 export { OnboardingDownloadsRow, type OnboardingDownloadsRowProps } from './Phone.tsx'
 export { createFakeDownloadsSource, currentDownloadsSource, provideDownloadsSource } from './source.ts'
-export { useDownloadRateText } from './rate.ts'
+export { useDownloadStatusText } from './Items.tsx'
+export type { DownloadItem } from './source.ts'
+export { startPageDownload, type PageDownload } from './source.ts'
+export { BROWSER_DOWNLOAD_KEY } from './names.ts'

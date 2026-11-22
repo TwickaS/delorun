@@ -4,6 +4,7 @@
  * then and adds the pack through the guide's installer, and No browser turns it off and records that. Under the choice the step says whether Browser is ready, read from the Host's requirement check, or
  * where adding the pack stands, and what the first chat that uses it asks.
  */
+import { BROWSER_BUNDLE } from '@delorun/browser-setup'
 import { BrowserChoices } from '@delorun/browser-setup/client'
 import type { ReactNode } from 'react'
 import { useBrowser } from '../browser/use-browser.ts'
@@ -11,6 +12,7 @@ import type { BundleView } from '../bundles.ts'
 import type { StepServices } from '../types.ts'
 import { Explain } from '../ui/Explain.tsx'
 import { StateLine } from '../ui/StateLine.tsx'
+import { DownloadBlock, useDownloadView } from './BundleCard.tsx'
 import type { StepProps } from './shared.ts'
 import css from './steps.module.css'
 
@@ -37,12 +39,14 @@ function assertNever(value: never): never {
 function PackLine({ view, services, onRetry }: { readonly view: BundleView | undefined; readonly services: StepServices; readonly onRetry: () => void }): ReactNode {
   const { t } = services
   const state = view?.state ?? 'checking'
+  const download = useDownloadView(BROWSER_BUNDLE)
+  const progress = download === undefined ? null : <DownloadBlock label={t('step.browser')} download={download} />
   switch (state) {
     case 'checking': return <StateLine tone="loading">{t('bundle.checking')}</StateLine>
     // The add starts with the choice, so an available pack is about to be adding.
     case 'available': return null
-    case 'installing': return <StateLine tone="loading">{t('bundle.adding')}</StateLine>
-    case 'slow': return <StateLine tone="loading">{t('bundle.slow')}</StateLine>
+    case 'installing': return <><StateLine tone="loading">{t('bundle.adding')}</StateLine>{progress}</>
+    case 'slow': return <><StateLine tone="loading">{t('bundle.slow')}</StateLine>{progress}</>
     case 'offline': return <StateLine tone="info">{t('bundle.offline')}</StateLine>
     case 'unavailable': return <StateLine tone="warning">{view?.packsReason === undefined ? t('bundle.unavailable') : t('bundle.unavailableWhy', { reason: view.packsReason })}</StateLine>
     case 'failed': return <StateLine tone="error" action={{ label: t('bundle.retry'), onClick: onRetry }}>{view?.reason === undefined ? t('bundle.failed') : t('bundle.failedWhy', { reason: view.reason })}</StateLine>

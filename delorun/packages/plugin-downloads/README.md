@@ -32,9 +32,11 @@ interface DownloadsSource {
 }
 ```
 
-A `DownloadItem` has `key` (the package name), `title`, `iconUrl`, `state`, `receivedBytes`, `totalBytes`, `position` and `failure`. The states are `queued`, `waiting-for-unlock`, `downloading`, `verifying`, `installing`, `ready`, `needs-reload`, `failed` and `cancelled`.
+A `DownloadItem` has `key` (the package name), `title`, `iconUrl`, `state`, `receivedBytes`, `totalBytes`, `position`, `failure` and, for a download the page runs itself, `local`. The states are `queued`, `waiting-for-unlock`, `downloading`, `verifying`, `installing`, `ready`, `needs-reload`, `failed` and `cancelled`.
 
 `createFakeDownloadsSource(items)` holds the items in memory; its `set` and `update` drive tests and the harness page. `createRemoteDownloadsSource(ctx)` is the adapter for `@delorun/plugin-packs`' routes (`createPacksClient()`): it reads the install list while a surface subscribes (on the Host's install announcements, after a connection reset, and every 1.5 seconds while something is queued or working), and sends cancel, retry, remove and dismiss. A refusal that asks for an unlock keeps the row on "Waiting for unlock". A Host without plugin packs shows an empty list.
+
+`startPageDownload(key, { title, retry })` (exported from `@delorun/plugin-downloads/row`) adds an install that does not go through the Host's install queue, such as the plugin manager's own install of a package that is not a plugin pack, or the browser download Browser needs, to every surface of this tab. Its item carries `local` and follows the Host's items; a Host item of the same key wins. Its starter reports `bytes(received, total)`, `installing()`, `done(reload)` or `failed(message)`; without a size the bar moves without a measure and the status says Downloading. It cannot be cancelled, a failure offers Try again only when the starter passed `retry`, and Remove takes it off. It lives only in this tab: nothing persists it and other devices do not see it.
 
 ## In the setup guide
 

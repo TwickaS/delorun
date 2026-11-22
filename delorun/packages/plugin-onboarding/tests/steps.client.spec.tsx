@@ -656,6 +656,18 @@ describe('the recommended plugins step', () => {
     expect(fake.install).not.toHaveBeenCalled()
   })
 
+  it('leaves the Browser pack to its own step, and gives the packs near Claude Code, Codex and a browser the guide\'s own titles', async () => {
+    const plugins = ['@delorun/bundle-browser', '@delorun/bundle-agent-hooks', '@delorun/bundle-external-agents', '@delorun/bundle-real-browser']
+    // The plugin manager's own titles lose to the guide's words for Delorun's packs.
+    const fake = installerFake(Object.fromEntries(plugins.map(name => [name, { state: 'available' as const, title: 'Package title' }])))
+    render(<PluginsStep services={stepServices({ bundles: fake.installer, plugins })} guide={guideOf(hostFake({ recommend: undefined }).host)} />)
+    await settle()
+    expect(screen.getAllByRole('heading', { level: 4 }).map(each => each.textContent)).toEqual([
+      en['plugins.pack.agentHooks.title'], en['plugins.pack.externalAgents.title'], en['plugins.pack.realBrowser.title'],
+    ])
+    expect(new Set([en['plugins.pack.agentHooks.title'], en['plugins.pack.externalAgents.title'], en['agents.claude.title'], en['agents.codex.title']]).size).toBe(4)
+  })
+
   it('names a plugin whose title is not known yet in words, never by its package id', () => {
     expect(['@scope/codex-quota', '@deepseek-ai/dsh-session-search', 'plain', '@delorun/bundle-browser'].map(readableName)).toEqual(['Codex quota', 'Dsh session search', 'Plain', 'Browser'])
   })

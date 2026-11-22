@@ -1,6 +1,9 @@
 /** The words for Delorun's own plugin packs, by the signed package name, with the signed name as the fallback. */
 import type { DownloadsLocaleKey, Translate } from './locales.ts'
 
+/** The key the browser download Browser needs (Chromium, through its installer) shows under in the panel. */
+export const BROWSER_DOWNLOAD_KEY = 'delorun:browser-download'
+
 /** Dictionary keys of the packs the release ships, by package name. */
 export const PACK_TITLE_KEYS: Readonly<Record<string, DownloadsLocaleKey>> = {
   '@delorun/bundle-browser': 'pack.browser',
@@ -12,6 +15,7 @@ export const PACK_TITLE_KEYS: Readonly<Record<string, DownloadsLocaleKey>> = {
   '@delorun/bundle-computer-use-driver': 'pack.computerUseDriver',
   '@deepseek-ai/dsh-subagent-claude-code': 'pack.claudeCode',
   '@deepseek-ai/dsh-subagent-codex': 'pack.codex',
+  [BROWSER_DOWNLOAD_KEY]: 'pack.chromium',
 }
 
 /**

@@ -8,7 +8,7 @@ import type { ClientRemote } from '@deepseek-ai/dsh-api-remotes/client'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { LocalizedText } from '@deepseek-ai/dsh-package-manifest'
 import { randomUUID } from '@deepseek-ai/dsh-util-crypto'
-import { currentDownloadsSource } from '@delorun/plugin-downloads/row'
+import { currentDownloadsSource, startPageDownload, type PageDownload } from '@delorun/plugin-downloads/row'
 import { createPacksClient } from '@delorun/plugin-packs/client'
 import { packView, type PackView, type PacksResult, type PacksSnapshot } from '@delorun/plugin-packs/wire'
 
@@ -171,6 +171,26 @@ export function packReason(pack: PackView | undefined): string | undefined {
 function pluginManager(ctx: Context): ClientRemote['pluginManager'] | undefined {
   const namespace: ClientRemote['pluginManager'] | undefined = ctx.get('remote.pluginManager')
   return namespace
+}
+
+/**
+ * A package's own title in English, for the downloads panel's row of an install this page runs.
+ * @param title - the title the plugin manager lists, if any.
+ * @returns the text, or undefined.
+ */
+function textOf(title: LocalizedText | undefined): string | undefined {
+  return title === undefined ? undefined : typeof title === 'string' ? title : title.en
+}
+
+/**
+ * End the downloads panel's row of an install this page ran, as its card ended.
+ * @param shown - the row.
+ * @param view - how the card ended.
+ */
+function endShown(shown: PageDownload, view: { readonly state: BundleState, readonly reason?: string | undefined }): void {
+  if (view.state === 'installed') shown.done()
+  else if (view.state === 'restart') shown.done(true)
+  else shown.failed(view.reason)
 }
 
 /**
@@ -365,6 +385,8 @@ export function createBundleInstaller(ctx: Context, options: BundleInstallerOpti
     }
     if (before?.state !== 'available' || bundle === undefined || remote === undefined) return
     set(name, { ...before, state: 'installing' })
+    // The plugin manager's own install is not in the Host's install queue; the downloads panel shows it from this page.
+    const shown = startPageDownload(name, { title: textOf(before.title) })
     let done = false
     const finish = (view: BundleView): void => {
       if (done) return
@@ -372,6 +394,7 @@ export function createBundleInstaller(ctx: Context, options: BundleInstallerOpti
       clearTimeout(slowTimer)
       clearInterval(pollTimer)
       set(name, view)
+      endShown(shown, view)
     }
     // After the wait the card says the add is still working, and the plugin manager's own state is read until it reports an outcome.
     const slowTimer = setTimeout(() => { if (!done) set(name, { ...before, state: 'slow' }) }, options.addWaitMs())
@@ -435,15 +458,19 @@ export function createBundleInstaller(ctx: Context, options: BundleInstallerOpti
       const before = rows.getSnapshot()[id]
       if (before?.state !== 'available' || entry === undefined || remote === undefined) return
       setRow(id, { ...before, state: 'installing' })
+      const shown = startPageDownload(id, { title: textOf(before.title) })
       inflightRows.add(id)
       try {
         const result = await remote.setPluginEnabled(entry, true)
         const application = result.ok ? result.value.application : 'failed'
-        setRow(id, { ...before, state: application === 'applied' ? 'installed' : application === 'restart-required' ? 'restart' : 'failed' })
+        const state = application === 'applied' ? 'installed' : application === 'restart-required' ? 'restart' : 'failed'
+        setRow(id, { ...before, state })
+        endShown(shown, { state })
       } catch (error) {
         // The outcome is unknown here; Plugins shows what the profile holds and can finish it.
         console.warn('delorun onboarding: the optional plugin was not turned on', error)
         setRow(id, { ...before, state: 'failed' })
+        endShown(shown, { state: 'failed' })
       } finally { inflightRows.delete(id) }
     },
     openPlugins: () => { ctx.get('pluginNavigation')?.openList() },
