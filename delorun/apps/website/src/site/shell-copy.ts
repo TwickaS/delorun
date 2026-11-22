@@ -36,8 +36,9 @@ export const THEME_COPY: ThemeCopy = {
 /** The header's text. */
 export const HEADER_COPY: HeaderCopy = { title: COPY.siteTitle, navLabel: COPY.footer.primaryNav, theme: THEME_COPY }
 
-/** The header's links: Docs, Blog once an article exists, and GitHub. */
+/** The header's links: Why Delorun, Docs, Blog once an article exists, and GitHub. */
 export const HEADER_LINKS: readonly ShellLink[] = [
+  { label: COPY.nav.why, href: `${DOCS_URL}/guide/why-delorun`, site: 'other' },
   { label: COPY.nav.docs, href: DOCS_URL, site: 'other' },
   ...ARTICLE_COUNT === 0 ? [] : [{ label: COPY.nav.blog, href: '/blog' }],
   { label: COPY.nav.github, href: GITHUB_URL },
@@ -57,6 +58,7 @@ export const FOOTER_LINKS: readonly ShellLink[] = [
   { label: COPY.footer.docs, href: DOCS_URL, site: 'other' },
   { label: COPY.footer.changelog, href: `${DOCS_URL}/changelog`, site: 'other' },
   { label: COPY.footer.roadmap, href: `${DOCS_URL}/guide/roadmap`, site: 'other' },
+  { label: COPY.footer.why, href: `${DOCS_URL}/guide/why-delorun`, site: 'other' },
   { label: COPY.footer.questions, href: `${DOCS_URL}/guide/questions`, site: 'other' },
   { label: COPY.footer.knownIssues, href: `${DOCS_URL}/guide/known-issues`, site: 'other' },
   ...ARTICLE_COUNT === 0 ? [] : [{ label: COPY.footer.blog, href: '/blog' }],
