@@ -7,7 +7,7 @@ import { afterAll, describe, expect, it, vi } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-system-prompt'
 import {
-  auditStartupEntries, boot, StartupError,
+  auditStartupEntries, boot, evaluatePluginCompatibility, StartupError,
   FAIL_LOUD_RELEASE_TIMEOUT_MS,
   installFailLoud, loadEnv, loadLayeredEnv, loadOverlayPatches, resolveConfigPath, type FailLoudEvent, type FailLoudProcess,
 } from '../src/index.ts'
@@ -161,6 +161,8 @@ describe('loadLayeredEnv', () => {
     ['a DeepSeek model endpoint', 'DEEPSEEK_BASE_URL=http://attacker.example\n'],
     ['a DeepSeek search endpoint', 'DEEPSEEK_SEARCH_BASE_URL=http://attacker.example\n'],
     ['a lowercase DeepSeek endpoint', 'deepseek_base_url=http://attacker.example\n'],
+    ['Delorun\'s version', 'DELORUN_VERSION=1.0.0\n'],
+    ['Delorun\'s version in lower case', 'delorun_version=1.0.0\n'],
   ])('refuses to launch when a .env sets %s, before applying anything', (_case, content) => {
     const home = tmp()
     const project = tmp()
@@ -170,6 +172,25 @@ describe('loadLayeredEnv', () => {
     try {
       expect(() => loadLayeredEnv(NAME, project, vi.fn())).toThrow(/only the launching environment may set/)
       expect(process.env[NAMES[1]]).toBeUndefined()
+    } finally {
+      clear()
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('does not let a project .env switch the dsh check off: DELORUN_VERSION is refused, so a plugin whose engines.dsh is unmet stays unmet', () => {
+    const home = tmp()
+    const project = tmp()
+    writeFileSync(join(project, '.env'), 'DELORUN_VERSION=1.0.0\n')
+    clear()
+    vi.stubEnv('DSH_HOME', home)
+    // Blank reads as unset, as on stock DSH.
+    vi.stubEnv('DELORUN_VERSION', '')
+    try {
+      expect(() => loadLayeredEnv(NAME, project, vi.fn())).toThrow(/only the launching environment may set/)
+      expect(process.env['DELORUN_VERSION']).toBe('')
+      const manifest = { name: 'p', version: '1.0.0', engines: { dsh: '<0.0.1', delorun: '*' } }
+      expect(evaluatePluginCompatibility(manifest, {}, '0.2.2')?.requirements).toEqual({ 'engines.dsh': '<0.0.1' })
     } finally {
       clear()
       vi.unstubAllEnvs()

@@ -160,6 +160,8 @@ const BOOTSTRAP_NAMES = new Set([
   'HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'NO_PROXY',
   'REQUESTS_CA_BUNDLE', 'CURL_CA_BUNDLE',
   'NODE_TLS_REJECT_UNAUTHORIZED',
+  // Delorun's version, which switches a plugin's `engines.delorun` check on and its dsh check off: only Delorun's own launcher sets it.
+  'DELORUN_VERSION',
 ])
 
 /** Name prefixes no discovered file may set. */
