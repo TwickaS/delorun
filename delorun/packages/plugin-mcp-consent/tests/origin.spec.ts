@@ -259,6 +259,9 @@ describe('the origin of a server', () => {
     const [profile] = await startRows('always', [{ id: 'files', name: 'cordis:mcp', config: serverRow('files') }])
     expect(profile).toBeInstanceOf(McpConsentRefusedError)
     expect(ctx.get('mcpReviews')?.pending()[0]?.origin).toEqual({ kind: 'profile' })
+    // Nothing ran: a profile server waits for its acceptance before its command starts.
+    expect(mockConnect).not.toHaveBeenCalled()
+    expect(ctx.tools.get('mcp__files__remote')).toBeUndefined()
   })
 
   it('names a pack by the bundle that inserted the nearest row, and a third-party bundle around it before anything else', async () => {

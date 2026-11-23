@@ -4,11 +4,12 @@
  * Delorun look is on; these `:where()` rules, with no specificity, are the stock look and lose to them.
  */
 
+/* The dock stack is wider than the composer card by the side clearance on each side; the card starts at the composer's edge. */
 .card {
   width: fit-content;
-  max-width: min(100%, 520px);
+  max-width: min(calc(100% - 2 * var(--dsh-composer-side-clearance, 0px)), 520px);
   box-sizing: border-box;
-  margin: 0 0 8px;
+  margin: 0 0 8px var(--dsh-composer-side-clearance, 0px);
 }
 
 :where(.card) {
