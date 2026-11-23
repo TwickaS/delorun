@@ -58,8 +58,8 @@ export interface AlertProps {
   readonly secondary?: AlertAction | undefined
   /** The close button: its localised name and what it does. */
   readonly close?: AlertAction | undefined
-  /** Overrides the role the kind gives. */
-  readonly role?: 'status' | 'alert'
+  /** Overrides the role the kind gives; `note` marks a standing notice that is not announced as it appears. */
+  readonly role?: 'status' | 'alert' | 'note'
   /** Plays the leave transition, then calls `onClosed`. */
   readonly closing?: boolean
   /** Called once the leave transition has finished; unmount the alert here. */

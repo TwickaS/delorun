@@ -26,6 +26,12 @@ describe('the role', () => {
     expect(screen.getByRole('status')).toBeTruthy()
     expect(screen.queryByRole('alert')).toBeNull()
   })
+
+  it('can be a note, which is not a live region', () => {
+    render(<Alert kind="info" role="note" title="Restart to finish" />)
+    expect(screen.getByRole('note')).toBeTruthy()
+    expect(screen.queryByRole('status')).toBeNull()
+  })
 })
 
 describe('the anatomy', () => {

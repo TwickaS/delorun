@@ -16,6 +16,7 @@
     "./locale/*.json": "./locale/*.json"
   },
   "dependencies": {
+    "@delorun/brand": "workspace:*",
     "@delorun/contract-home-process": "workspace:*",
     "@delorun/contract-update-report": "workspace:*",
     "@delorun/home-process": "workspace:*",
