@@ -1,10 +1,10 @@
-# Bilingual-pair consistency record for 2026-11-23-release-log-entry-key-agility.md (docs/i18n/README.md): per heading
+# Bilingual-pair consistency record for 2026-11-23-delorun-release-log-entry-key-agility.md (docs/i18n/README.md): per heading
 # section, a hash of its English and Chinese blocks outside code blocks and generated regions.
 # After editing either side, bring the other along and re-record with:
-#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-11-23-release-log-entry-key-agility.md
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-11-23-delorun-release-log-entry-key-agility.md
 /agent-note-the-release-root-lists-the-log-entry-keys-and-logs-it-trusts:
-  en: d139270f4971e709
-  zh: d7587666dd689329
+  en: 8168f1133052f27e
+  zh: 87a578f0fcc39094
 /agent-note-the-release-root-lists-the-log-entry-keys-and-logs-it-trusts/problem:
   en: 73e63e3e48441540
   zh: 73e63e3e48441540

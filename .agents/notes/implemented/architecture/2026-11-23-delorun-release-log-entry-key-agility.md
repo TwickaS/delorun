@@ -2,7 +2,7 @@
 
 Status: implemented
 
-English | [中文](2026-11-23-release-log-entry-key-agility.zh.md)
+English | [中文](2026-11-23-delorun-release-log-entry-key-agility.zh.md)
 
 ## Problem
 
