@@ -5,7 +5,7 @@
  * contract C18's online check through `@delorun/install`, and leaves nothing under `~/.delorun/runtimes/` when any of them
  * refuses. A launcher never switches `current`: the store's install sets it only when the store has no runtime at all.
  * When `current` fails its start check and `previous` passes it, a run that starts Delorun (see {@link mayStartPrevious})
- * starts `previous` with `delorun recover rollback`, the one way back contract C3 defines, which switches the pointers
+ * starts `previous` with `delorun recover rollback`, once per run, the one way back contract C3 defines, which switches the pointers
  * only through its rollback table; every other command is refused with that command as its remedy, and runs nothing.
  *
  * @module @delorun/npm-launcher/launcher
@@ -300,7 +300,7 @@ async function startOrInstall(options: LauncherOptions): Promise<number> {
         return LAUNCHER_EXIT.failed
       }
       options.output.stderr(`Delorun did not start release ${String(rollback.current)}: it failed its start check. Starting release ${String(rollback.previous)}, the version before the last update, to roll back to it: delorun ${ROLLBACK_ARGS.join(' ')}\n`)
-      return start(options, { ...options.store.launchCommand(rollback.previous, options.profile, ROLLBACK_ARGS), version: rollback.previous, root: rollback.root, check: rollback.check, checkedAt: rollback.checkedAt }, ROLLBACK_ARGS)
+      return start(options, { ...options.store.launchCommand(rollback.previous, options.profile, ROLLBACK_ARGS), version: rollback.previous, root: rollback.root, check: rollback.check, checkedAt: rollback.checkedAt }, ROLLBACK_ARGS, true)
     }
     if (!(error instanceof RuntimeStoreError && error.code === 'NO_ACTIVE_RUNTIME')) throw error
   }
@@ -322,9 +322,12 @@ async function startOrInstall(options: LauncherOptions): Promise<number> {
  * @param options - the launch's inputs.
  * @param plan - the command, with the release and the root its start check verified it under.
  * @param args - the arguments the runtime is started with, which name its command.
+ * @param rolledBack - whether this start is itself the one rollback this run takes. It takes no second: the pointers are
+ *   read again for a rollback, so a run that may roll back once never reads them again to roll back a second time, which
+ *   would follow a change another process made to them meanwhile.
  * @returns the runtime's exit status, or {@link LAUNCHER_EXIT.failed} when the release-log check stops the start.
  */
-async function start(options: LauncherOptions, plan: CheckedPlan, args: readonly string[]): Promise<number> {
+async function start(options: LauncherOptions, plan: CheckedPlan, args: readonly string[], rolledBack = false): Promise<number> {
   if (options.startCheck !== undefined) {
     const check = await options.startCheck(plan.version, plan.root)
     for (const notice of check.notices ?? []) options.output.stderr(`Release log: ${notice}\n`)
@@ -334,15 +337,15 @@ async function start(options: LauncherOptions, plan: CheckedPlan, args: readonly
     if (check.stop) {
       // A release whose bundle is missing can be left by `delorun recover rollback`, which then starts `previous` as a
       // failed start check of `current` does; the rollback checks `previous`'s own release log first.
-      if (check.missingBundle !== undefined && runsOneOf(args, options.passedThrough, [ROLLBACK_ARGS])) {
+      if (!rolledBack && check.missingBundle !== undefined && runsOneOf(args, options.passedThrough, [ROLLBACK_ARGS])) {
         const rollback = await previousRollback(options)
         // `previous` naming this same release (a kill between the store's two pointer writes) is no release to roll back to.
         if (rollback !== undefined && rollback.current === plan.version && rollback.previous !== plan.version) {
           options.output.stderr(`Delorun did not start release ${String(plan.version)}: its release-log bundle is missing. Starting release ${String(rollback.previous)}, the version before the last update, to roll back to it: delorun ${ROLLBACK_ARGS.join(' ')}\n`)
-          return start(options, { ...options.store.launchCommand(rollback.previous, options.profile, ROLLBACK_ARGS), version: rollback.previous, root: rollback.root, check: rollback.check, checkedAt: rollback.checkedAt }, ROLLBACK_ARGS)
+          return start(options, { ...options.store.launchCommand(rollback.previous, options.profile, ROLLBACK_ARGS), version: rollback.previous, root: rollback.root, check: rollback.check, checkedAt: rollback.checkedAt }, ROLLBACK_ARGS, true)
         }
       }
-      options.output.stderr(failedStartText(plan.version, check, options.profile))
+      options.output.stderr(failedStartText(plan.version, check, options.profile, rolledBack))
       if (runtimeCommand(args) !== 'verify') return LAUNCHER_EXIT.failed
     }
   }
@@ -404,17 +407,22 @@ function rollbackRefusalText(options: Pick<LauncherOptions, 'args' | 'profile'>,
  * @param version - the release.
  * @param check - the failed check.
  * @param profile - the CLI profile, which the rollback remedy names.
+ * @param rolledBack - whether the release is the one a rollback started: the rollback is then no remedy, because it is
+ *   what led here, and the remedies are the bundle and `repair`.
  * @returns the redacted text, every line ending with a newline.
  */
-export function failedStartText(version: RuntimeVersion, check: LauncherStartCheck, profile: string): string {
+export function failedStartText(version: RuntimeVersion, check: LauncherStartCheck, profile: string, rolledBack = false): string {
   if (check.missingBundle !== undefined) {
+    const putBack = `put the bundle back: restore ${check.missingBundle} from a backup of this home, or download delorun-${String(version)}.manifest.log.json from the release page of v${String(version)} to that path; the next start checks it.`
     return renderLauncherRefusal({
       lead: `Delorun did not start release ${String(version)}: the release-log bundle stored beside it is missing.`,
       reason: codedReason(String(check.refusal), `no release-log bundle is stored at ${check.missingBundle}, and every install through the runtime store keeps the bundle it verified`),
-      remedies: [
-        `If an update installed release ${String(version)}, go back to the version before it: delorun ${ROLLBACK_ARGS.join(' ')}${profileOption({ profile })}`,
-        `Or put the bundle back: restore ${check.missingBundle} from a backup of this home, or download delorun-${String(version)}.manifest.log.json from the release page of v${String(version)} to that path; the next start checks it.`,
-      ],
+      remedies: rolledBack
+        ? [`Put the bundle back: ${putBack.slice('put the bundle back: '.length)}`, 'Or run npx delorun@latest repair.']
+        : [
+            `If an update installed release ${String(version)}, go back to the version before it: delorun ${ROLLBACK_ARGS.join(' ')}${profileOption({ profile })}`,
+            `Or ${putBack}`,
+          ],
     })
   }
   return renderLauncherRefusal({

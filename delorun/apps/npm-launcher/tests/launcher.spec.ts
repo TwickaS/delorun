@@ -1135,6 +1135,57 @@ describe('the release-log check at a start', () => {
     expect(plain.started).toBe(false)
   })
 
+  // The rollback is one step: whichever way the launcher reaches `previous`, another process that moves the pointers
+  // while `previous` starts must not turn it into a start of the release before it.
+  it.each([
+    ['current\'s release-log bundle is missing', 'bundle'],
+    ['current fails its start check', 'changed'],
+  ] as const)('takes one rollback only when %s: pointers that move while previous starts do not make a second step', async (_name, how) => {
+    const fixture = await fixtureRelease()
+    const current = version('0.3.0')
+    const previous = version('0.2.0')
+    const older = version('0.1.0')
+    const started: LaunchCommand[] = []
+    const checked: RuntimeVersion[] = []
+    let reads = 0
+    let printed = ''
+    const store: LauncherStore = {
+      prepareLaunch: how === 'changed'
+        ? () => Promise.reject(new RuntimeStoreError('RUNTIME_CHANGED', `/home/.delorun/runtimes/${current}`, `runtime ${current} differs from its signed file list: app/entry.js (sha256)`, ['reinstall', 'rollback']))
+        : request => Promise.resolve({ command: `/home/.delorun/runtimes/${current}/node/bin/node`, args: ['entry.js', ...request.args], env: {}, version: current, check: { full: false, hashed: 6, files: 40, fullCheckAt: 1_700_000_000_000 } }),
+      install: () => Promise.reject(new Error('the launcher must not install')),
+      retain: () => Promise.reject(new Error('the launcher must not retain')),
+      // The first read is the rollback's; after it another process moves the pointers one step, so that `current` names
+      // the release the launcher is rolling back to and `previous` names the one before it.
+      pointers: () => Promise.resolve(reads++ === 0 ? { current, previous } : { current: previous, previous: older }),
+      checkRuntime: checkedVersion => Promise.resolve({ version: checkedVersion, manifest: {} as VerifiedRuntime['manifest'], files: { files: [] } as Partial<VerifiedRuntime['files']> as VerifiedRuntime['files'], manifestSha256: '0'.repeat(64) }),
+      launchCommand: (launched, _profile, args) => ({ command: `/home/.delorun/runtimes/${launched}/node/bin/node`, args: ['entry.js', ...args], env: {} }),
+    }
+    const status = await runLauncher(launch({
+      home: await home({ root: fixture.roots[0]! }),
+      store,
+      channel: refusingChannel(new InstallError('INSTALL_VERIFY_FAILED', 'the channel', 'the channel must not be asked')),
+      roots: fixture.roots,
+      args: ['recover', 'rollback'],
+      spawn: (command) => { started.push(command); return Promise.resolve(0) },
+      stderr: (text) => { printed += text },
+      // The release the rollback starts has a missing bundle, and the one before it is sound: a second rollback would start it.
+      startCheck: (release) => {
+        checked.push(release)
+        return Promise.resolve(release === older ? { state: 'verified', stop: false } : { state: 'failed', stop: true, refusal: 'bundle-malformed', detail: 'missing', missingBundle: '/b' })
+      },
+    }))
+    expect(started).toEqual([])
+    expect(status).toBe(LAUNCHER_EXIT.failed)
+    expect(checked).toEqual(how === 'changed' ? [previous] : [current, previous])
+    expect(reads).toBe(1)
+    expect(printed).toContain(`Delorun did not start release ${previous}`)
+    expect(printed).not.toContain(`Starting release ${older}`)
+    // The rollback is what led here, so it is no remedy of the refusal.
+    expect(printed).not.toContain('go back to the version before it')
+    expect(printed).toContain('npx delorun@latest repair')
+  })
+
   it('does not start itself again when previous names the same release as current and its bundle is missing', async () => {
     const fixture = await fixtureRelease()
     const same = version('0.2.0')
