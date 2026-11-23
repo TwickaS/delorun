@@ -83,7 +83,8 @@ describe('checkDocker', () => {
   })
 })
 
-describe('delorun doctor when a check throws something other than an Error', () => {
+// It runs every doctor check in this process, like the in-process run in command.spec.ts, so it shares its limit.
+describe('delorun doctor when a check throws something other than an Error', { timeout: 60_000 }, () => {
   it('prints the thrown value as that check\'s failure line and runs the other checks', async () => {
     // The key check sets the launch variables on this process.
     for (const name of ['DSH_HOME', 'DELORUN_HOME', 'DELORUN_PROFILE']) vi.stubEnv(name, undefined)
