@@ -328,6 +328,11 @@
     },
     {
       "area": "Install and update",
+      "section": "Fixed",
+      "text": "`yarn add delorun` and `yarn dlx delorun` now install and start Delorun with Yarn 4's default Plug'n'Play, as `npx` does. They stopped with `TRUST_STATE_INVALID: the trust file cannot be written`. The launcher starts one plain Node process for itself under Plug'n'Play, and its package asks Yarn to unpack it. If Yarn keeps the package in a zip, the launcher says so in one line and names `nodeLinker: node-modules` and `npx delorun`."
+    },
+    {
+      "area": "Install and update",
       "section": "Security",
       "text": "Starting an installed runtime does not trust a release root merely because a file under `~/.delorun/trust/` names a newer version: the launcher keeps the root chain the install walked, checks that it leads from a root the launcher carries, and otherwise stops and offers a reinstall. It starts a runtime only when the release root the home stored is one the launcher ships."
     },
@@ -1963,6 +1968,11 @@
     },
     {
       "area": "Safety and privacy",
+      "section": "Changed",
+      "text": "With Ask me first, Delorun asks before starting an MCP server that comes from a plugin, a bundle someone else made, your editor or a place it could not identify. Servers you set up yourself and servers Delorun's packs install start without asking; a bundle that only carries a pack's name is not a pack, and an allowance given before this version asks once more for servers from plugins and editors. Settings, Safety, Permissions chooses which servers ask: Ask for project servers (the default), Always ask or Never ask; the choice changes only at your computer. A waiting server shows as a small card above the message box with Allow, Not now and Details, and an allowed server starts at once, with its tools in the open chat's next message."
+    },
+    {
+      "area": "Safety and privacy",
       "section": "Fixed",
       "text": "A chat never turns a plugin on at any protection level: with protection off, `undo` and `restore` in the plugin manager, and a turn-on whose `enabled` is not the boolean `false`, wait for you at the computer, as an install does."
     },
@@ -3138,6 +3148,36 @@
     }
   ],
   "versions": [
+    {
+      "version": "0.1.0-preview.3.1",
+      "date": "2026-11-23",
+      "preview": true,
+      "areas": [
+        {
+          "area": "Install and update",
+          "items": [
+            {
+              "section": "Fixed",
+              "text": "`yarn add delorun` and `yarn dlx delorun` now install and start Delorun with Yarn 4's default Plug'n'Play, as `npx` does. They stopped with `TRUST_STATE_INVALID: the trust file cannot be written`. The launcher starts one plain Node process for itself under Plug'n'Play, and its package asks Yarn to unpack it. If Yarn keeps the package in a zip, the launcher says so in one line and names `nodeLinker: node-modules` and `npx delorun`."
+            }
+          ]
+        },
+        {
+          "area": "Safety and privacy",
+          "items": [
+            {
+              "section": "Changed",
+              "text": "With Ask me first, Delorun asks before starting an MCP server that comes from a plugin, a bundle someone else made, your editor or a place it could not identify. Servers you set up yourself and servers Delorun's packs install start without asking; a bundle that only carries a pack's name is not a pack, and an allowance given before this version asks once more for servers from plugins and editors. Settings, Safety, Permissions chooses which servers ask: Ask for project servers (the default), Always ask or Never ask; the choice changes only at your computer. A waiting server shows as a small card above the message box with Allow, Not now and Details, and an allowed server starts at once, with its tools in the open chat's next message."
+            }
+          ]
+        }
+      ],
+      "fromUpstream": {
+        "ref": "dsh-v0.2.2-rc.3",
+        "items": []
+      },
+      "previews": []
+    },
     {
       "version": "0.1.0-preview.3",
       "date": "2026-11-23",
