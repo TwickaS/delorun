@@ -1,5 +1,6 @@
 /** The panel's data seat: the typed client interface the panel reads, the fake that stands in for it and the shared hub. */
 
+import { TransferRate } from '@delorun/plugin-packs/transfer'
 import type { Translate } from './locales.ts'
 
 /** Where one download stands; the install queue's states plus `waiting-for-unlock` for a phone install that awaits the unlock (A408, A413). */
@@ -151,6 +152,8 @@ interface Hub {
   page?: PageDownloads
   /** The provided source with the page's downloads after its items, made again when the source changes. */
   merged?: { readonly raw: DownloadsSource, readonly source: DownloadsSource }
+  /** One speed meter per running download, shared by every surface that shows it, with the count of surfaces using it. */
+  meters?: Map<string, { readonly rate: TransferRate, users: number }>
 }
 
 /** The page's own downloads and who follows them. */
@@ -401,4 +404,34 @@ export function provideUninstall(uninstall: (name: string) => Promise<void>): ()
  */
 export function providedUninstall(): ((name: string) => Promise<void>) | undefined {
   return hub().uninstall
+}
+
+/**
+ * The speed meter of one download, shared by every surface that shows it (the panel's rows and the setup guide's
+ * cards, in either plugin's bundle), so they read the same speed. Each call is paired with {@link releaseMeter}.
+ * @param key - the download's key.
+ * @returns the meter.
+ */
+export function acquireMeter(key: string): TransferRate {
+  const shared = hub()
+  shared.meters ??= new Map()
+  const found = shared.meters.get(key)
+  if (found !== undefined) {
+    found.users++
+    return found.rate
+  }
+  const made = { rate: new TransferRate(), users: 1 }
+  shared.meters.set(key, made)
+  return made.rate
+}
+
+/**
+ * Stop using a download's meter; the last surface to stop drops it, so a download that starts again is measured afresh.
+ * @param key - the download's key.
+ */
+export function releaseMeter(key: string): void {
+  const found = hub().meters?.get(key)
+  if (found === undefined) return
+  found.users--
+  if (found.users <= 0) hub().meters?.delete(key)
 }
