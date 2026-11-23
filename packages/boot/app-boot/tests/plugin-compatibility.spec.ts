@@ -223,3 +223,26 @@ describe('compatibility warning', () => {
     )
   })
 })
+
+describe('engines.delorun decides alone when Delorun\'s version is known', () => {
+  const delorun = '1.0.0'
+  const plugin = (engines: object, peerDependencies: object = {}) => ({ ...identity, engines, peerDependencies })
+
+  it('admits a met engines.delorun beside an unmet engines.dsh and unmet dsh peers', () => {
+    expect(evaluatePluginCompatibility(plugin({ delorun: '^1.0.0', dsh: '^99' }, { '@deepseek-ai/dsh': '^99' }), {}, runtime, delorun)).toBeUndefined()
+  })
+
+  it('refuses an unmet engines.delorun beside a met engines.dsh, naming no dsh requirement', () => {
+    const issue = evaluatePluginCompatibility(plugin({ delorun: '^2.0.0', dsh: '*' }), {}, runtime, delorun)
+    expect(issue?.delorun).toMatchObject({ status: 'unmet', requirement: '^2.0.0' })
+    expect(issue?.requirements).toEqual({})
+  })
+
+  it.each(['', ' '])('refuses an engines.delorun of %j as unreadable, not as any version, beside a met engines.dsh', (range) => {
+    expect(evaluatePluginCompatibility(plugin({ delorun: range, dsh: '*' }), {}, runtime, delorun)?.delorun?.status).toBe('unreadable')
+  })
+
+  it('reads engines.dsh as usual when Delorun\'s version is unknown', () => {
+    expect(evaluatePluginCompatibility(plugin({ delorun: '^1.0.0', dsh: '^99' }), {}, runtime, undefined)?.requirements).toEqual({ 'engines.dsh': '^99' })
+  })
+})

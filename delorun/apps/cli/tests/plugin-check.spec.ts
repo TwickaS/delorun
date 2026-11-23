@@ -194,6 +194,17 @@ describe('delorun plugin check', () => {
     }
   })
 
+  it('writes C1 controls and bidirectional marks in the --json range as \\uXXXX, and reads back as the same range', async () => {
+    for (const range of ['\u009b2J', '^0.1.0\u202e', '\u2066^0.1.0\u2069']) {
+      let out = ''
+      await runPluginCheck([plugin({ name: 'fixture', version: '1.0.0', engines: { delorun: range } }), '--json'], { env: {}, stdout: (text) => { out += text }, stderr: () => {} }, RUNNING)
+      expect(out).not.toMatch(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/u)
+      expect(out).toContain('\\u')
+      expect(out.trimEnd().split('\n')).toHaveLength(1)
+      expect(JSON.parse(out)).toMatchObject({ decidedBy: 'delorun', range: range.trim() })
+    }
+  })
+
   it('takes exactly one directory, through delorun plugin check', async () => {
     const context = { env: {}, stdout: () => {}, stderr: () => {} }
     await expect(runPluginCheck([], context, RUNNING)).rejects.toMatchObject({ exit: EXIT.usage })

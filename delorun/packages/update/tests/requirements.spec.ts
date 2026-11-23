@@ -167,6 +167,11 @@ describe('decidePluginVersion', () => {
     }
   })
 
+  it('describes an unreadable peers record as refused: none for peerDependencies that is not an object, peer for a range that is not a string', () => {
+    expect(decideOn({ peerDependencies: 'x' })).toEqual({ decidedBy: 'none', range: null, checkedAgainst: null, verdict: 'refused', readable: false })
+    expect(decideOn({ peerDependencies: { '@deepseek-ai/dsh-agent': 3 } })).toEqual({ decidedBy: 'peer', range: '@deepseek-ai/dsh-agent 3', checkedAgainst: '0.3.0', verdict: 'refused', readable: false })
+  })
+
   it('gives the range trimmed of leading and trailing whitespace', () => {
     expect(decideOn({ engines: { delorun: '  ^1.0.0 ' } })).toMatchObject({ range: '^1.0.0', verdict: 'admitted', readable: true })
     expect(decideOn({ engines: { dsh: ' ^0.3.0\n' } })).toMatchObject({ range: '^0.3.0', verdict: 'admitted' })
