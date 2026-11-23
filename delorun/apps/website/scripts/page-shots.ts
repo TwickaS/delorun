@@ -16,7 +16,7 @@ const MODES = ['full', 'noscript', 'reduced', 'focus', 'zoom'] as const
 /** The points of the hero's scroll, as fractions of its length, that `zoom` takes a picture at. */
 const ZOOM_POINTS = [0, 0.15, 0.35, 0.55, 0.75, 0.9] as const
 
-/** How long each zoom point waits for the sharper tiles the zoom loads once the scroll pauses, in milliseconds. */
+/** How long the page must finish no new picture and show no unfinished one before a zoom point is pictured, in milliseconds. */
 const ZOOM_SETTLE = 1500
 
 /** Tab presses before the focus search gives up. */
@@ -56,7 +56,25 @@ try {
         const hero = document.querySelector<HTMLElement>('section[aria-labelledby="home-hero"]')
         if (hero !== null) scrollTo(0, hero.offsetTop + at * (hero.offsetHeight - innerHeight))
       }, point)
-      await page.waitForTimeout(ZOOM_SETTLE)
+      // The zoom loads sharper tiles once the scroll pauses; the picture waits until they have all arrived.
+      await page.evaluate(quiet => new Promise<void>(done => {
+        let seen = -1
+        let since = performance.now()
+        const deadline = since + 15000
+        const check = () => {
+          const count = performance.getEntriesByType('resource').length
+          // A lazy picture far from the window never loads, so only those in the window are waited for.
+          const loading = [...document.images].some(img => {
+            const box = img.getBoundingClientRect()
+            return img.src !== '' && !img.complete && box.bottom > 0 && box.top < innerHeight && box.right > 0 && box.left < innerWidth
+          })
+          if (count !== seen || loading) { seen = count; since = performance.now() }
+          if (performance.now() - since >= quiet || performance.now() > deadline) done()
+          else setTimeout(check, 100)
+        }
+        check()
+      }), ZOOM_SETTLE)
+      await page.waitForTimeout(300)
       await page.screenshot({ path: out.replace(/\.png$/, '') + `-p${String(Math.round(point * 100)).padStart(2, '0')}.png` })
     }
   } else {
