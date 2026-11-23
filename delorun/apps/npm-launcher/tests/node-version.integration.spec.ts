@@ -9,6 +9,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { buildLauncher } from '../src/build.ts'
 import { fixtureRelease } from '../../install/tests/support.ts'
+import { loopRefusal, PNP_RERUN_ENV } from '../src/pnp.ts'
 import { MINIMUM_NODE, NODE_ENGINES_RANGE, nodeIsSupported, nodeRefusal } from '../src/node-version.ts'
 
 afterEach(() => {
@@ -95,4 +96,97 @@ describe('the entry the package’s bin runs', () => {
     const entry = await readFile(join(import.meta.dirname, '..', 'src', 'entry.ts'), 'utf8')
     expect(entry.match(/^import .*$/gmu)).toEqual(["import { nodeRefusal } from './node-version.ts'"])
   })
+})
+
+describe('the entry under Yarn\'s Plug\'n\'Play', () => {
+  it('leaves Plug\'n\'Play before it loads the launcher, and ends with the re-run\'s status', async () => {
+    const main = vi.fn()
+    const leavePnp = vi.fn(() => Promise.resolve({ action: 'exit' as const, code: 5 }))
+    vi.doMock('../src/bin.ts', () => ({ main }))
+    vi.doMock('../src/pnp.ts', () => ({ leavePnp, signalStatus: () => 1 }))
+    const underPnp = { ...process.versions, node: process.versions.node, pnp: '3' } as NodeJS.ProcessVersions
+    vi.spyOn(process, 'versions', 'get').mockReturnValue(underPnp)
+    vi.spyOn(process, 'argv', 'get').mockReturnValue(['node', 'delorun', '--help'])
+    await import('../src/entry.ts')
+    await vi.waitFor(() => expect(process.exitCode).toBe(5))
+    expect(leavePnp).toHaveBeenCalledWith(expect.objectContaining({ pnp: '3', argv: ['--help'] }))
+    expect(main).not.toHaveBeenCalled()
+    vi.doUnmock('../src/pnp.ts')
+  })
+
+  it('prints the refusal and exits 1 when the re-run cannot happen, without loading the launcher', async () => {
+    const main = vi.fn()
+    vi.doMock('../src/bin.ts', () => ({ main }))
+    vi.doMock('../src/pnp.ts', () => ({ leavePnp: () => Promise.resolve({ action: 'refuse', line: 'one line' }), signalStatus: () => 1 }))
+    const underPnp = { ...process.versions, node: process.versions.node, pnp: '3' } as NodeJS.ProcessVersions
+    vi.spyOn(process, 'versions', 'get').mockReturnValue(underPnp)
+    const written: string[] = []
+    vi.spyOn(process.stderr, 'write').mockImplementation((text: string | Uint8Array) => { written.push(String(text)); return true })
+    await import('../src/entry.ts')
+    await vi.waitFor(() => expect(process.exitCode).toBe(1))
+    expect(written.join('')).toBe('one line\n')
+    expect(main).not.toHaveBeenCalled()
+    vi.doUnmock('../src/pnp.ts')
+  })
+
+  it('raises the signal that ended the re-run on itself, and keeps the signal\'s status as its exit code', async () => {
+    vi.doMock('../src/bin.ts', () => ({ main: vi.fn() }))
+    vi.doMock('../src/pnp.ts', () => ({ leavePnp: () => Promise.resolve({ action: 'signal', signal: 'SIGTERM' }), signalStatus: () => 143 }))
+    const underPnp = { ...process.versions, node: process.versions.node, pnp: '3' } as NodeJS.ProcessVersions
+    vi.spyOn(process, 'versions', 'get').mockReturnValue(underPnp)
+    const kill = vi.spyOn(process, 'kill').mockImplementation(() => true)
+    await import('../src/entry.ts')
+    await vi.waitFor(() => expect(kill).toHaveBeenCalledWith(process.pid, 'SIGTERM'))
+    expect(process.exitCode).toBe(143)
+    vi.doUnmock('../src/pnp.ts')
+  })
+
+  it('says in one line that it could not leave Plug\'n\'Play, and exits 1, when the re-run cannot start', async () => {
+    vi.doMock('../src/bin.ts', () => ({ main: vi.fn() }))
+    vi.doMock('../src/pnp.ts', () => ({ leavePnp: () => Promise.reject(new Error('spawn ENOENT')), signalStatus: () => 1 }))
+    const underPnp = { ...process.versions, node: process.versions.node, pnp: '3' } as NodeJS.ProcessVersions
+    vi.spyOn(process, 'versions', 'get').mockReturnValue(underPnp)
+    const written: string[] = []
+    vi.spyOn(process.stderr, 'write').mockImplementation((text: string | Uint8Array) => { written.push(String(text)); return true })
+    await import('../src/entry.ts')
+    await vi.waitFor(() => expect(process.exitCode).toBe(1))
+    const text = written.join('')
+    expect(text).toBe(`Delorun could not leave Yarn's Plug'n'Play: spawn ENOENT. Set "nodeLinker: node-modules" in .yarnrc.yml, or run "npx delorun" instead.\n`)
+    vi.doUnmock('../src/pnp.ts')
+  })
+
+  it('does not load the re-run module without Plug\'n\'Play', async () => {
+    const leavePnp = vi.fn()
+    vi.doMock('../src/pnp.ts', () => ({ leavePnp, signalStatus: () => 1 }))
+    vi.doMock('../src/bin.ts', () => ({ main: () => Promise.resolve(0) }))
+    await import('../src/entry.ts')
+    await vi.waitFor(() => expect(process.exitCode).toBe(0))
+    expect(leavePnp).not.toHaveBeenCalled()
+    vi.doUnmock('../src/pnp.ts')
+  })
+})
+
+describe('the built entry under Plug\'n\'Play', () => {
+  it('refuses a second re-run with one line and exit 1, and reads and writes nothing', async () => {
+    const work = await mkdtemp(join(tmpdir(), 'delorun-launcher-pnp-'))
+    try {
+      const fixture = await fixtureRelease()
+      await writeFile(join(work, 'root.json'), fixture.roots[0]!)
+      const built = await buildLauncher({ roots: [join(work, 'root.json')], out: join(work, 'out'), version: '0.0.1-pnp' })
+      // The preload makes the built entry see Plug'n'Play, as Yarn's `--require .pnp.cjs` does.
+      await writeFile(join(work, 'pnp.cjs'), "Object.defineProperty(process.versions, 'pnp', { value: '3' })\n")
+      const home = join(work, 'home')
+      // This process is the entry's parent, so the marker says the entry is already the re-run.
+      const env = { PATH: process.env.PATH ?? '', DELORUN_HOME: home, [PNP_RERUN_ENV]: String(process.pid) }
+      const finished = spawnSync(process.execPath, ['--require', join(work, 'pnp.cjs'), join(built.directory, 'dist', 'bin.js'), '--version'], { encoding: 'utf8', env, timeout: 50_000 })
+      expect(finished.status, `signal ${String(finished.signal)}: ${finished.stderr}`).toBe(1)
+      expect(finished.stdout).toBe('')
+      expect(finished.stderr).toBe(`${loopRefusal()}\n`)
+      await expect(readdir(home)).rejects.toMatchObject({ code: 'ENOENT' })
+      const entry = await readFile(join(built.directory, 'dist', 'bin.js'), 'utf8')
+      expect(entry.match(/^import .*$/gmu) ?? []).toEqual([])
+    } finally {
+      await rm(work, { recursive: true, force: true })
+    }
+  }, 120_000)
 })

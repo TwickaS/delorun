@@ -12,8 +12,8 @@
   en: f4c19a7cd29de757
   zh: efe8bd86097ccc75
 /known-issues/contents:
-  en: 9bde38cdd754b000
-  zh: 695c3d471b1b9a72
+  en: 856edc18ea08ad0b
+  zh: b52d22e80b034db2
 /known-issues/where-delorun-runs:
   en: 02a5aeca78896854
   zh: 2acea932d03d67d2
@@ -49,7 +49,10 @@
   zh: cea783885b6620f3
 /known-issues/installing-a-plugin:
   en: 5ecfdbe1785e6343
-  zh: 828368d2e2a48c2d
+  zh: 97614530c864907c
+/known-issues/starting-with-yarn-s-plug-n-play:
+  en: 983e01a658ad6b84
+  zh: c899d83a5738f823
 /known-issues/documentation-languages:
   en: d9d76e3cab2da7f3
   zh: 2a652db0e466ddb1

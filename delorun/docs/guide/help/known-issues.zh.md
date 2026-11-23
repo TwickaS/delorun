@@ -26,6 +26,7 @@ description: "你在 Delorun 预览版中可能遇到的毛边，每条都写明
 - [Face ID on phones](#face-id-on-phones)
 - [Several agents at once](#several-agents-at-once)
 - [安装插件](#installing-a-plugin)
+- [Yarn 的 Plug'n'Play 下启动](#starting-with-yarns-plugnplay)
 - [文档语言](#documentation-languages)
 
 <a id="where-delorun-runs"></a>
@@ -125,6 +126,13 @@ description: "你在 Delorun 预览版中可能遇到的毛边，每条都写明
 **会发生什么。** `delorun plugin` 在你的 Delorun home 内运行 DeepSeek Harness 的插件安装器，不带 Delorun 的保护。插件拥有与 Delorun 相同的完全访问权限，而且在你安装之后，Delorun 不会再次检查插件的文件。
 
 **该怎么做。** 只安装你信任的插件，且来自你信任的来源。如果某个插件行为异常，请用 `delorun recover safe-mode` 以安全模式启动（[更新](../safety-and-updates/updates.zh.md#going-back)）。
+
+<a id="starting-with-yarns-plugnplay"></a>
+## Yarn 的 Plug'n'Play 下启动
+
+**会发生什么。** 使用 0.1.0-preview.3 及更早版本时，在采用 Yarn 4 默认 Plug'n'Play 的项目中运行 `yarn add delorun` 或 `yarn dlx delorun`，会以 `TRUST_STATE_INVALID: the trust file cannot be written` 停止。`npx delorun` 不受影响。
+
+**该怎么做。** 在 `.yarnrc.yml` 中设置 `nodeLinker: node-modules`，或者改用 `npx delorun`。0.1.0-preview.3.1 版本修复了此问题。
 
 <a id="documentation-languages"></a>
 ## 文档语言

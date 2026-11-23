@@ -102,6 +102,8 @@ function publishedManifest(version: string, constants: BuildConstants): string {
     bin: { delorun: 'dist/bin.js' },
     files: ['dist', ROOTS_DIRECTORY, 'LICENSE', 'README.md'],
     engines: { node: NODE_ENGINES_RANGE },
+    // Yarn's Plug'n'Play then unpacks the package to `.yarn/unplugged`, where the launcher can leave Plug'n'Play (see `pnp.ts`).
+    preferUnplugged: true,
     repository: { type: 'git', url: `git+${RELEASE_REPOSITORY_URL}.git` },
   }, undefined, 2)}\n`
 }
