@@ -61,12 +61,25 @@ export interface BuiltLauncher {
   readonly tarball: string
 }
 
+/** The address of Delorun's issue tracker, which the published package's `bugs` field names. */
+const ISSUES_URL = `${RELEASE_REPOSITORY_URL}/issues`
+
 /** The README npm shows for the published package. */
 const PUBLISHED_README = `# delorun
 
-\`npx delorun\` installs and starts Delorun. It checks the release it installs against its signed manifest and the release log, and installs nothing when either check refuses.
+**Your harness. No limits.** Delorun is an open-source agent harness that runs on your own computer and that you shape to the way you work. Change anything; undo everything.
 
-This package holds only the launcher. The program it installs comes from the release channel and is checked before it runs. The launcher needs Node ${MINIMUM_NODE[0]}.${MINIMUM_NODE[1]} or newer.
+\`\`\`sh
+npx delorun
+\`\`\`
+
+This package is the launcher. It installs Delorun from its release channel, checks the release against its signed manifest and the release log, and installs nothing when either check refuses. It needs Node ${MINIMUM_NODE[0]}.${MINIMUM_NODE[1]} or newer, on Linux or on Windows through WSL2.
+
+- Website: https://delorun.com
+- Docs: https://docs.delorun.com
+- Source and issues: ${RELEASE_REPOSITORY_URL}
+
+Delorun is an independent, community-driven continuation of DeepSeek Harness. It is not a DeepSeek product, and DeepSeek does not endorse it. MIT licence.
 `
 
 /**
@@ -81,6 +94,9 @@ function publishedManifest(version: string, constants: BuildConstants): string {
     name: 'delorun',
     version,
     description: custom ? 'Delorun launcher built for a local release channel' : 'Install and run Delorun',
+    keywords: ['delorun', 'agent-harness', 'ai-agents', 'coding-agent', 'deepseek-harness', 'dsh-plugin', 'cli'],
+    homepage: 'https://delorun.com',
+    bugs: { url: ISSUES_URL },
     license: 'MIT',
     type: 'module',
     bin: { delorun: 'dist/bin.js' },

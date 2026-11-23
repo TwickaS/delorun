@@ -141,7 +141,7 @@ A store refusal offers the store's own remedies as commands the person can run, 
 
 ## Building the package
 
-`src/build.ts` builds the package npm serves as `delorun` and packs it. The package holds the launcher bundled into plain JavaScript with its dependencies inlined (`dist/bin.js` and one chunk), the root files in `roots/`, `LICENSE` and a short `README.md`, with `bin` pointing at `dist/bin.js` and `engines.node` set to `>=24.9.0`; `npx` runs it on Node alone.
+`src/build.ts` builds the package npm serves as `delorun` and packs it. The package holds the launcher bundled into plain JavaScript with its dependencies inlined (`dist/bin.js` and one chunk), the root files in `roots/`, `LICENSE` and a short `README.md` (what the launcher does, the Node and platform it needs, the website, docs and source links, and the independence line from `BRAND_GUIDELINES.md`), with `bin` pointing at `dist/bin.js`, `engines.node` set to `>=24.9.0`, and `homepage`, `bugs` and `keywords` for npm's package page; `npx` runs it on Node alone.
 
 ```sh
 node_modules/.bin/tsx delorun/apps/npm-launcher/src/build.ts --root <root.json>... --out <dir> \
