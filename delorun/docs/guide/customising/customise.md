@@ -8,7 +8,7 @@ English | [中文](customise.zh.md)
 
 ## Summary
 
-You can reshape Delorun at six levels, from a setting in the studio to the harness's own source. Each level reaches further than the one before it and costs more at each update, so choose the first one that can make your change. None of them edits Delorun's signed release, though the last runs files you changed, and an update shows what it would turn off before it does ([updates never take your work away](../safety-and-updates/trust.md)).
+You can reshape Delorun at six levels, from a setting in the studio to the harness's own source. Each level reaches further than the one before it and costs more at each update, so choose the first one that can make your change. None of them edits Delorun's signed release, though the last runs files you changed, and an update shows what it would turn off before it does (see [What you trust](../safety-and-updates/trust.md) and [Updates](../safety-and-updates/updates.md)).
 
 ## Contents
 

@@ -28,6 +28,7 @@
 页面中的每个相对链接都在构建时解析。遇到指向不存在文件的链接，构建失败。
 
 - 指向已发布页面的链接变为该页面的路由。
+- A link to a file at the repository's top level, such as `SECURITY.md`, `GOVERNANCE.md` or `AGENTS.md`, becomes its URL in Delorun's GitHub repository: those are the project's own files, which upstream lacks or has in another form.
 - 指向上游仓库文件的链接变为它在 [`deepseek-ai/deepseek-harness`](https://github.com/deepseek-ai/deepseek-harness) 中的 URL。
 - 指向其他 Delo 文件（例如契约或威胁模型）的链接变为写明该文件名的代码文本，因为站点只发布用户指南和参考资料。
 - 中文页面按位置采用英文页面的标题 id，使目录链接在两种语言中都能解析；这些链接由成对的一致性记录固定。

@@ -44,14 +44,14 @@ export async function loadSectionPage(section: Section, locale: Locale, splat: s
 }
 
 /**
- * The document head of a section page: its title is its first heading, its description is the frontmatter's, and its
- * canonical URL is its route on the published site.
+ * The document head of a section page: its title is its first heading followed by the site's title, as the changelog
+ * page's is, its description is the frontmatter's, and its canonical URL is its route on the published site.
  * @param data - the loader's data, absent when the page was not found.
  * @returns the head's meta and link tags.
  */
 export function sectionHead(data: SectionPageData | undefined) {
   if (data === undefined) return {}
-  return pageHead({ title: data.title, description: data.description, path: routeOf(data.section, data.slugs, data.locale === 'zh'), locale: data.locale })
+  return pageHead({ title: `${data.title} · ${COPY[data.locale].siteTitle}`, description: data.description, path: routeOf(data.section, data.slugs, data.locale === 'zh'), locale: data.locale })
 }
 
 /**

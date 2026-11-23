@@ -15,7 +15,7 @@ import { sources } from './source.ts'
 
 /**
  * The Markdown of one page: its source without frontmatter, with each link resolved as the page's HTML links are, so a
- * link to another page names that page's route and a link to an unpublished Delorun file reads as its path.
+ * link to another page names that page's route and a link to an unpublished Delorun file names its URL on GitHub.
  * @param section - the section.
  * @param slug - the route slug, which {@link markdownSlugOf} produces.
  * @param locale - the locale.
@@ -29,8 +29,7 @@ export function pageMarkdown(section: Section, slug: readonly string[], locale: 
   const file = join(root, 'delorun/docs', section, page.path)
   const source = readFileSync(file, 'utf8').replace(/^---\n[\s\S]*?\n---\n/, '')
   return source.replace(/\[([^\]]*)\]\(([^)\s]+)\)/g, (_link, text: string, href: string) => {
-    const resolved = resolveLink(file, href, root)
-    return resolved.kind === 'href' ? `[${text}](${resolved.href})` : `\`${resolved.path}\``
+    return `[${text}](${resolveLink(file, href, root).href})`
   })
 }
 

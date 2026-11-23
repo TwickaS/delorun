@@ -2,10 +2,10 @@
   "title": "Everyday use",
   "pages": [
     "daily-use",
+    "reach",
+    "agents",
     "cost-meter",
     "thinking-tab",
-    "use-your-own-browser",
-    "reach",
-    "agents"
+    "use-your-own-browser"
   ]
 }
