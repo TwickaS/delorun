@@ -63,8 +63,8 @@ export interface PluginEntryCardProps extends Omit<LiHTMLAttributes<HTMLLIElemen
   /** The artwork's address; the default plugin artwork shows when absent. */
   icon?: string | undefined
   /**
-   * Open the plugin's page. When set, the title is a button that covers the whole card and the card highlights on
-   * hover; the action stays above it.
+   * Open the plugin's page. When set, the title is a button that covers the whole card, and the action stays above it;
+   * when absent, the card does not highlight on hover, since pressing it does nothing.
    */
   onOpen?: (() => void) | undefined
   /** The accessible name of the open button, such as "Open Browser"; the title when absent. */
@@ -100,7 +100,7 @@ export function PluginEntryCard({
   const Title = heading === undefined ? 'span' : HEADINGS[heading]
   return (
     <li {...item} className={className === undefined ? css.card : `${css.card} ${className}`}
-      data-openable={onOpen === undefined ? undefined : ''} data-clamp={clamp ? undefined : 'false'}>
+      data-static={onOpen === undefined ? '' : undefined} data-clamp={clamp ? undefined : 'false'}>
       <PluginEntryIcon src={icon} />
       <div className={css.main}>
         <div className={css.titleRow}>

@@ -26,7 +26,7 @@
 }
 
 @media (hover: hover) {
-  .card[data-openable]:hover {
+  .card:not([data-static]):hover {
     background: var(--dsw-alias-interactive-bg-hover);
   }
 }
