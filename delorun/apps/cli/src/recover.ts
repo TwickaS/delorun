@@ -188,8 +188,10 @@ export async function rollbackOffline(home: string, profile: string, profileOnly
     }
     const path = journalPath(home, profile)
     const record = await readJournal(path)
-    // The record's target runs, or `current` is unreadable, or a rollback that began is to be completed.
-    const applies = record !== undefined && (current === undefined || current === record.to || record.phase === 'rolling-back')
+    // The record's target runs, or `current` is unreadable, or a rollback that began is to be completed: it began when
+    // the pointers named the target, and they name the source once it has switched them, so any other `current` is no
+    // rollback of this record, and nothing is restored before this refusal.
+    const applies = record !== undefined && (current === undefined || current === record.to || (record.phase === 'rolling-back' && current === record.from))
     if (record === undefined || !applies) {
       if (!profileOnly) {
         context.stderr('delorun recover: NO_UPDATE_RECORD: no update to the running release is recorded, so there is nothing to roll back; delorun recover rollback --profile-only restores the latest profile snapshot.\n')

@@ -121,6 +121,23 @@ describe('delorun recover', () => {
     expect(readFileSync(path, 'utf8')).toBe(journal)
   })
 
+  it('refuses to complete a rollback that began when `current` names neither the update\'s target nor its source, and restores nothing', async () => {
+    const path = journalPath(delorunHome, 'default')
+    mkdirSync(join(delorunHome, 'run', 'default'), { recursive: true, mode: 0o700 })
+    // The rollback of 0.1.0 to 0.2.0 began and stopped before it switched the pointers, and `current` has moved on since.
+    await writeJournal(path, { from: release('0.1.0'), to: release('0.2.0'), previous: undefined, startedAt: '2026-11-01T00:00:00.000Z', dataDiffers: false, copy: false, targetStarted: true }, 'rolling-back')
+    for (const version of ['0.1.0', '0.2.0', '0.3.0']) mkdirSync(join(delorunHome, 'runtimes', version), { recursive: true, mode: 0o700 })
+    writeFileSync(join(delorunHome, 'runtimes', 'current'), '0.3.0\n')
+    writeFileSync(join(delorunHome, 'runtimes', 'previous'), '0.2.0\n')
+    const journal = readFileSync(path, 'utf8')
+    const result = await delorun(['recover', 'rollback'])
+    expect(result.code).toBe(EXIT.failed)
+    expect(result.stderr).toContain('NO_UPDATE_RECORD')
+    expect(readFileSync(join(delorunHome, 'runtimes', 'current'), 'utf8')).toBe('0.3.0\n')
+    expect(readFileSync(join(delorunHome, 'runtimes', 'previous'), 'utf8')).toBe('0.2.0\n')
+    expect(readFileSync(path, 'utf8')).toBe(journal)
+  })
+
   it('prints what a rollback through the running home process tells the person, the chats it set aside included', async () => {
     await ensureHomeTree(delorunHome, 'default')
     await writeNewStartToken(delorunHome, 'default')
