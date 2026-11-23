@@ -44,11 +44,11 @@ describe('buildUpdateReport', () => {
       const byKind = rank(left) - rank(right)
       return byKind !== 0 ? byKind : left.slice(left.indexOf(':') + 1).localeCompare(right.slice(right.indexOf(':') + 1), 'en')
     }))
-    expect(pluginNames(report)).toEqual(['bridge', 'broken', 'calendar', 'exempt-plugin', 'legacy', 'legacy-x', 'notes', 'old-exempt', 'revoked-plugin', 'weird'])
+    expect(pluginNames(report)).toEqual(['bridge', 'broken', 'calendar', 'exempt-plugin', 'legacy', 'legacy-x', 'old-exempt', 'revoked-plugin', 'weird'])
   })
 
   it('counts every effect and the unverified items beside them', () => {
-    expect(buildUpdateReport(input()).counts).toEqual({ disabled: 9, removed: 1, changed: 0, unverified: 4, data: 0, harness: 0 })
+    expect(buildUpdateReport(input()).counts).toEqual({ disabled: 9, removed: 1, changed: 0, unverified: 3, data: 0, harness: 0 })
     expect(countItems([])).toEqual({ disabled: 0, removed: 0, changed: 0, unverified: 0, data: 0, harness: 0 })
   })
 
@@ -71,7 +71,8 @@ describe('buildUpdateReport', () => {
   it('leaves a compatible plugin out of the items and out of the counts', () => {
     const report = buildUpdateReport(input())
     expect(pluginNames(report)).not.toContain('dsh-tools')
-    expect(report.items.find(item => item.kind === 'plugin' && item.subject.name === 'notes')).toMatchObject({ reason: 'requirement-undeclared', effect: 'kept', verification: 'unverified' })
+    // `notes` declares only engines.delorun, which the target meets and which decides alone (A567), so its compatibility is stated.
+    expect(pluginNames(report)).not.toContain('notes')
   })
 
   it('is empty when nothing changes', () => {

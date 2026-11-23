@@ -4,7 +4,7 @@
  * exemption files).
  */
 import { describe, expect, it } from 'vitest'
-import { evaluatePluginAxes, exempted, exemptionKey, requirementText, satisfiesRange } from '../src/index.ts'
+import { decidePluginVersion, evaluatePluginAxes, exempted, exemptionKey, requirementText, satisfiesRange } from '../src/index.ts'
 import { version } from './support.ts'
 
 /** The versions the default spec checks against: DSH 0.2.2 to 0.3.0, Delorun 0.9.0 to 1.0.0. */
@@ -98,7 +98,7 @@ describe('evaluatePluginAxes', () => {
     const record = { dsh: { 'plugin@1.0.0': [version('0.3.0')] }, delorun: {} }
     expect(decide({ engines: { dsh: 42 } }, record).dsh).toEqual({ kind: 'unreadable' })
     expect(decide({ peerDependencies: { '@deepseek-ai/dsh-agent': 3 } }).dsh).toEqual({ kind: 'unreadable' })
-    expect(decide({ engines: { delorun: ['^1.0.0'] } })).toEqual({ dsh: { kind: 'undeclared' }, delorun: { kind: 'unreadable' } })
+    expect(decide({ engines: { delorun: ['^1.0.0'] } })).toEqual({ dsh: { kind: 'not-checked' }, delorun: { kind: 'unreadable' } })
     expect(decide({ engines: '^0.3.0' })).toEqual({ dsh: { kind: 'unreadable' }, delorun: { kind: 'unreadable' } })
   })
 
@@ -110,5 +110,69 @@ describe('evaluatePluginAxes', () => {
     expect(decide({ engines: { delorun: '^0.10.0' } }).delorun).toEqual({ kind: 'unmet', requirement: '^0.10.0' })
     expect(decide({ engines: { delorun: '^1.0.0' } }).delorun).toEqual({ kind: 'compatible' })
     expect(decide({ engines: { delorun: '^0.10.0' } }, { dsh: {}, delorun: { 'plugin@1.0.0': [version('1.0.0')] } }).delorun.kind).toBe('exempted')
+  })
+})
+
+describe('engines.delorun decides alone (A567)', () => {
+  it('leaves the DSH axis unchecked when engines.delorun is declared, whatever the DSH ranges say', () => {
+    expect(decide({ engines: { delorun: '^1.0.0', dsh: '^0.2.0' } })).toEqual({ dsh: { kind: 'not-checked' }, delorun: { kind: 'compatible' } })
+    expect(decide({ engines: { delorun: '^1.0.0' }, peerDependencies: { '@deepseek-ai/dsh-agent': '^0.2.0' } })).toEqual({ dsh: { kind: 'not-checked' }, delorun: { kind: 'compatible' } })
+    expect(decide({ engines: { delorun: '^1.0.0', dsh: 42 } })).toEqual({ dsh: { kind: 'not-checked' }, delorun: { kind: 'compatible' } })
+  })
+
+  it('refuses on the Delorun axis alone when engines.delorun is unmet and engines.dsh is met', () => {
+    expect(decide({ engines: { delorun: '^0.10.0', dsh: '^0.3.0' } })).toEqual({ dsh: { kind: 'not-checked' }, delorun: { kind: 'unmet', requirement: '^0.10.0' } })
+  })
+
+  it('keeps the DSH exemption from admitting a plugin decided on engines.delorun', () => {
+    const record = { dsh: { 'plugin@1.0.0': [version('0.3.0')] }, delorun: {} }
+    expect(decide({ engines: { delorun: '^0.10.0', dsh: '^0.2.0' } }, record).delorun).toEqual({ kind: 'unmet', requirement: '^0.10.0' })
+  })
+})
+
+describe('decidePluginVersion', () => {
+  const decideOn = (fields: Readonly<Record<string, unknown>>, delorun = '1.0.0', dsh = '0.3.0') => decidePluginVersion(fields, delorun, dsh)
+
+  it('only engines.delorun: decided by delorun', () => {
+    expect(decideOn({ engines: { delorun: '^1.0.0' } })).toEqual({ decidedBy: 'delorun', range: '^1.0.0', checkedAgainst: '1.0.0', verdict: 'admitted', readable: true })
+    expect(decideOn({ engines: { delorun: '^0.10.0' } })).toMatchObject({ decidedBy: 'delorun', verdict: 'refused', readable: true })
+  })
+
+  it('only engines.dsh: decided by dsh, and peers do not count beside it', () => {
+    expect(decideOn({ engines: { dsh: '^0.3.0' } })).toEqual({ decidedBy: 'dsh', range: '^0.3.0', checkedAgainst: '0.3.0', verdict: 'admitted', readable: true })
+    expect(decideOn({ engines: { dsh: '^0.2.0' } })).toMatchObject({ decidedBy: 'dsh', verdict: 'refused' })
+    expect(decideOn({ engines: { dsh: '^0.3.0' }, peerDependencies: { '@deepseek-ai/dsh-agent': '^0.2.0' } })).toMatchObject({ decidedBy: 'dsh', verdict: 'admitted' })
+  })
+
+  it('both declared, engines.delorun admitting and engines.dsh refusing: admitted by delorun', () => {
+    expect(decideOn({ engines: { delorun: '^1.0.0', dsh: '^0.2.0' } })).toEqual({ decidedBy: 'delorun', range: '^1.0.0', checkedAgainst: '1.0.0', verdict: 'admitted', readable: true })
+  })
+
+  it('both declared, engines.delorun refusing and engines.dsh admitting: refused by delorun', () => {
+    expect(decideOn({ engines: { delorun: '^0.10.0', dsh: '^0.3.0' } })).toMatchObject({ decidedBy: 'delorun', range: '^0.10.0', checkedAgainst: '1.0.0', verdict: 'refused' })
+  })
+
+  it('only DSH peers: decided by peer; nothing declared: none', () => {
+    const peers = { '@deepseek-ai/dsh-agent': '^0.3.0', 'react': '^18.0.0' }
+    expect(decideOn({ peerDependencies: peers })).toEqual({ decidedBy: 'peer', range: '@deepseek-ai/dsh-agent ^0.3.0', checkedAgainst: '0.3.0', verdict: 'admitted', readable: true })
+    expect(decideOn({ peerDependencies: { '@deepseek-ai/dsh-agent': '^0.2.0' } })).toMatchObject({ decidedBy: 'peer', verdict: 'refused' })
+    expect(decideOn({})).toEqual({ decidedBy: 'none', range: null, checkedAgainst: null, verdict: 'admitted', readable: true })
+    expect(decideOn({ peerDependencies: { react: '^18.0.0' } })).toMatchObject({ decidedBy: 'none', verdict: 'admitted' })
+  })
+
+  it('refuses a declaration it cannot read, and does not fall back to the DSH ranges', () => {
+    expect(decideOn({ engines: { delorun: 3, dsh: '^0.3.0' } })).toEqual({ decidedBy: 'delorun', range: null, checkedAgainst: '1.0.0', verdict: 'refused', readable: false })
+    expect(decideOn({ engines: { dsh: 3 } })).toMatchObject({ decidedBy: 'dsh', verdict: 'refused', readable: false })
+    expect(decideOn({ engines: 'x' })).toMatchObject({ decidedBy: 'none', verdict: 'refused', readable: false })
+  })
+
+  it('takes prereleases into ranges, ignores name and version, and applies no exemption', () => {
+    expect(decideOn({ engines: { delorun: '^0.1.0-0' } }, '0.1.0-preview.3')).toMatchObject({ verdict: 'admitted' })
+    expect(decideOn({ name: '', version: 7, engines: { dsh: '^0.2.0' } })).toMatchObject({ verdict: 'refused', readable: true })
+  })
+
+  it('refuses a version that is not a semantic version', () => {
+    expect(() => decideOn({}, 'one')).toThrow(RangeError)
+    expect(() => decideOn({}, '1.0.0', 'x')).toThrow(RangeError)
   })
 })

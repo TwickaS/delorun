@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'vitest'
 import { evaluatePluginCompatibility } from '@deepseek-ai/dsh-app-boot'
 import { UpdateReportError, buildUpdateReport, confirmationNeeds, confirmsWithoutAsking, disabledPluginNames, readInstalledPlugin, reasonMessage, requirementText } from '../src/index.ts'
-import { FROM, TO, input, installed, profile, reasonOf, status, target, unreadable, version } from './support.ts'
+import { FROM, TO, exemptions, input, installed, profile, reasonOf, status, target, unreadable, version } from './support.ts'
 
 /** A profile of one plugin whose `package.json` does not parse. */
 const UNREADABLE = profile({ plugins: [unreadable('broken', '1.0.0')] })
@@ -44,6 +44,30 @@ describe('c03-delorun-requirement-excludes-target', () => {
   it('names both target versions for a DSH mismatch too', () => {
     const report = buildUpdateReport(input({ profile: profile({ plugins: [installed('calendar', '2.0.0', { dsh: '^0.2.0' })] }) }))
     expect(reasonMessage(report.items[0]!, report)).toBe('calendar requires DSH ^0.2.0; Delorun 1.0.0 runs DSH 0.3.0.')
+    expect(reasonOf(report, 'calendar')).toBe('dsh-requirement-unmet')
+  })
+})
+
+describe('pin-delorun-axis-decides-alone', () => {
+  it('keeps a plugin whose engines.delorun the target meets although its engines.dsh does not', () => {
+    const report = buildUpdateReport(input({ profile: profile({ plugins: [installed('bridge', '0.5.0', { dsh: '^0.2.0', delorun: '^1.0.0' })] }) }))
+    expect(report.items).toEqual([])
+    expect(disabledPluginNames(report)).toEqual([])
+  })
+
+  it('disables a plugin whose engines.delorun the target does not meet although its engines.dsh does, naming the Delorun axis only', () => {
+    const report = buildUpdateReport(input({ profile: profile({ plugins: [installed('bridge', '0.5.0', { dsh: '^0.3.0', delorun: '^0.10.0' })] }) }))
+    expect(report.items).toHaveLength(1)
+    expect(report.items[0]).toMatchObject({ reason: 'delorun-requirement-unmet', effect: 'disabled', detail: { axis: 'delorun', requirement: '^0.10.0' } })
+  })
+
+  it('does not let a DSH exemption keep a plugin whose engines.delorun the target does not meet', () => {
+    const report = buildUpdateReport(input({ profile: profile({ plugins: [installed('bridge', '0.5.0', { dsh: '^0.2.0', delorun: '^0.10.0' })], exemptions: exemptions({ 'bridge@0.5.0': [TO.dsh] }) }) }))
+    expect(report.items).toMatchObject([{ reason: 'delorun-requirement-unmet', effect: 'disabled' }])
+  })
+
+  it('decides a plugin without engines.delorun on its DSH range as before', () => {
+    const report = buildUpdateReport(input({ profile: profile({ plugins: [installed('calendar', '2.0.0', { dsh: '^0.2.0' })] }) }))
     expect(reasonOf(report, 'calendar')).toBe('dsh-requirement-unmet')
   })
 })

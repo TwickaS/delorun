@@ -162,10 +162,16 @@ describe('checkPlugins', () => {
     expect(about(await check(), 'acme-tools')[1]).toEqual({ name: 'plugin', subject: 'acme-tools', status: 'fail', message: 'acme-tools@1.2.0 requires DSH "^0.1.0" (engines.dsh), and this is DSH 0.2.2, so the installer and the start\'s version check refuse it; update or remove the plugin, or accept the risk with: delorun plugin --profile default allow-version acme-tools@1.2.0 --dsh-version 0.2.2 --accept-risk' })
   })
 
-  it('fails a DSH peer range and a Delorun range, offering no exemption that would not admit the plugin', async () => {
+  it('fails a plugin decided on engines.delorun by that range alone, whatever its DSH peers say, offering no exemption', async () => {
     profile({ 'acme-tools': '^1.0.0' }, ['acme-tools'])
     installed('acme-tools', { version: '1.2.0', engines: { delorun: '^0.3.0' }, peerDependencies: { '@deepseek-ai/dsh-agent': '^0.1.0' }, dsh: { bundle: {} } })
-    expect(about(await check(), 'acme-tools')[1]!.message).toBe('acme-tools@1.2.0 requires DSH "^0.1.0" (peer @deepseek-ai/dsh-agent), and this is DSH 0.2.2; acme-tools@1.2.0 requires Delorun "^0.3.0" (engines.delorun), and this is Delorun 0.4.0, so the installer and the start\'s version check refuse it; update or remove the plugin.')
+    expect(about(await check(), 'acme-tools')[1]!.message).toBe('acme-tools@1.2.0 requires Delorun "^0.3.0" (engines.delorun), and this is Delorun 0.4.0; its DSH ranges are not checked on Delorun, so the installer and the start\'s version check refuse it; update or remove the plugin.')
+  })
+
+  it('passes a plugin whose engines.delorun is met although its engines.dsh and DSH peers are not', async () => {
+    profile({ 'acme-tools': '^1.0.0' }, ['acme-tools'])
+    installed('acme-tools', { version: '1.2.0', engines: { dsh: '^0.1.0', delorun: '^0.4.0' }, peerDependencies: { '@deepseek-ai/dsh-agent': '^0.1.0' }, dsh: { bundle: {} } })
+    expect(about(await check(), 'acme-tools').filter(line => line.status !== 'pass')).toEqual([])
   })
 
   it('fails an engines.delorun that is not a string, and a version field the installer refuses', async () => {
@@ -173,7 +179,7 @@ describe('checkPlugins', () => {
     installed('unreadable', { version: '1.0.0', engines: { delorun: 3 } })
     installed('malformed', { version: '1.0.0', engines: { dsh: 3 } })
     const lines = await check()
-    expect(about(lines, 'unreadable')[1]!.message).toBe('unreadable@1.0.0 declares engines.delorun in a form Delorun cannot read, so the installer and the start\'s version check refuse it; update or remove the plugin.')
+    expect(about(lines, 'unreadable')[1]!.message).toBe('unreadable@1.0.0 declares engines.delorun in a form Delorun cannot read; its DSH ranges are not checked on Delorun, so the installer and the start\'s version check refuse it; update or remove the plugin.')
     expect(about(lines, 'malformed')[1]).toMatchObject({ status: 'fail', message: expect.stringMatching(/^malformed@1\.0\.0 declares its version ranges in a form the installer refuses \(.*engines\.dsh must be a string.*\); update or remove the plugin\.$/) })
   })
 
