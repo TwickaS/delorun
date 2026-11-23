@@ -1,5 +1,9 @@
 /** The words for Delorun's own plugin packs, by the signed package name, with the signed name as the fallback. */
-import type { DownloadsLocaleKey, Translate } from './locales.ts'
+import { fallbackTranslate, type DownloadsLocaleKey, type Translate } from './locales.ts'
+import { providedTranslate } from './source.ts'
+
+/** The key the browser download Browser needs (Chromium, through its installer) shows under in the panel. */
+export const BROWSER_DOWNLOAD_KEY = 'delorun:browser-download'
 
 /** Dictionary keys of the packs the release ships, by package name. */
 export const PACK_TITLE_KEYS: Readonly<Record<string, DownloadsLocaleKey>> = {
@@ -12,6 +16,7 @@ export const PACK_TITLE_KEYS: Readonly<Record<string, DownloadsLocaleKey>> = {
   '@delorun/bundle-computer-use-driver': 'pack.computerUseDriver',
   '@deepseek-ai/dsh-subagent-claude-code': 'pack.claudeCode',
   '@deepseek-ai/dsh-subagent-codex': 'pack.codex',
+  [BROWSER_DOWNLOAD_KEY]: 'pack.chromium',
 }
 
 /**
@@ -24,4 +29,15 @@ export function nameOf(item: { readonly key: string, readonly title?: string }, 
   if (item.title !== undefined) return item.title
   const key = Object.hasOwn(PACK_TITLE_KEYS, item.key) ? PACK_TITLE_KEYS[item.key] : undefined
   return key === undefined ? item.key : t(key)
+}
+
+/**
+ * The words for one of Delorun's plugin packs in the plugin's bound copy: the one source of a pack's title for the
+ * downloads panel and the setup guide's cards alike.
+ * @param name - the signed package name.
+ * @returns the title, or undefined for a package that is not one of Delorun's packs.
+ */
+export function packTitle(name: string): string | undefined {
+  const key = Object.hasOwn(PACK_TITLE_KEYS, name) ? PACK_TITLE_KEYS[name] : undefined
+  return key === undefined ? undefined : (providedTranslate() ?? fallbackTranslate)(key)
 }

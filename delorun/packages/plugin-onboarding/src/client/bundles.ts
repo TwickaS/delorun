@@ -8,7 +8,7 @@ import type { ClientRemote } from '@deepseek-ai/dsh-api-remotes/client'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { LocalizedText } from '@deepseek-ai/dsh-package-manifest'
 import { randomUUID } from '@deepseek-ai/dsh-util-crypto'
-import { currentDownloadsSource } from '@delorun/plugin-downloads/row'
+import { currentDownloadsSource, startPageDownload, type PageDownload } from '@delorun/plugin-downloads/row'
 import { createPacksClient } from '@delorun/plugin-packs/client'
 import { packView, type PackView, type PacksResult, type PacksSnapshot } from '@delorun/plugin-packs/wire'
 
@@ -55,6 +55,8 @@ export interface BundleInstallerOptions {
   readonly addWaitMs: () => number
   /** How often a slow add re-reads the plugin manager's state, in milliseconds. */
   readonly pollMs: number
+  /** A package's title in the studio's language, for the downloads panel's row of an add this page runs. */
+  readonly resolveText: (text: LocalizedText) => string
 }
 
 /** What the steps use to offer bundles. */
@@ -171,6 +173,17 @@ export function packReason(pack: PackView | undefined): string | undefined {
 function pluginManager(ctx: Context): ClientRemote['pluginManager'] | undefined {
   const namespace: ClientRemote['pluginManager'] | undefined = ctx.get('remote.pluginManager')
   return namespace
+}
+
+/**
+ * End the downloads panel's row of an install this page ran, as its card ended.
+ * @param shown - the row.
+ * @param view - how the card ended.
+ */
+function endShown(shown: PageDownload, view: { readonly state: BundleState, readonly reason?: string | undefined }): void {
+  if (view.state === 'installed') shown.done()
+  else if (view.state === 'restart') shown.done(true)
+  else shown.failed(view.reason)
 }
 
 /**
@@ -365,6 +378,10 @@ export function createBundleInstaller(ctx: Context, options: BundleInstallerOpti
     }
     if (before?.state !== 'available' || bundle === undefined || remote === undefined) return
     set(name, { ...before, state: 'installing' })
+    const target = bundle.availability === 'missing' ? bundle.installTarget : undefined
+    // The plugin manager's own install is not in the Host's install queue; the downloads panel shows it from this page.
+    // Switching on a bundle the installation ships downloads nothing, so it shows as installing.
+    const shown = startPageDownload(name, { title: before.title === undefined ? undefined : options.resolveText(before.title), state: target === undefined ? 'installing' : 'downloading' })
     let done = false
     const finish = (view: BundleView): void => {
       if (done) return
@@ -372,6 +389,7 @@ export function createBundleInstaller(ctx: Context, options: BundleInstallerOpti
       clearTimeout(slowTimer)
       clearInterval(pollTimer)
       set(name, view)
+      endShown(shown, view)
     }
     // After the wait the card says the add is still working, and the plugin manager's own state is read until it reports an outcome.
     const slowTimer = setTimeout(() => { if (!done) set(name, { ...before, state: 'slow' }) }, options.addWaitMs())
@@ -384,7 +402,6 @@ export function createBundleInstaller(ctx: Context, options: BundleInstallerOpti
       }, () => undefined)
     }, options.pollMs)
     try {
-      const target = bundle.availability === 'missing' ? bundle.installTarget : undefined
       const result = target === undefined
         ? await remote.setBundleEnabled(name, true)
         : await remote.installBundle(target.spec, {
@@ -435,15 +452,20 @@ export function createBundleInstaller(ctx: Context, options: BundleInstallerOpti
       const before = rows.getSnapshot()[id]
       if (before?.state !== 'available' || entry === undefined || remote === undefined) return
       setRow(id, { ...before, state: 'installing' })
+      // Turning on a row downloads nothing, so it shows as installing.
+      const shown = startPageDownload(id, { title: before.title === undefined ? undefined : options.resolveText(before.title), state: 'installing' })
       inflightRows.add(id)
       try {
         const result = await remote.setPluginEnabled(entry, true)
         const application = result.ok ? result.value.application : 'failed'
-        setRow(id, { ...before, state: application === 'applied' ? 'installed' : application === 'restart-required' ? 'restart' : 'failed' })
+        const state = application === 'applied' ? 'installed' : application === 'restart-required' ? 'restart' : 'failed'
+        setRow(id, { ...before, state })
+        endShown(shown, { state })
       } catch (error) {
         // The outcome is unknown here; Plugins shows what the profile holds and can finish it.
         console.warn('delorun onboarding: the optional plugin was not turned on', error)
         setRow(id, { ...before, state: 'failed' })
+        endShown(shown, { state: 'failed' })
       } finally { inflightRows.delete(id) }
     },
     openPlugins: () => { ctx.get('pluginNavigation')?.openList() },

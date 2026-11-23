@@ -186,9 +186,8 @@ describe('the header words and the queue wording', () => {
 
   it('names the place in the queue as next, or by how many are ahead', () => {
     render(<Card source={createFakeDownloadsSource([item('a', { state: 'queued', position: 1 }), item('b', { state: 'queued', position: 2 }), item('c', { state: 'queued', position: 3 })])} />)
-    expect(screen.getByText('Waiting · next')).toBeTruthy()
-    expect(screen.getByText('Waiting · 1 ahead')).toBeTruthy()
-    expect(screen.getByText('Waiting · 2 ahead')).toBeTruthy()
+    // The status draws its digits apart (Figures), so it is read whole.
+    expect([...document.querySelectorAll('[class*="status"]')].map(each => each.textContent)).toEqual(['Waiting · next', 'Waiting · 1 ahead', 'Waiting · 2 ahead'])
   })
 
   it('counts the badge and the header from the same number', () => {

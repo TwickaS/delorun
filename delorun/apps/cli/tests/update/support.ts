@@ -25,9 +25,8 @@ import {
 } from '@delorun/contract-release-manifest'
 import { publicKeyEntry, signEnvelope } from '@delorun/release-formats/sign/envelope'
 import { toJsonValue } from '@delorun/release-formats/sign/json'
-import { progressLines } from '@delorun/install'
 import { recordResult } from '@delorun/release-verify'
-import type { ChannelRelease, OpenUpdateChannel, ReleaseFileBytes, UpdateReleaseChannel } from '@delorun/runtime-store'
+import type { ChannelRelease, OpenUpdateChannel, ReleaseFileBytes, UpdateInstallEvent, UpdateReleaseChannel } from '@delorun/runtime-store'
 
 /** How one fake release's successor behaves. */
 export interface FakeBehaviour {
@@ -219,7 +218,7 @@ export function writeClosure(directory: string, files: Record<string, FakeFile>)
 }
 
 /**
- * A release channel over fake releases: it names the release the spec points it at, writes the launcher's line for
+ * A release channel over fake releases: it names the release the spec points it at, reports the install step for
  * it, fills the staging directory with its signed files, as `@delorun/install`'s channel does after its checks, and
  * records each release the store installed.
  */
@@ -228,7 +227,7 @@ export class FakeChannel implements UpdateReleaseChannel {
   next: RuntimeVersion
   /** The releases the store installed, in order. */
   readonly recorded: RuntimeVersion[] = []
-  private line: (text: string) => void = () => {}
+  private report: (event: UpdateInstallEvent) => void = () => {}
 
   private readonly root: RootMetadata
   private readonly key: KeyObject
@@ -253,15 +252,15 @@ export class FakeChannel implements UpdateReleaseChannel {
     this.next = first
   }
 
-  /** Opens this channel for one prepare, writing its lines where the prepare asks. */
-  readonly open: OpenUpdateChannel = async (line) => {
-    this.line = line
+  /** Opens this channel for one prepare, reporting its steps where the prepare asks. */
+  readonly open: OpenUpdateChannel = async (report) => {
+    this.report = report
     return this
   }
 
   async resolve(target: RuntimeVersion | undefined): Promise<ChannelRelease> {
     const version = target ?? this.next
-    for (const text of progressLines({ step: 'resolved', channel: 'stable', version: brandString<SemanticVersion>(version) })) this.line(text)
+    this.report({ step: 'resolved', channel: 'stable', version: brandString<SemanticVersion>(version) })
     // As the launcher's channel stores the timestamp it verified, which names the release it confirmed as current.
     writeFileSync(join(this.home, DELORUN_HOME_ENTRIES.trust, TRUST_FILES.timestamp), JSON.stringify({ signed: { version: 1, channels: { stable: { release: version } } } }), { mode: 0o600 })
     return Promise.resolve({ version, root: this.root })

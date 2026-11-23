@@ -6,7 +6,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./transfer": "./src/transfer.ts"
   },
   "dependencies": {
     "@deepseek-ai/dsh-brand": "workspace:*",

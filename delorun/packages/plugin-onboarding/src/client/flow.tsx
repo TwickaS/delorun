@@ -109,7 +109,8 @@ export function buildSteps({ services, guide, record, extra, reach, phone, devic
   if (!first) {
     if (!covered(STEPS.look.id)) built.push({ ...STEPS.look, title: () => t('step.look'), render: next => <LookStep {...props} next={next} /> })
     if (!covered(STEPS.agents.id)) built.push({ ...STEPS.agents, title: () => t('step.agents'), render: () => <AgentsStep {...props} /> })
-    if ((plugins.length > 0 || optionalRows.length > 0) && !covered(STEPS.plugins.id)) built.push({ ...STEPS.plugins, title: () => t('step.plugins'), render: () => <PluginsStep {...props} /> })
+    // The Browser pack has its own step, so it alone does not make Recommended plugins worth showing.
+    if ((plugins.some(name => name !== BROWSER_BUNDLE) || optionalRows.length > 0) && !covered(STEPS.plugins.id)) built.push({ ...STEPS.plugins, title: () => t('step.plugins'), render: () => <PluginsStep {...props} /> })
     // Browser has its own step where the plugins step offers its pack, or the pack is already in the profile.
     const browserOffered = plugins.includes(BROWSER_BUNDLE) && !covered(STEPS.plugins.id)
     if (browserOffered || browserAdded) built.push({ ...STEPS.browser, title: () => t('step.browser'), render: () => <BrowserStep {...props} /> })

@@ -1,13 +1,20 @@
 // @vitest-environment jsdom
 import { Context } from '@deepseek-ai/cordis'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { currentDownloadsSource } from '@delorun/plugin-downloads/row'
 import { createBundleInstaller, stateOf } from '../src/client/bundles.ts'
 
 // The Host's packs routes publish no pack, so the bundles read as the plugin manager lists them.
 beforeEach(() => { vi.stubGlobal('fetch', () => Promise.resolve(Response.json({ supported: true, release: '0.1.0', packs: [], queue: [] }))) })
 /** Make the Host's packs routes answer that it has no plugin packs, with a reason. */
 const noPacks = (): void => { vi.stubGlobal('fetch', () => Promise.resolve(Response.json({ supported: false, reason: 'no packs here', packs: [], queue: [] }))) }
-afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals() })
+afterEach(() => {
+  vi.restoreAllMocks()
+  vi.unstubAllGlobals()
+  for (const item of currentDownloadsSource().snapshot()) currentDownloadsSource().remove(item.key)
+})
+/** The downloads panel's row of a key, as every downloads surface reads it. */
+const panelRow = (key: string) => currentDownloadsSource().snapshot().find(item => item.key === key)
 
 interface Row {
   name: string
@@ -17,7 +24,7 @@ interface Row {
   error?: { code: string; message?: string; diagnostic?: string }
   readOnlyReason?: string
   installed?: boolean
-  meta?: { title?: string | { en: string }; description?: string }
+  meta?: { title?: string | { en: string; zh?: string }; description?: string }
 }
 
 const row = (change: Partial<Row> & { name: string }): Row => ({ availability: 'installation', enabled: false, ...change })
@@ -37,7 +44,7 @@ function bench(rows: readonly Row[] | 'refused' | 'rejects' | 'no-remote', optio
   if (rows !== 'no-remote') ctx.provide('remote.pluginManager', pluginManager as never)
   const openList = vi.fn()
   ctx.provide('pluginNavigation', { openList } as never)
-  const installer = createBundleInstaller(ctx, { addWaitMs: () => options.addWaitMs ?? 60_000, pollMs: 1000 })
+  const installer = createBundleInstaller(ctx, { addWaitMs: () => options.addWaitMs ?? 60_000, pollMs: 1000, resolveText: text => (typeof text === 'string' ? text : text.zh ?? text.en) })
   return { ctx, installer, pluginManager, openList, state: (name: string) => installer.views.getSnapshot()[name] }
 }
 
@@ -317,7 +324,7 @@ describe('opening Plugins', () => {
     const { installer, openList } = bench([])
     installer.openPlugins()
     expect(openList).toHaveBeenCalledOnce()
-    const bare = createBundleInstaller(new Context(), { addWaitMs: () => 1000, pollMs: 1000 })
+    const bare = createBundleInstaller(new Context(), { addWaitMs: () => 1000, pollMs: 1000, resolveText: text => (typeof text === 'string' ? text : text.en) })
     expect(() => { bare.openPlugins() }).not.toThrow()
   })
 })
@@ -345,6 +352,24 @@ describe('the bundled rows', () => {
     await flush()
     expect(rowState()).toEqual({ state: 'available', title: { en: 'Cost meter' }, description: 'Estimated cost.', icon: 'data:image/png;base64,AA==' })
     expect(setPluginEnabled).not.toHaveBeenCalled()
+  })
+
+  it('lists a row being turned on in the downloads panel as installing, until it is on or failed', async () => {
+    let answer: (value: { ok: true, value: { application: string } }) => void = () => undefined
+    const { installer, setPluginEnabled } = rowBench(false)
+    setPluginEnabled.mockImplementationOnce(() => new Promise((resolve) => { answer = resolve }))
+    installer.refreshRows(['delorun-cost-meter'])
+    await flush()
+    const turning = installer.enableRow('delorun-cost-meter')
+    expect(panelRow('delorun-cost-meter')).toMatchObject({ state: 'installing', title: 'Cost meter', local: { retry: false } })
+    answer({ ok: true, value: { application: 'applied' } })
+    await turning
+    expect(panelRow('delorun-cost-meter')?.state).toBe('ready')
+    const refused = rowBench(false, undefined, { application: 'overridden' })
+    refused.installer.refreshRows(['delorun-cost-meter'])
+    await flush()
+    await refused.installer.enableRow('delorun-cost-meter')
+    expect(panelRow('delorun-cost-meter')?.state).toBe('failed')
   })
 
   it('turns a row on through the plugin manager by its entry, without a restart', async () => {
@@ -481,5 +506,36 @@ describe('a pack the Host downloads', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+})
+
+describe('the downloads panel during an add the plugin manager runs', () => {
+  it('lists a catalog install from the press until it ends, with the package\'s title in the studio\'s language', async () => {
+    let answer: (value: { ok: true, value: { application: 'applied' } }) => void = () => undefined
+    // The bench resolves titles as a studio in Chinese would.
+    const { installer, pluginManager } = bench([row({ name: 'a', availability: 'missing', installTarget: { spec: '@scope/a@1.2.3', version: '1.2.3' }, meta: { title: { en: 'English A', zh: 'A' } } })])
+    pluginManager.installBundle.mockImplementationOnce(() => new Promise((resolve) => { answer = resolve }))
+    installer.refresh(['a'])
+    await flush()
+    const adding = installer.install('a')
+    await flush()
+    expect(panelRow('a')).toMatchObject({ state: 'downloading', title: 'A', local: { retry: false } })
+    answer({ ok: true, value: { application: 'applied' } })
+    await adding
+    expect(panelRow('a')?.state).toBe('ready')
+  })
+
+  it('lists a shipped bundle switched on, and ends a refusal as failed in the plugin manager\'s words', async () => {
+    const { installer, pluginManager } = bench([row({ name: 'a' }), row({ name: 'b' })], { change: { application: 'restart-required' } })
+    installer.refresh(['a', 'b'])
+    await flush()
+    const switching = installer.install('a')
+    // A shipped bundle downloads nothing, so its row starts as installing.
+    expect(panelRow('a')?.state).toBe('installing')
+    await switching
+    expect(panelRow('a')?.state).toBe('needs-reload')
+    pluginManager.setBundleEnabled.mockResolvedValueOnce({ ok: false, error: { code: 'refused', message: 'no', diagnostic: 'Not allowed here' } } as never)
+    await installer.install('b')
+    expect(panelRow('b')).toMatchObject({ state: 'failed', failure: { message: 'Not allowed here' } })
   })
 })

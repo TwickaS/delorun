@@ -5,7 +5,7 @@
  * setup unattended (`delorun setup --yes`, the answers a person takes by accepting every default), then the first
  * `delorun start` to the studio's first page. The install's steps are read from the times the launcher's progress
  * lines arrived; the launcher prints each line when its step finishes, except the download line, which it prints as
- * the download begins.
+ * the download begins, and the unpack line ends the download and starts the store's install.
  *
  * @module @delorun/benchmarks/suites/install
  */
@@ -38,11 +38,11 @@ export const INSTALL_ITEMS: Readonly<Record<string, string>> = {
  */
 export function installItems(finished: Finished): Record<string, number> {
   const at = (pattern: RegExp): number | undefined => firstMatch(finished.lines, pattern)?.at
-  const resolved = at(/^Resolving the release/u)
-  const signature = at(/^Checking the signature/u)
-  const log = at(/^Checking the release log/u)
+  const resolved = at(/^✔ Found release /u)
+  const signature = at(/^✔ Signature checked/u)
+  const log = at(/^[✔!] Release log /u)
   const download = at(/^Downloading /u)
-  const installing = at(/^Installing release /u)
+  const installing = at(/^✔ Unpacked the runtime/u)
   const version = at(/^Delorun \d/u)
   const items: Record<string, number | undefined> = {
     'install': finished.endedAt - finished.startedAt,

@@ -175,7 +175,7 @@ describe('delorun update end to end', TIMEOUT, () => {
       expect(result.stderr).toBe('')
       expect(result.code).toBe(EXIT.ok)
       expect(result.stdout).toContain('Update from Delorun 1.0.0 (DSH 0.2.2) to Delorun 1.1.0')
-      expect(result.stdout).toContain('… checking\nResolving the release: the stable channel names 1.1.0.\n… installing\n')
+      expect(result.stdout).toContain('… checking\n✔ Found release 1.1.0 on the stable channel\n… installing\n')
       expect(channel.recorded).toEqual([v('1.1.0')])
       expect(result.stdout).not.toContain('Chat data:')
       expect(result.stdout).toContain('Delorun 1.1.0 runs now.')

@@ -270,6 +270,12 @@ describe('the Browser step\'s place in the guide', () => {
     expect(steps.slice(steps.indexOf(STEPS.plugins.id), steps.indexOf(STEPS.plugins.id) + 2)).toEqual(['plugins', 'browser'])
   })
 
+  it('stands without Recommended plugins when the Browser pack is the only plugin offered', () => {
+    const steps = ids({ plugins: [BROWSER_BUNDLE] })
+    expect(steps).toContain('browser')
+    expect(steps).not.toContain('plugins')
+  })
+
   it('is left out of a first open, where the pack is offered or added', () => {
     const first = (browserAdded: boolean): string[] => buildSteps({
       services: stepServices({ plugins: [BROWSER_BUNDLE] }), guide: createGuide(hostFake().host), record: NO_RECORD,

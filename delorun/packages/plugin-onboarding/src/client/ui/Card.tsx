@@ -4,13 +4,11 @@
  * letter tile, so every title in a list starts at the same place.
  */
 import { CardIcon } from '@delorun/brand'
-import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
-import { useEffect, useId, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import css from './ListRow.module.css'
+import { Summary } from './Summary.tsx'
 
-/** A description longer than this many characters is shortened to one line with the full text behind "More". */
-export const SUMMARY_LIMIT = 140
+export { SUMMARY_LIMIT } from './Summary.tsx'
 
 /** The props of the card. */
 export interface CardProps {
@@ -36,11 +34,11 @@ export interface CardProps {
 
 /**
  * The tinted letter tile for something that has no logo here; brand's {@link CardIcon} draws it.
- * @param props - the name the tint comes from and, optionally, the letter to show.
+ * @param props - the name the tint comes from and, optionally, the letter to show and the side in pixels (32 by default).
  * @returns the tile, hidden from assistive technology because the title says the same.
  */
-export function Monogram({ name, letters }: { readonly name: string; readonly letters?: string | undefined }): ReactNode {
-  return <CardIcon name={name} letter={letters} />
+export function Monogram({ name, letters, size }: { readonly name: string; readonly letters?: string | undefined; readonly size?: number | undefined }): ReactNode {
+  return <CardIcon name={name} letter={letters} size={size} />
 }
 
 /**
@@ -49,21 +47,6 @@ export function Monogram({ name, letters }: { readonly name: string; readonly le
  * @returns the card.
  */
 export function Card({ title, icon, monogram, description, labels, leading, action, children, selected = false }: CardProps): ReactNode {
-  const [open, setOpen] = useState(false)
-  const id = useId()
-  const summary = useRef<HTMLParagraphElement>(null)
-  // A narrow row cuts a shorter description at two lines too, so the clamp itself is measured.
-  const [clipped, setClipped] = useState(false)
-  useEffect(() => {
-    const element = summary.current
-    if (element === null || open || typeof ResizeObserver === 'undefined') return
-    const measure = (): void => { setClipped(element.scrollHeight > element.clientHeight + 1) }
-    measure()
-    const observer = new ResizeObserver(measure)
-    observer.observe(element)
-    return () => { observer.disconnect() }
-  }, [description, open])
-  const long = description !== undefined && (description.length > SUMMARY_LIMIT || clipped || open)
   return (
     <div className={css.card} data-selected={selected || undefined}>
       <div className={css.row} data-described={description !== undefined || undefined}>
@@ -73,12 +56,7 @@ export function Card({ title, icon, monogram, description, labels, leading, acti
         </span>
         <div className={css.text}>
           <h4 className={css.title}>{title}</h4>
-          {description !== undefined && <p id={id} ref={summary} className={css.summary} data-open={open || undefined}>{description}</p>}
-          {long && (
-            <Button variant="ghost" size="sm" className={css.more} aria-expanded={open} aria-controls={id} onClick={() => { setOpen(!open) }}>
-              {open ? labels.less : labels.more}
-            </Button>
-          )}
+          {description !== undefined && <Summary text={description} labels={labels} />}
         </div>
         {action !== undefined && <div className={css.action}>{action}</div>}
       </div>

@@ -13,7 +13,8 @@ import { existsSync } from 'node:fs'
 import { join, relative, sep, resolve } from 'node:path'
 import { DELORUN_HOME_ENTRIES } from '@delorun/contract-home-layout'
 import { hostPacksEnvironment } from '@delorun/plugin-packs/environment'
-import { acquirePacks, fetchPack, installFetchedPack, readStoredPacks } from '@delorun/runtime-store'
+import { createRenderer, type InstallRenderer } from '@delorun/install'
+import { acquirePacks, fetchPack, installFetchedPack, packDownloadSize, readStoredPacks } from '@delorun/runtime-store'
 import { profileDirectory } from './profile.ts'
 import type { PreStartContext } from './pre-start.ts'
 
@@ -60,6 +61,45 @@ export function profilePacksStep(fetchPacks: FetchProfilePacks): (context: PreSt
   }
 }
 
+/** How {@link fetchPacksShown} reaches one pack: its name and size, its download and its install. */
+export interface ShownPackSteps<Fetched> {
+  /**
+   * The pack a folder names, and the size of what fetching it downloads.
+   * @throws when the release publishes no such pack.
+   */
+  readonly entry: (folder: string) => { readonly name: string, readonly bytes: number }
+  /** Downloads the pack, reporting the bytes received so far. */
+  readonly fetch: (name: string, onBytes: (received: number) => void) => Promise<Fetched>
+  /** Installs a fetched pack. */
+  readonly install: (fetched: Fetched) => Promise<void>
+}
+
+/**
+ * Fetch and install packs one after the other, with every step on the install display: the same bar, speed and time
+ * left as the launcher's download.
+ * @param folders - the pack folder names.
+ * @param steps - how each pack is found, downloaded and installed.
+ * @param display - the install display.
+ * @returns when every pack is installed.
+ * @throws what a step throws, after the display shows the failure.
+ */
+export async function fetchPacksShown<Fetched>(folders: readonly string[], steps: ShownPackSteps<Fetched>, display: Pick<InstallRenderer, 'handle' | 'fail' | 'close'>): Promise<void> {
+  try {
+    for (const folder of folders) {
+      const { name, bytes } = steps.entry(folder)
+      display.handle({ step: 'pack-downloading', name, bytes })
+      const fetched = await steps.fetch(name, (received) => { display.handle({ step: 'pack-bytes', name, received, total: bytes }) })
+      display.handle({ step: 'pack-installing', name, bytes })
+      await steps.install(fetched)
+      display.handle({ step: 'pack-installed', name })
+    }
+  } catch (error) {
+    display.fail()
+    throw error
+  }
+  display.close()
+}
+
 /**
  * Fetch and install packs through the running installation's verified release and channel.
  * @param context - the start.
@@ -73,10 +113,13 @@ export const fetchPacksFromRelease: FetchProfilePacks = async (context, folders)
   const release = await environment.release()
   const packs = await readStoredPacks(release) ?? await acquirePacks(release, environment.files)
   if (packs === undefined) throw new Error(`release ${release.version} publishes no plugin packs`)
-  for (const folder of folders) {
-    const entry = packs.packs.find(each => each.name.replaceAll('/', '__') === folder)
-    if (entry === undefined) throw new Error(`release ${release.version} publishes no plugin pack ${folder.replace('__', '/')}`)
-    await installFetchedPack(release, await fetchPack(release, entry.name, environment.files))
-    context.output.stdout(`Fetched ${entry.name}\n`)
-  }
+  await fetchPacksShown(folders, {
+    entry: (folder) => {
+      const entry = packs.packs.find(each => each.name.replaceAll('/', '__') === folder)
+      if (entry === undefined) throw new Error(`release ${release.version} publishes no plugin pack ${folder.replace('__', '/')}`)
+      return { name: entry.name, bytes: packDownloadSize(entry, release.paths.platform) }
+    },
+    fetch: (name, onBytes) => fetchPack(release, name, environment.files, { onBytes }),
+    install: async (fetched) => { await installFetchedPack(release, fetched) },
+  }, createRenderer(text => { context.output.stdout(text) }, process.stdout, process.env))
 }

@@ -52,7 +52,7 @@ import { NO_RECORD, SETUP_RECORD_PATH, SetupRecord } from '../wire.ts'
 import { createPreviewFlagsStore } from '@delorun/preview-flags/client'
 import { createBrowserSetup, REAL_BROWSER_BUNDLE } from '@delorun/browser-setup'
 import { runBrowserInstall, runBrowserTest } from '@delorun/bundle-local/browser-check-api'
-import { turnBrowserOff } from './browser-pack.ts'
+import { downloadBrowserShown, turnBrowserOff } from './browser-pack.ts'
 import { BrowserSettings, type BrowserSettingsInjected } from './browser/BrowserSettings.tsx'
 import { createBundleInstaller } from './bundles.ts'
 import { closeSidebarDrawer } from './focus.ts'
@@ -214,7 +214,7 @@ export function applyStudio(ctx: Context): void {
       subscribe: listener => progress.subscribe(listener),
     },
     test: () => runBrowserTest((input, init) => globalThis.fetch(input, init)),
-    download: () => runBrowserInstall((input, init) => globalThis.fetch(input, init)),
+    download: () => downloadBrowserShown(() => runBrowserInstall((input, init) => globalThis.fetch(input, init))),
     turnOff: () => turnBrowserOff(ctx),
     // Looked up on click, as for the PIN link above.
     openSettings: (section) => { ctx.get('settingsShell')?.openSection(section) },
@@ -235,6 +235,7 @@ export function applyStudio(ctx: Context): void {
   const installer = createBundleInstaller(ctx, {
     addWaitMs: () => (progress.getSnapshot().value?.addWaitSeconds ?? DEFAULT_SETTINGS.addWaitSeconds) * 1000,
     pollMs: 3000,
+    resolveText: text => ctx.locale.resolveText(text),
   })
   const services = (): StaticServices => ({
     notice: notice(),

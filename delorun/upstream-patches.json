@@ -2562,7 +2562,7 @@
       "path": "packages/client/ui-primitives/src/index.ts",
       "class": "delorun-feature",
       "feature": "phone-settings",
-      "reason": "Exports usePhone and its media query."
+      "reason": "Exports usePhone and its media query, and the plugin entry row (plugin-entry-rows) the market and the setup guide share."
     },
     {
       "path": "packages/client/ui-shortcuts/src/client/Reference.tsx",
@@ -3295,6 +3295,30 @@
       "class": "generic-fix",
       "feature": "typecheck-strictness",
       "reason": "Type-parameter erasure for a mixed table; offer upstream."
+    },
+    {
+      "path": "packages/client/ui-plugin-market/src/client/DiscoverSection.module.css",
+      "class": "delorun-feature",
+      "feature": "plugin-entry-rows",
+      "reason": "The entry row's rules move to ui-primitives' PluginEntry, which the market and Delorun's setup guide share."
+    },
+    {
+      "path": "packages/client/ui-plugin-market/src/client/DiscoverSection.tsx",
+      "class": "delorun-feature",
+      "feature": "plugin-entry-rows",
+      "reason": "Draws its entry rows, skeleton and entry artwork with ui-primitives' PluginEntry, shared with Delorun's setup guide; rendering is unchanged."
+    },
+    {
+      "path": "packages/client/ui-primitives/src/PluginEntry.module.css",
+      "class": "delorun-feature",
+      "feature": "plugin-entry-rows",
+      "reason": "Styles of the shared plugin entry row, moved from the market's Discover tab."
+    },
+    {
+      "path": "packages/client/ui-primitives/src/PluginEntry.tsx",
+      "class": "delorun-feature",
+      "feature": "plugin-entry-rows",
+      "reason": "The market's plugin entry row as a primitive, so Delorun's setup guide draws its recommended plugins like the market (a plugin cannot import another plugin's component)."
     }
   ],
   "retired": []

@@ -43,12 +43,15 @@
 }
 
 .name {
+  display: -webkit-box;
   overflow: hidden;
   color: var(--dsw-alias-label-primary);
   font-size: var(--dsw-font-s-14-font-size);
   line-height: var(--dsw-font-s-14-line-height);
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  /* A long pack title wraps to a second line; only a third is cut. */
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .row[data-tone='quiet'] .name {
@@ -61,7 +64,6 @@
   color: var(--dsw-alias-label-tertiary);
   font-size: var(--dsw-font-xs-13-font-size);
   line-height: var(--dsw-font-xs-13-line-height);
-  font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -91,6 +93,25 @@
 
 .fill.accent {
   background: var(--dsw-alias-brand-primary);
+}
+
+/* A download without a size: a short segment that travels the track, still and faint with reduced motion. */
+.fill[data-unmeasured] {
+  width: 30%;
+  animation: unmeasured 1.6s ease-in-out infinite;
+}
+
+@keyframes unmeasured {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(340%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fill[data-unmeasured] {
+    width: 100%;
+    opacity: 0.35;
+    animation: none;
+  }
 }
 
 .actions {

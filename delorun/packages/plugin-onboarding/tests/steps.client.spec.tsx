@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { packTitle } from '@delorun/plugin-downloads/row'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AGENT_BUNDLES, AGENTS_GUIDE_URL, AgentsStep } from '../src/client/steps/Agents.tsx'
 import { LookStep } from '../src/client/steps/Look.tsx'
@@ -513,7 +514,7 @@ describe('the recommended plugins step offers bundled rows', () => {
     render(<PluginsStep services={stepServices({ bundles: fake.installer, optionalRows })} guide={guideOf()} />)
     await settle()
     expect(fake.refreshRows).toHaveBeenCalledExactlyOnceWith(optionalRows)
-    expect(screen.getAllByRole('heading', { level: 4 }).map(each => each.textContent)).toEqual(['Thinking tab', 'Cost meter'])
+    expect(screen.getAllByRole('heading', { level: 3 }).map(each => each.textContent)).toEqual(['Thinking tab', 'Cost meter'])
     expect(screen.getAllByRole('button', { name: /^Add / }).map(each => each.getAttribute('aria-label'))).toEqual(['Add Thinking tab', 'Add Cost meter'])
     expect(screen.queryByText(en['plugins.none'])).toBeNull()
     expect(fake.enableRow).not.toHaveBeenCalled()
@@ -565,7 +566,7 @@ describe('the recommended plugins step', () => {
     expect(screen.getByText(en['plugins.reading'])).toBeTruthy()
     await settle()
     expect(host.recommend).toHaveBeenCalledExactlyOnceWith(false)
-    expect(screen.getAllByRole('heading', { level: 4 }).map(each => each.textContent)).toEqual(['Codex quota', 'Any', 'Unread'])
+    expect(screen.getAllByRole('heading', { level: 3 }).map(each => each.textContent)).toEqual(['Codex quota', 'Any', 'Unread'])
     expect(screen.getByText('Fits Codex, DeepSeek')).toBeTruthy()
     expect(screen.getByText('Fits any setup.')).toBeTruthy()
     expect(fake.refresh).toHaveBeenLastCalledWith(['@scope/codex-quota', '@scope/any', '@scope/unread'])
@@ -596,7 +597,7 @@ describe('the recommended plugins step', () => {
     })
     render(<PluginsStep services={stepServices({ bundles: fake.installer, plugins: ['@scope/claude-only'] })} guide={guideOf(host.host)} />)
     await settle()
-    expect(screen.queryAllByRole('heading', { level: 4 })).toEqual([])
+    expect(screen.queryAllByRole('heading', { level: 3 })).toEqual([])
     expect(screen.getByText(en['plugins.none'])).toBeTruthy()
     expect(fake.refresh).not.toHaveBeenCalledWith([])
   })
@@ -606,7 +607,7 @@ describe('the recommended plugins step', () => {
     render(<PluginsStep services={stepServices({ bundles: fake.installer, plugins })} guide={guideOf(hostFake({ recommend: undefined }).host)} />)
     await settle()
     expect(screen.getByText(en['plugins.unread'])).toBeTruthy()
-    expect(screen.getAllByRole('heading', { level: 4 }).map(each => each.textContent)).toEqual(['Codex quota', 'Any', 'Claude only', 'Unread'])
+    expect(screen.getAllByRole('heading', { level: 3 }).map(each => each.textContent)).toEqual(['Codex quota', 'Any', 'Claude only', 'Unread'])
   })
 
   it('never leaves blank cards when the plugin manager is slow: after a wait it names the plugins and offers Try again', async () => {
@@ -616,10 +617,10 @@ describe('the recommended plugins step', () => {
       render(<PluginsStep services={stepServices({ bundles: fake.installer, plugins })} guide={guideOf(hostFake({ recommend: undefined }).host)} />)
       await act(async () => { await vi.advanceTimersByTimeAsync(7000) })
       expect(screen.queryByText(en['plugins.slow'])).toBeNull()
-      expect(screen.queryAllByRole('heading', { level: 4 })).toEqual([])
+      expect(screen.queryAllByRole('heading', { level: 3 })).toEqual([])
       await act(async () => { await vi.advanceTimersByTimeAsync(1500) })
       expect(screen.getByText(en['plugins.slow'])).toBeTruthy()
-      expect(screen.getAllByRole('heading', { level: 4 })).toHaveLength(plugins.length)
+      expect(screen.getAllByRole('heading', { level: 3 })).toHaveLength(plugins.length)
       fake.refresh.mockClear()
       await click(screen.getByRole('button', { name: en['bundle.retry'] }))
       expect(fake.refresh).toHaveBeenCalledWith(plugins)
@@ -639,7 +640,7 @@ describe('the recommended plugins step', () => {
     const fake = installerFake({ '@scope/codex-quota': { state: 'checking' } }, { 'delorun-cost-meter': { state: 'checking' } })
     render(<PluginsStep services={stepServices({ bundles: fake.installer, plugins: ['@scope/codex-quota', '@scope/any'], optionalRows: ['delorun-cost-meter'] })} guide={guideOf(hostFake({ recommend: undefined }).host)} />)
     await settle()
-    expect(screen.queryAllByRole('heading', { level: 4 })).toEqual([])
+    expect(screen.queryAllByRole('heading', { level: 3 })).toEqual([])
     expect(screen.queryByText(/codex|delorun-cost-meter|Codex quota/i)).toBeNull()
     expect(document.querySelectorAll('[aria-hidden="true"]:empty, li[aria-hidden="true"]').length).toBeGreaterThanOrEqual(3)
   })
@@ -649,11 +650,23 @@ describe('the recommended plugins step', () => {
     const fake = installerFake({ [name]: { state: 'available' } })
     render(<PluginsStep services={stepServices({ bundles: fake.installer, plugins: [name] })} guide={guideOf(hostFake({ recommend: undefined }).host)} />)
     await settle()
-    expect(screen.getAllByRole('heading', { level: 4 }).map(each => each.textContent)).toEqual([en['plugins.pack.computerUseDriver.title']])
+    expect(screen.getAllByRole('heading', { level: 3 }).map(each => each.textContent)).toEqual([packTitle(name)])
     expect(screen.getByText(en['plugins.pack.computerUseDriver.description'])).toBeTruthy()
     expect(en['plugins.pack.computerUseDriver.description']).toMatch(/^Experimental\..*control the windows on this computer's desktop/u)
     expect(zh['plugins.pack.computerUseDriver.description']).toMatch(/^实验性功能。.*控制这台电脑桌面上的窗口/u)
     expect(fake.install).not.toHaveBeenCalled()
+  })
+
+  it('leaves the Browser pack to its own step, and gives the packs near Claude Code, Codex and a browser the guide\'s own titles', async () => {
+    const plugins = ['@delorun/bundle-browser', '@delorun/bundle-agent-hooks', '@delorun/bundle-external-agents', '@delorun/bundle-real-browser']
+    // The plugin manager's own titles lose to the guide's words for Delorun's packs.
+    const fake = installerFake(Object.fromEntries(plugins.map(name => [name, { state: 'available' as const, title: 'Package title' }])))
+    render(<PluginsStep services={stepServices({ bundles: fake.installer, plugins })} guide={guideOf(hostFake({ recommend: undefined }).host)} />)
+    await settle()
+    // The downloads panel's words, so a pack reads the same in the guide and in the panel.
+    expect(screen.getAllByRole('heading', { level: 3 }).map(each => each.textContent)).toEqual(['Hooks from Claude Code and Codex', 'Claude Code or Codex already installed', 'Your own Chrome'])
+    expect(plugins.slice(1).map(packTitle)).toEqual(['Hooks from Claude Code and Codex', 'Claude Code or Codex already installed', 'Your own Chrome'])
+    expect(new Set([packTitle('@delorun/bundle-agent-hooks'), packTitle('@delorun/bundle-external-agents'), en['agents.claude.title'], en['agents.codex.title']]).size).toBe(4)
   })
 
   it('names a plugin whose title is not known yet in words, never by its package id', () => {

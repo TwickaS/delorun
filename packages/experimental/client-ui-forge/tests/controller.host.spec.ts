@@ -537,7 +537,13 @@ describe('forgePanel local changes', () => {
     await expect(outside.ctx.forgePanel.diffBases(outside.session, '', signal)).rejects.toMatchObject({ code: 'forgePanel/not-a-checkout' })
   })
 
+  // Real Git work over three scratch repositories takes up to 23 s alone, beyond the default limit under a loaded run.
   it('lists the commits of the branch scope and reads chosen ones', async () => {
+    // The panel's Git inherits HOME, so a scratch home keeps the person's Git configuration out of the run.
+    const home = await plain()
+    vi.stubEnv('HOME', home)
+    vi.stubEnv('XDG_CONFIG_HOME', join(home, '.config'))
+    cleanups.push(async () => { vi.unstubAllEnvs() })
     const { repo } = await project()
     await withDefaultBranch(repo)
     for (const name of ['one', 'two', 'three']) {
@@ -582,7 +588,7 @@ describe('forgePanel local changes', () => {
     await expect(lonely.ctx.forgePanel.localCommits(lonely.session, null, signal)).rejects.toMatchObject({ code: 'forgePanel/no-fork-point' })
     const outside = await open(await plain())
     await expect(outside.ctx.forgePanel.localCommits(outside.session, null, signal)).rejects.toMatchObject({ code: 'forgePanel/not-a-checkout' })
-  })
+  }, 60_000)
 
   it('lists more refs than other Git output may print, up to maxDiffBytes', async () => {
     const { repo } = await project()

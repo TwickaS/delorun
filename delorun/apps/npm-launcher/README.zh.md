@@ -71,24 +71,47 @@ What you can do:
 
 ## 它打印什么
 
-安装会把每一步打印为标准错误上的一行，因此接下来运行的命令的输出留在标准输出上，不会混杂。每一行说明完成了什么：
+An install prints a checklist to standard error, so the output of the command that runs next stays on standard output unmixed. Each step is a line: a spinner while it runs, then a tick and how long it took, with the durations right-aligned in one column. The download and the extraction also show a bar under their line. On a terminal the block redraws in place:
 
 ```text
-Resolving the release: the stable channel names 0.1.0-preview.2.7.
-Checking the signature: 0.1.0-preview.2.7 is signed under release root 1.
-Checking the release log: verified.
-Downloading delorun-0.1.0-preview.2.7-linux-x64.tar.gz (218.0 MB).
-Installing release 0.1.0-preview.2.7.
+✔ Found release 0.1.0-preview.2.7 on the stable channel                    0.4s
+✔ Signature checked (release root 1)                                       0.1s
+✔ Release log checked                                                      0.6s
+⠹ Downloading delorun-0.1.0-preview.2.7-linux-x64.tar.gz
+  ██████████████░░░░░░░░░░   58%  126.4 / 218.0 MB  6.7 MB/s  ~14s left
 ```
 
-各行按检查运行的顺序出现：签名在下载归档之前检查，因为正是已签名的 manifest 指明归档及其大小。当发布日志或其见证者无法访问，或其最新的经见证检查点早于 24 小时之前时，日志行会说明这一点及原因，随后以约定 C18 的措辞给出一条警告：
+The bar shortens, and then drops the time left, the speed and the amounts, on a narrow terminal. The speed and the time left are worked out over the last five seconds, and the time left reads `estimating…` until a second of data gives a speed. A download that delivers no byte for three seconds reads `waiting for data… 12s`, and the spinner keeps turning, so the screen is never silent. Setting `NO_COLOR` removes the colour.
+
+The steps follow the order the checks run: the signature is checked before the archive is downloaded, because the signed manifest is what names the archive and its size. When the install ends and the command says what happens next, it prints one `Next:` line: `a few setup questions` for a bare `delorun` on a home without the CLI profile and for `delorun setup`, `opening the studio` for a bare `delorun` on a home that has it and for `delorun start`, and no line for any other command. When standard error is not a terminal, or `TERM` is `dumb`, the same steps print as plain lines, and the download prints one line for each tenth:
 
 ```text
-Checking the release log: not checked (the release log did not answer: …).
-Warning: Release 0.1.0-preview.2.7 has not been checked against the release log; Delorun checks it at the next connection.
+✔ Found release 0.1.0-preview.2.7 on the stable channel  0.4s
+✔ Signature checked (release root 1)  0.1s
+✔ Release log checked  0.6s
+Downloading delorun-0.1.0-preview.2.7-linux-x64.tar.gz…
+  10%  21.8 / 218.0 MB  6.7 MB/s
+  20%  43.6 / 218.0 MB  6.8 MB/s
+…
+✔ Downloaded 218.0 MB at 6.8 MB/s average  32s
+✔ Download matches its signed hash  0.9s
+Unpacking the runtime…
+  10%  352 / 3,516 files
+…
+✔ Unpacked the runtime (3,516 files)  4.5s
+✔ Installed release 0.1.0-preview.2.7  0.2s
+✔ Starting Delorun  0.0s
+Next: a few setup questions
 ```
 
-安装随后依据发布的签名继续进行，home 会在 `trust/release-log.json` 中把该发布记录为 `unchecked`（见 [`@delorun/install`](../install/README.zh.md#the-release-log)）。有回应且与发布矛盾的日志则会拒绝安装，如[拒绝](#refusals)所述。启动不打印这些行。这些行是 `@delorun/install` 的 `progressLines`，由 `src/progress.ts` 重新导出，因此 `delorun update` 打印相同的措辞。
+When the release log or its witness cannot be reached, or its newest witnessed checkpoint is older than 24 hours, the step is marked `!` with the reason, and one warning follows in the words of contract C18:
+
+```text
+! Release log not checked (the release log did not answer: …)  0.6s
+  Warning: Release 0.1.0-preview.2.7 has not been checked against the release log; Delorun checks it at the next connection.
+```
+
+The install then goes on with the release's signature, and the home records the release as `unchecked` in `trust/release-log.json` (see [`@delorun/install`](../install/README.zh.md#the-release-log)). A log that answers and contradicts the release refuses instead, as [Refusals](#refusals) describes: the running step is marked `✖`, and the refusal's own text follows. A question the launcher asks, such as the one `delorun repair` asks, clears the checklist while it is asked. A start prints none of these lines. The checklist is `@delorun/install`'s `InstallRenderer`, which `src/progress.ts` re-exports, so `delorun update`, `delorun repair` and a plugin pack download draw the same lines from the same events. The renderer only displays: verification, its order, its refusals and their messages do not depend on it.
 
 比该包 `engines` 范围（`>=24.9.0`）更旧的 Node 会在其他任何内容运行之前得到一行信息，说明它发现的版本以及在哪里获取更新的版本，并以状态 1 退出：发布的 `bin`（`src/entry.ts`）只在版本检查通过后才载入启动器的主模块，因此无法解析主模块语法的 Node 仍能读到这条拒绝信息。
 

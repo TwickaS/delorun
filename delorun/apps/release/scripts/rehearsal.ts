@@ -336,7 +336,7 @@ try {
     const first = await npx(['--version'])
     expect(first.status === 0, `install failed: ${excerpt(first)}`)
     const lines = first.stderr.split('\n').filter(line => line !== '' && !line.startsWith('npm '))
-    expect(lines.length >= 5 && lines.some(line => line.startsWith('Checking the release log: verified')), `unexpected progress lines: ${lines.join(' | ')}`)
+    expect(lines.length >= 5 && lines.some(line => line.startsWith('✔ Release log checked')), `unexpected progress lines: ${lines.join(' | ')}`)
     const record = JSON.parse(readFileSync(join(home, 'trust', 'release-log.json'), 'utf8')) as { releases: Record<string, { state: string }> }
     expect(record.releases[R1]?.state === 'verified', 'the release log check was not recorded as verified')
     return `${first.stdout.trim().split('\n')[0] ?? ''}; ${String(lines.length)} progress lines; log verified`

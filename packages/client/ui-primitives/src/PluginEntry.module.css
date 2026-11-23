@@ -1,0 +1,171 @@
+/* Plugin entry rows: card, detail, and fact metrics follow the Installed tab of the Plugins page. The row bleeds 8px
+   into the page gutter so its artwork lines up with the page text while the hover fill keeps a margin. */
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0 -8px;
+  padding: 8px;
+  border-radius: var(--dsw-radius-xl);
+}
+
+/* A row with more than one line of text keeps its artwork and action level with the title. */
+.card[data-clamp='false'] {
+  align-items: flex-start;
+}
+
+@media (hover: hover) {
+  .card:not([data-static]):hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+  }
+}
+
+.icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border: 0.5px solid var(--dsw-alias-border-l3);
+  border-radius: var(--dsw-radius-lg);
+  color: var(--dsw-alias-label-secondary);
+}
+
+.image {
+  object-fit: contain;
+}
+
+.main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.titleRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* The title button covers the whole card, so the card opens the entry; the action stays above it. */
+.open {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* After `.open`, so the title's type wins over the button's `font: inherit`. */
+.title {
+  max-width: 100%;
+  margin: 0;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card[data-clamp='false'] .title {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.open::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: var(--dsw-radius-xl);
+}
+
+.open:focus-visible {
+  outline: none;
+}
+
+.open:focus-visible::after {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+}
+
+.description {
+  display: -webkit-box;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+}
+
+.card[data-clamp='false'] .description {
+  display: block;
+  overflow: visible;
+  -webkit-line-clamp: unset;
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  margin: 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--dsw-alias-label-tertiary);
+  overflow-wrap: anywhere;
+}
+
+.end {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+}
+
+.fill {
+  background: var(--dsw-alias-bg-skeleton);
+  animation: dsh-plugin-entry-skeleton 2s cubic-bezier(0.36, 0, 0.64, 1) infinite;
+}
+
+.icon.fill {
+  border-color: transparent;
+}
+
+.bar {
+  display: block;
+  height: 12px;
+  margin: 4px 0;
+  border-radius: var(--dsw-radius-xs);
+}
+
+.barTitle { width: min(144px, 60%); }
+.barDescription { width: min(280px, 85%); }
+
+@keyframes dsh-plugin-entry-skeleton {
+  0% { opacity: 1; }
+  40% { opacity: 0.6; }
+  80%, 100% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fill { animation: none; }
+}

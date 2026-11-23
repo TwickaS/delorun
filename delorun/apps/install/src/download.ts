@@ -161,14 +161,15 @@ export class Downloader {
    * @param url - the file's URL.
    * @param limit - its largest allowed length in bytes.
    * @param path - the file to write; it must not exist.
+   * @param onBytes - told how many bytes are on disk after each piece; a display only, which decides nothing.
    * @returns the answering URL, the length and the SHA-256 of what was written.
    * @throws {InstallError} `DOWNLOAD_REFUSED` or `DOWNLOAD_FAILED`, as {@link Downloader.bytes} does; a file that
    *   cannot be created, written to completion or closed is the same `DOWNLOAD_FAILED`.
    */
-  async file(url: string, limit: number, path: string): Promise<{ readonly url: string, readonly length: number, readonly sha256: string }> {
+  async file(url: string, limit: number, path: string, onBytes?: (written: number) => void): Promise<{ readonly url: string, readonly length: number, readonly sha256: string }> {
     const total = this.deadline()
     try {
-      return await this.fileUnder(url, limit, path, total.signal)
+      return await this.fileUnder(url, limit, path, total.signal, onBytes)
     } finally {
       total.clear()
     }
@@ -180,9 +181,10 @@ export class Downloader {
    * @param limit - its largest allowed length in bytes.
    * @param path - the file to write.
    * @param whole - aborts when the total deadline passes.
+   * @param onBytes - told how many bytes are on disk after each piece.
    * @returns the answering URL, the length and the SHA-256 of what was written.
    */
-  private async fileUnder(url: string, limit: number, path: string, whole: AbortSignal): Promise<{ readonly url: string, readonly length: number, readonly sha256: string }> {
+  private async fileUnder(url: string, limit: number, path: string, whole: AbortSignal, onBytes: ((written: number) => void) | undefined): Promise<{ readonly url: string, readonly length: number, readonly sha256: string }> {
     const open = await this.open(url, whole)
     const hash = createHash('sha256')
     // The file is opened before its body is read, so a failure that arrives while the body is read removes a file this
@@ -206,6 +208,7 @@ export class Downloader {
         } catch (error) {
           throw writeRefused(open.url, path, error)
         }
+        onBytes?.(written)
       }
       try {
         await out.close()

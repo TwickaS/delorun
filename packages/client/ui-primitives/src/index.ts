@@ -135,6 +135,8 @@ export {
   PluginArtworkTerminal, PluginArtworkLoop, PluginArtworkSubagent, PluginArtworkSearch, PluginArtworkDefault,
 } from './plugin-artwork.tsx'
 export { GuideArtworkBrowser, GuideArtworkFiles } from './guide-artwork.tsx'
+export { PluginEntryCard, PluginEntryIcon, PluginEntryList, PluginEntryPlaceholder, PluginEntrySkeleton } from './PluginEntry.tsx'
+export type { PluginEntryCardProps, PluginEntryListProps } from './PluginEntry.tsx'
 export { ImageLightbox } from './ImageLightbox.tsx'
 export type { ImageLightboxLabels } from './ImageLightbox.tsx'
 

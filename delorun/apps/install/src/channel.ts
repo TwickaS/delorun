@@ -99,6 +99,9 @@ interface Candidate {
   readonly url: string
 }
 
+/** The shortest time between two byte or file counts the channel reports. */
+const PROGRESS_INTERVAL_MS = 100
+
 /** The most root versions one install walks past the root this home trusts; a timestamp that names more is refused unread. */
 export const MAX_ROOT_ROTATIONS = 32
 
@@ -382,6 +385,7 @@ export class LauncherChannel implements RuntimeChannel {
    */
   private async current(now: number, target: RuntimeVersion | undefined, trust: 'record' | 'read-only'): Promise<Current> {
     const unconfirmed = this.options.unconfirmed !== undefined
+    if (trust === 'record') this.options.progress?.({ step: 'resolving', channel: this.options.channel })
     // fetchFrom throws a DOWNLOAD_FAILED only for the last origin, so only then is the channel unreachable.
     const stamp = await this.fetchFrom(this.metadataCandidates('timestamp.json'), 'timestamp.json', url => this.downloader.bytes(url, RELEASE_FILE_SIZE_LIMITS.timestamp)).catch((error: unknown) => {
       if (unconfirmed && isInstallError(error, 'DOWNLOAD_FAILED')) throw new Unconfirmable(`the release channel cannot be reached for timestamp.json (${messageOf(error)})`, error)
@@ -560,6 +564,23 @@ export class LauncherChannel implements RuntimeChannel {
   }
 
   /**
+   * A progress callback that reports at most ten times a second and always reports the last count, so a display redraws
+   * without a flood of events.
+   * @param event - makes the event from the counts.
+   * @param last - the count that ends the work.
+   * @returns the callback.
+   */
+  private throttled<Args extends readonly number[]>(event: (...counts: Args) => InstallProgress, last: number): (...counts: Args) => void {
+    let sent = Number.NEGATIVE_INFINITY
+    return (...counts) => {
+      const at = this.now()
+      if (at - sent < PROGRESS_INTERVAL_MS && counts[0] !== last) return
+      sent = at
+      this.options.progress?.(event(...counts))
+    }
+  }
+
+  /**
    * Download a resolved release's platform archive and file list, check both against the manifest before extracting,
    * and extract the archive into the staging directory with contract C1's path checks.
    * @param release - the release {@link LauncherChannel.resolve} returned.
@@ -582,14 +603,22 @@ export class LauncherChannel implements RuntimeChannel {
     const scratch = await mkdtemp(join(dirname(directory), DOWNLOAD_PREFIX))
     try {
       const archivePath = join(scratch, artifacts.archive.name)
-      this.options.progress?.({ step: 'downloading', name: artifacts.archive.name, bytes: artifacts.archive.length })
-      await this.fetchFrom(this.fileCandidates(manifest.version, artifacts.archive.name), artifacts.archive.name, async (url) => {
+      const { name, length } = artifacts.archive
+      this.options.progress?.({ step: 'downloading', name, bytes: length })
+      await this.fetchFrom(this.fileCandidates(manifest.version, name), name, async (url) => {
         await rm(archivePath, { force: true })
-        await this.downloader.file(url, Math.min(artifacts.archive.length, ARCHIVE_MAX_BYTES), archivePath)
-      }, () => verifyDownloadedFile(artifacts.archive, archivePath))
+        const onBytes = this.throttled((received: number) => ({ step: 'download-bytes', name, received, total: length }), length)
+        const written = await this.downloader.file(url, Math.min(length, ARCHIVE_MAX_BYTES), archivePath, onBytes)
+        this.options.progress?.({ step: 'downloaded', name, bytes: written.length })
+      }, async () => {
+        await verifyDownloadedFile(artifacts.archive, archivePath)
+        this.options.progress?.({ step: 'download-verified', name })
+      })
       const list = await this.fetchFrom(this.fileCandidates(manifest.version, artifacts.files.name), artifacts.files.name, url => this.downloader.bytes(url, Math.min(artifacts.files.length, RELEASE_FILE_SIZE_LIMITS.files)), downloaded => checkBytes(artifacts.files, downloaded.bytes))
       const files = verifyPlatformFiles({ root: release.root, manifest, platform: this.options.platform, bytes: list.bytes })
-      const extracted = await extractArchive({ archive: archivePath, format, files, directory })
+      this.options.progress?.({ step: 'unpacking', files: files.files.length })
+      const onFile = this.throttled((written: number, total: number) => ({ step: 'unpack-files', written, total }), files.files.length)
+      const extracted = await extractArchive({ archive: archivePath, format, files, directory, onFile })
       return { manifest: resolved.manifestBytes, files: list.bytes, bundle: resolved.bundleBytes, staged: { fileList: artifacts.files.sha256, identities: extracted.identities } }
     } finally {
       await rm(scratch, { recursive: true, force: true })

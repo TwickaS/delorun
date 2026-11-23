@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   Button, IconChevronDownOutlineRegular, IconPlusOutlineRegular, IconRefreshOutlineRegular, IconSearchOutlineRegular,
   IconSlidersTwoOutlineRegular, IconTrashOutlineRegular, IconWarningOutlineRegular, Input, Menu, Modal, Pill,
-  PluginArtworkDefault, StateDot, Tag, Tooltip,
+  PluginArtworkDefault, PluginEntryCard, PluginEntryIcon, PluginEntryList, PluginEntrySkeleton, StateDot, Tag, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { MarketCompatibility, MarketListingEntry, MarketListingVersion, MarketSearchResult, MarketSort } from '@deepseek-ai/dsh-api-remotes/client'
@@ -24,9 +24,6 @@ type DiscoverActions = Omit<DiscoverFace, 'hooks'>
 
 /** Typing pause before the query text is sent. */
 const TEXT_DELAY_MS = 250
-/** Artwork size inside the 48px icon frame, as on the Installed tab. */
-const ICON = 36
-
 const FAILURE_KEYS = {
   fetch: 'readFailed',
   invalid: 'readInvalid',
@@ -40,16 +37,6 @@ const FACT_KEYS = {
   commit: 'factCommit',
   directory: 'factDirectory',
 } as const satisfies Record<SourceFact['kind'], string>
-
-function MarketIcon({ src, size }: { readonly src: string | undefined; readonly size: number }): ReactNode {
-  const [failed, setFailed] = useState<string>()
-  return src === undefined || src === failed
-    ? <PluginArtworkDefault size={size} />
-    : (
-      <img className={css.image} src={src} width={size} height={size} alt="" loading="lazy" referrerPolicy="no-referrer"
-        onError={() => { setFailed(src) }} />
-    )
-}
 
 function sourceFailureText(failure: SourceFailure, t: Translate): string {
   switch (failure.kind) {
@@ -146,24 +133,15 @@ function EntryCard({ entry, t, face, language, labels, onOpen, onInstall, onUpda
   const version = presentedVersion(entry)
   const date = formatDate(version.publishTimestamp, language, 'medium')
   return (
-    <li className={css.card} data-market-entry={entry.name}>
-      <span className={css.icon} aria-hidden="true"><MarketIcon src={entry.icon} size={ICON} /></span>
-      <div className={css.main}>
-        <div className={css.titleRow}>
-          <button type="button" className={css.cardOpen} aria-label={t('openEntry', { name: title })} onClick={onOpen}>{title}</button>
-          {labels.filter(label => entry.metadata.labels.includes(label.id)).map(label => <Tag key={label.id}>{label.title}</Tag>)}
-        </div>
-        {entry.description === undefined ? null : <span className={css.description}>{face.resolveText(entry.description)}</span>}
-        <span className={css.meta}>
-          {entry.author === undefined
-            ? t('entryMeta', { version: version.version, date })
-            : t('entryMetaAuthor', { version: version.version, author: entry.author, date })}
-        </span>
-      </div>
-      <div className={css.cardEnd}>
+    <PluginEntryCard data-market-entry={entry.name} title={title} icon={entry.icon} onOpen={onOpen} openLabel={t('openEntry', { name: title })}
+      badges={labels.filter(label => entry.metadata.labels.includes(label.id)).map(label => <Tag key={label.id}>{label.title}</Tag>)}
+      description={entry.description === undefined ? undefined : face.resolveText(entry.description)}
+      meta={entry.author === undefined
+        ? t('entryMeta', { version: version.version, date })
+        : t('entryMetaAuthor', { version: version.version, author: entry.author, date })}
+      action={(
         <EntryAction entry={entry} title={title} t={t} onInstall={onInstall} onUpdate={onUpdate} onOpenInstalled={onOpenInstalled} />
-      </div>
-    </li>
+      )} />
   )
 }
 
@@ -240,7 +218,7 @@ function EntryDetail({ entry, listing, t, face, hooks, language, onBack, onInsta
         <span>{t('backToList')}</span>
       </button>
       <div className={css.detailHead}>
-        <span className={css.icon} aria-hidden="true"><MarketIcon src={entry.icon} size={ICON} /></span>
+        <PluginEntryIcon src={entry.icon} />
         <div className={css.main}>
           <div className={css.titleRow}>
             <h3 className={css.detailTitle}>{title}</h3>
@@ -374,7 +352,7 @@ function ConfirmDialog({ choice, t, face, onCancel, onConfirm }: {
       )}>
       <div className={css.dialogBody}>
         <div className={css.confirmHead}>
-          <span className={css.icon} aria-hidden="true"><MarketIcon src={entry.icon} size={ICON} /></span>
+          <PluginEntryIcon src={entry.icon} />
           <div className={css.main}>
             <span className={css.strong}>{title}</span>
             <span className={css.meta}>{version.version}</span>
@@ -392,22 +370,6 @@ function ConfirmDialog({ choice, t, face, onCancel, onConfirm }: {
         <p className={css.notice} role="note"><IconWarningOutlineRegular size={14} aria-hidden="true" /><span>{t('installTrust')}</span></p>
       </div>
     </Modal>
-  )
-}
-
-function ListSkeleton({ label }: { readonly label: string }): ReactNode {
-  return (
-    <ul className={css.cards} role="status" aria-label={label} aria-busy="true">
-      {[0, 1, 2, 3].map(index => (
-        <li key={index} className={css.card} aria-hidden="true">
-          <span className={`${css.icon} ${css.skeletonFill}`} />
-          <div className={css.main}>
-            <span className={`${css.skeletonBar} ${css.skeletonTitle} ${css.skeletonFill}`} />
-            <span className={`${css.skeletonBar} ${css.skeletonDescription} ${css.skeletonFill}`} />
-          </div>
-        </li>
-      ))}
-    </ul>
   )
 }
 
@@ -565,19 +527,19 @@ function Browser({ state, listing, t, face, hooks, language, onInstall, onUpdate
         </div>
       )}
       {value === null
-        ? listing.status === 'loading' ? <ListSkeleton label={t('loading')} /> : null
+        ? listing.status === 'loading' ? <PluginEntrySkeleton label={t('loading')} /> : null
         : value.total === 0
           // Results are published together with the query they answer.
           ? <p className={css.muted}>{t(unfiltered(listing.answered as DiscoverQuery) ? 'emptyIndex' : 'noMatches')}</p>
           : (
             <>
-              <ul className={css.cards} aria-busy={busy}>
+              <PluginEntryList busy={busy}>
                 {value.entries.map(entry => (
                   <EntryCard key={entry.name} entry={entry} t={t} face={face} language={language} labels={declarations.labels}
                     onOpen={() => { setOpened(entry) }} onInstall={(version) => { onInstall({ entry, version }) }}
                     onUpdate={(version) => { onUpdate({ entry, version }) }} onOpenInstalled={() => { openPackage(entry.name) }} />
                 ))}
-              </ul>
+              </PluginEntryList>
               {value.nextOffset === null
                 ? null
                 : (
@@ -601,7 +563,7 @@ export function DiscoverSection(props: DiscoverSectionProps): ReactNode {
   useEffect(() => { props.ensure() }, [props.ensure])
   let body: ReactNode
   if (state.status === 'idle' || state.status === 'loading') {
-    body = <ListSkeleton label={t('loading')} />
+    body = <PluginEntrySkeleton label={t('loading')} />
   } else if (state.status === 'error') {
     body = (
       <div className={css.failure}>

@@ -3,14 +3,15 @@
  * named; a package that declares only connections the person lacks is left out. Packages that are not installed are
  * read from the registry only when the person asks.
  */
-import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, PluginEntryList } from '@deepseek-ai/dsh-client-ui-primitives'
+import { BROWSER_BUNDLE } from '@delorun/browser-setup'
+import { packTitle } from '@delorun/plugin-downloads/row'
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
 import { fits, presentConnections } from '../guide.ts'
 import type { OnboardingLocaleKey } from '../locales.ts'
 import type { StepServices } from '../types.ts'
 import { Notice } from '../ui/Notice.tsx'
-import { StateLine } from '../ui/StateLine.tsx'
 import { BundleCard, RowCard } from './BundleCard.tsx'
 import { readableName, useRefresh, useStore, type StepProps } from './shared.ts'
 import css from './steps.module.css'
@@ -32,16 +33,19 @@ export function connectionName(id: string, t: StepServices['t'], providers: Read
 export { readableName }
 
 /**
- * The guide's own words for an offered plugin pack that is not in the profile yet, whose package the studio cannot read
- * before it downloads.
+ * The guide's descriptions of Delorun's plugin packs; their titles are the downloads panel's (`packTitle`), so a pack
+ * reads the same in both. Both win over the package's own words, so the packs that touch Claude Code, Codex or a
+ * browser read apart from the Agents and Browser steps, and a pack not in the profile yet, whose package the studio
+ * cannot read before it downloads, still has a title.
  */
-const PACK_CARDS: Readonly<Record<string, { readonly title: OnboardingLocaleKey, readonly description: OnboardingLocaleKey }>> = {
-  '@delorun/bundle-browser': { title: 'plugins.pack.browser.title', description: 'plugins.pack.browser.description' },
-  '@delorun/bundle-code-intelligence': { title: 'plugins.pack.codeIntelligence.title', description: 'plugins.pack.codeIntelligence.description' },
-  '@delorun/bundle-agent-hooks': { title: 'plugins.pack.agentHooks.title', description: 'plugins.pack.agentHooks.description' },
-  '@delorun/bundle-webhooks': { title: 'plugins.pack.webhooks.title', description: 'plugins.pack.webhooks.description' },
-  '@delorun/bundle-external-agents': { title: 'plugins.pack.externalAgents.title', description: 'plugins.pack.externalAgents.description' },
-  '@delorun/bundle-computer-use-driver': { title: 'plugins.pack.computerUseDriver.title', description: 'plugins.pack.computerUseDriver.description' },
+const PACK_CARDS: Readonly<Record<string, OnboardingLocaleKey>> = {
+  '@delorun/bundle-browser': 'plugins.pack.browser.description',
+  '@delorun/bundle-real-browser': 'plugins.pack.realBrowser.description',
+  '@delorun/bundle-code-intelligence': 'plugins.pack.codeIntelligence.description',
+  '@delorun/bundle-agent-hooks': 'plugins.pack.agentHooks.description',
+  '@delorun/bundle-webhooks': 'plugins.pack.webhooks.description',
+  '@delorun/bundle-external-agents': 'plugins.pack.externalAgents.description',
+  '@delorun/bundle-computer-use-driver': 'plugins.pack.computerUseDriver.description',
 }
 
 /** How long the plugin manager may take to answer before the step says so and offers Try again. */
@@ -73,7 +77,8 @@ export function PluginsStep({ services, guide }: StepProps): ReactNode {
   useEffect(() => { if (guide.recommendations.getSnapshot() === undefined) guide.recommend(false) }, [guide])
   const answer = recommendations?.status === 'ready' ? recommendations.value : undefined
   const present = presentConnections(keys, readiness)
-  const shown = fits(plugins, answer, present)
+  // The Browser pack has its own step wherever this step offers it, so it is not offered twice.
+  const shown = fits(plugins.filter(name => name !== BROWSER_BUNDLE), answer, present)
   useRefresh(services, shown.map(each => each.name))
   const rowKey = optionalRows.join('\n')
   useEffect(() => { if (rowKey !== '') bundles.refreshRows(rowKey.split('\n')) }, [bundles, rowKey])
@@ -93,21 +98,20 @@ export function PluginsStep({ services, guide }: StepProps): ReactNode {
         <Notice tone="warning">{t('plugins.slow')}</Notice>
       )}
       <p className={css.lead}>{t('plugins.lead')}</p>
-      {count > 0 && <p className={css.status} data-tone="done" aria-live="polite">{t('ready.plugins.count', { count: String(count) })}</p>}
-      <ul className={css.cards}>
+      {count > 0 && <p className={`${css.status} ${css.count}`} data-tone="done" aria-live="polite">{t('ready.plugins.count', { count: String(count) })}</p>}
+      <PluginEntryList label={t('step.plugins')}>
         {shown.map(({ name, matches }) => {
           const view = views[name]
           const pack = Object.hasOwn(PACK_CARDS, name) ? PACK_CARDS[name] : undefined
           return (
-            <BundleCard key={name} name={name} services={services}
-              title={view?.title !== undefined ? resolveText(view.title) : !slow && (view === undefined || view.state === 'checking') ? undefined : pack === undefined ? readableName(name) : t(pack.title)}
-              description={view?.description !== undefined ? resolveText(view.description) : pack === undefined ? undefined : t(pack.description)}>
-              {matches.length > 0 && <StateLine tone="success">{t('plugins.fits', { names: matches.map(id => connectionName(id, t, names)).join(', ') })}</StateLine>}
-            </BundleCard>
+            <BundleCard key={name} look="entry" name={name} services={services}
+              title={pack !== undefined ? packTitle(name) ?? readableName(name) : view?.title !== undefined ? resolveText(view.title) : !slow && (view === undefined || view.state === 'checking') ? undefined : readableName(name)}
+              description={pack !== undefined ? t(pack) : view?.description !== undefined ? resolveText(view.description) : undefined}
+              meta={matches.length > 0 ? t('plugins.fits', { names: matches.map(id => connectionName(id, t, names)).join(', ') }) : undefined} />
           )
         })}
         {optionalRows.map(id => <RowCard key={id} id={id} services={services} />)}
-      </ul>
+      </PluginEntryList>
       <div aria-live="polite">
         {recommendations?.status === 'loading' && <p className={css.status}>{t('plugins.reading')}</p>}
         {shown.length === 0 && optionalRows.length === 0 && <p className={css.status}>{t('plugins.none')}</p>}

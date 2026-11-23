@@ -16,7 +16,7 @@ The studio's downloads panel. It lists every plugin the install queue is working
 | A phone, in the setup guide | `OnboardingDownloadsRow`: one muted line above Back and Continue with a thin grey progress line. No accent, no motion beyond the progress. A failure shows as a small neutral marker. Tapping the line lists the plugins in place. |
 | A phone, elsewhere | A header download icon with a count badge. It opens a bottom sheet with the same list. |
 
-The card appears only while something is queued or has just finished. Reduced motion turns the fades and the fold off. A polite live region speaks a completion or a new failure once; it never speaks a percentage.
+A running download's status gives its percentage (the bytes received while the queue holds no size), then its speed and, with a known size, the time left, such as `25% · 4.0 MB/s · ~3.8s left`. The page measures them from the received bytes over the last five seconds, with the formats of the terminal's install display (`@delorun/install/transfer`, reached through `@delorun/plugin-packs/transfer`); the speed shows once two readings a second apart exist and goes when no byte has arrived for three seconds. The progress bar's text keeps to the percentage. The card appears only while something is queued or has just finished. Reduced motion turns the fades and the fold off. A polite live region speaks a completion or a new failure once; it never speaks a percentage.
 
 ## The data seat
 
@@ -32,9 +32,11 @@ interface DownloadsSource {
 }
 ```
 
-A `DownloadItem` has `key` (the package name), `title`, `iconUrl`, `state`, `receivedBytes`, `totalBytes`, `position` and `failure`. The states are `queued`, `waiting-for-unlock`, `downloading`, `verifying`, `installing`, `ready`, `needs-reload`, `failed` and `cancelled`.
+A `DownloadItem` has `key` (the package name), `title`, `iconUrl`, `state`, `receivedBytes`, `totalBytes`, `position`, `failure` and, for a download the page runs itself, `local`. The states are `queued`, `waiting-for-unlock`, `downloading`, `verifying`, `installing`, `ready`, `needs-reload`, `failed` and `cancelled`.
 
 `createFakeDownloadsSource(items)` holds the items in memory; its `set` and `update` drive tests and the harness page. `createRemoteDownloadsSource(ctx)` is the adapter for `@delorun/plugin-packs`' routes (`createPacksClient()`): it reads the install list while a surface subscribes (on the Host's install announcements, after a connection reset, and every 1.5 seconds while something is queued or working), and sends cancel, retry, remove and dismiss. A refusal that asks for an unlock keeps the row on "Waiting for unlock". A Host without plugin packs shows an empty list.
+
+`startPageDownload(key, { title, retry })` (exported from `@delorun/plugin-downloads/row`) adds an install that does not go through the Host's install queue, such as the plugin manager's own install of a package that is not a plugin pack, or the browser download Browser needs, to every surface of this tab. Its item carries `local` and follows the Host's items; a Host item of the same key wins. Its starter reports `bytes(received, total)`, `installing()`, `done(reload)` or `failed(message)`; without a size the bar moves without a measure and the status says Downloading. It cannot be cancelled, a failure offers Try again only when the starter passed `retry`, and Remove takes it off. It lives only in this tab: nothing persists it and other devices do not see it.
 
 ## In the setup guide
 
