@@ -23,23 +23,32 @@ export class PairingWriter {
   }
 
   /**
-   * Write one field of the `pairing` section, keeping the others; a write while another crosses the wire is dropped.
+   * Write one field of the `pairing` section by its path, keeping the others; the Host creates the section when the row
+   * has none. The write never restates the section, so a stale or unread snapshot cannot replace the other fields. A write
+   * while another crosses the wire is dropped.
    * @param field - the field.
    * @param value - the value the person chose.
-   * @returns after the write settles.
+   * @returns whether the Host accepted the write.
    */
-  async set<K extends keyof PairingConfig>(field: K, value: NonNullable<PairingConfig[K]>): Promise<void> {
-    if (this.state.getSnapshot().busy) return
+  async set<K extends keyof PairingConfig>(field: K, value: NonNullable<PairingConfig[K]>): Promise<boolean> {
+    if (this.state.getSnapshot().busy) return false
     this.state.update((state) => { state.busy = true; state.failed = false })
     let accepted = false
     try {
-      const section = this.form.getSnapshot().value?.pairing
-      accepted = await this.form.mutate(section === undefined
-        ? [{ op: 'set', path: ['pairing'], value: { [field]: value } }]
-        : [{ op: 'set', path: ['pairing', field], value }])
+      accepted = await this.form.mutate([{ op: 'set', path: ['pairing', field], value }])
     } catch (_error) {
       // A transport failure is reported as failed; the form keeps the accepted value.
     }
     this.state.update((state) => { state.busy = false; state.failed = !accepted })
+    return accepted
+  }
+
+  /**
+   * "Don't show this pop-up again": show requests as the quiet notice from now on. It writes only `showRequest: notice`,
+   * never `none`, so a waiting request still shows in the notice and in Settings → Devices.
+   * @returns whether the Host accepted the write.
+   */
+  showAsNotice(): Promise<boolean> {
+    return this.set('showRequest', 'notice')
   }
 }

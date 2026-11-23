@@ -16,6 +16,8 @@ import { mayAskWithoutWindow, PAIRING_BOUNDS, PAIRING_DEFAULTS, resolvePairing, 
 import { approvalRequestHandler, approveHandler, cancelHandler, pendingHandler, REACH_PATHS } from '../src/reach-routes.ts'
 import type { RouteHandler } from '../src/routes.ts'
 import { deviceIdOf } from '../src/records.ts'
+import { Config } from '../src/service.ts'
+import { matchCode } from '../src/match-code.ts'
 import { homeFixture, keyOf, STUDIO_COOKIE, testCredential, type Home } from './fixtures/home.ts'
 
 const ADDRESS = brandString<StudioAddress>('https://home.example.ts.net')
@@ -66,8 +68,18 @@ function ask(fill: number, identity?: TailnetIdentity): Promise<ApprovalRequestA
 describe('the pairing configuration', () => {
   it('resolves to Delorun\'s defaults when the profile sets none', () => {
     // Pins the default values the guide and C5 state.
-    expect(resolvePairing(undefined)).toEqual({ mayAskWithoutWindow: 'own-user', showRequest: 'notice', windowMs: 5 * 60_000, requestExpiryMs: 5 * 60_000, pendingPerIdentity: 1 })
+    expect(resolvePairing(undefined)).toEqual({ mayAskWithoutWindow: 'own-user', showRequest: 'dialog', windowMs: 5 * 60_000, requestExpiryMs: 5 * 60_000, pendingPerIdentity: 1 })
     expect(resolvePairing({})).toEqual(PAIRING_DEFAULTS)
+  })
+
+  it('fills the pop-up dialog as the schema\'s default display, and keeps the notice and none choices', () => {
+    // Pins the schema default: a profile that sets no pairing section shows a request as the pop-up dialog.
+    expect(Config({ secretsDirectory: '/nowhere' }).pairing.get()).toMatchObject({ showRequest: 'dialog', mayAskWithoutWindow: 'own-user' })
+    expect(Config({ secretsDirectory: '/nowhere', pairing: {} }).pairing.get()).toMatchObject({ showRequest: 'dialog' })
+    for (const showRequest of ['notice', 'dialog', 'none'] as const) {
+      expect(Config({ secretsDirectory: '/nowhere', pairing: { showRequest } }).pairing.get()).toMatchObject({ showRequest })
+    }
+    expect(() => Config({ secretsDirectory: '/nowhere', pairing: { showRequest: 'popup' as never } })).toThrow()
   })
 
   it('reads every field a profile sets', () => {
@@ -158,6 +170,16 @@ describe('the waiting requests of one identity', () => {
     await expect(ask(3, ME)).resolves.toMatchObject({ requestId: expect.any(String) })
     home.auth.approvals.cancel(first.requestId)
     await expect(ask(2, SOMEONE)).resolves.toMatchObject({ requestId: expect.any(String) })
+  })
+
+  it('keeps a request waiting and listed whichever display the studio uses', async () => {
+    for (const showRequest of ['dialog', 'notice', 'none'] as const) {
+      await (home as Home | undefined)?.dispose()
+      await start(resolvePairing({ showRequest, pendingPerIdentity: 5 }))
+      await ask(1, ME)
+      // Pins the display as a studio choice only: no value of showRequest hides or refuses a waiting request.
+      expect(home.auth.pendingApprovals().map(request => request.label)).toEqual(['Device 1'])
+    }
   })
 
   it('allows the configured number, and keeps the global cap of 5', async () => {
@@ -357,13 +379,31 @@ describe('the routes', () => {
     expect((await home.auth.devices()).devices).toEqual([])
   })
 
+  it('approves a window-less request only with all 8 digits of its own code: a partial, longer or wrong code approves nothing', async () => {
+    const accepted = (await send('POST', `${REACH_PATHS.request}?reach`, message(1), identityHeaders(ME))).json as { requestId: string; homePublicKey: string; homeNonce: Base64Url }
+    const code = matchCode({
+      homePublicKey: Buffer.from(accepted.homePublicKey, 'base64url'), deviceId: deviceIdOf(keyOf(1)), homeNonce: accepted.homeNonce,
+      deviceNonce: brandString<Base64Url>(Buffer.alloc(16, 1).toString('base64url')), address: ADDRESS,
+    })
+    // Pins the full-code comparison the pop-up's Submit relies on: the first 7 digits, or the code with a digit added, are wrong codes.
+    for (const typedCode of [code.slice(0, 7), `${code}0`]) {
+      const refused = await send('POST', REACH_PATHS.approve, { requestId: accepted.requestId, typedCode })
+      expect({ typedCode, status: refused.status, error: refused.json.error }).toEqual({ typedCode, status: 403, error: 'APPROVAL_CODE_MISMATCH' })
+    }
+    expect((await home.auth.devices()).devices).toEqual([])
+    expect((await send('GET', REACH_PATHS.pending)).json.pending).toMatchObject([{ requestId: accepted.requestId, wrongCodes: 2 }])
+    const approved = await send('POST', REACH_PATHS.approve, { requestId: accepted.requestId, typedCode: `${code.slice(0, 4)} ${code.slice(4)}` })
+    expect(approved.status).toBe(200)
+    expect((await home.auth.devices()).devices).toHaveLength(1)
+  })
+
   it('shows the pending requests, the identity and the display choice at the computer, and never to a reach session', async () => {
     await send('POST', `${REACH_PATHS.request}?reach`, message(1), identityHeaders(ME))
     const computer = await send('GET', REACH_PATHS.pending)
     expect(computer.status).toBe(200)
     expect(computer.json).toMatchObject({
       pending: [{ label: 'Phone 1', identity: ME, windowless: true, wrongCodes: 0 }],
-      pairing: { mayAskWithoutWindow: 'own-user', showRequest: 'notice' },
+      pairing: { mayAskWithoutWindow: 'own-user', showRequest: 'dialog' },
     })
     const requestId = (computer.json.pending as { requestId: string }[])[0]?.requestId ?? ''
     // Pins the computer-only arrival: a reach session gets the refusal, with none of the pending data in it.

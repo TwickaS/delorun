@@ -54,7 +54,7 @@ afterEach(async () => {
 
 describe('Settings → Devices writing the pairing section', () => {
   it('applies a write from the computer to the running home without a restart', async () => {
-    expect(ctx.homeAuth.pairing()).toMatchObject({ mayAskWithoutWindow: 'own-user', showRequest: 'notice', windowMinutes: 5 })
+    expect(ctx.homeAuth.pairing()).toMatchObject({ mayAskWithoutWindow: 'own-user', showRequest: 'dialog', windowMinutes: 5 })
     const service = ctx.homeAuth
     await ctx.settings.mutate('delorun-home-auth', [{ op: 'set', path: ['pairing', 'mayAskWithoutWindow'], value: 'tailnet' }])
     await ctx.settings.mutate('delorun-home-auth', [{ op: 'set', path: ['pairing', 'windowMinutes'], value: 10 }])
@@ -81,6 +81,9 @@ describe('Settings → Devices writing the pairing section', () => {
     const condition = policy.bindings(reachDevicePrincipal('device-1' as never, 'reach-tailscale-private'))[0]?.condition
     const write = { action: 'settings/mutate', resource: { kind: 'global' }, args: { ns: 'delorun-home-auth', ops: [{ op: 'set', path: ['pairing', 'mayAskWithoutWindow'], value: 'tailnet' }] } }
     expect(condition?.(write as never)).toEqual({ kind: 'deny', reason: 'loopback-required: turning the home-auth settings off' })
-    expect(ctx.homeAuth.pairing().mayAskWithoutWindow).toBe('own-user')
+    // The display choice the pop-up writes is refused alike: a reach device cannot hide requests at the computer.
+    const display = { ...write, args: { ns: 'delorun-home-auth', ops: [{ op: 'set', path: ['pairing', 'showRequest'], value: 'none' }] } }
+    expect(condition?.(display as never)).toEqual({ kind: 'deny', reason: 'loopback-required: turning the home-auth settings off' })
+    expect(ctx.homeAuth.pairing()).toMatchObject({ mayAskWithoutWindow: 'own-user', showRequest: 'dialog' })
   })
 })

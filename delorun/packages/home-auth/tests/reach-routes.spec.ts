@@ -215,7 +215,7 @@ describe('the pre-login routes', () => {
 describe('the routes of the home\'s own computer', () => {
   it('open the window, list pending requests and approve on loopback, from the studio\'s own origin', async () => {
     const origin = { origin: `http://127.0.0.1:${String(port)}` }
-    expect(JSON.parse((await send('GET', REACH_PATHS.pending)).body)).toMatchObject({ windowClosesAt: null, pending: [], pairing: { mayAskWithoutWindow: 'own-user', showRequest: 'notice' } })
+    expect(JSON.parse((await send('GET', REACH_PATHS.pending)).body)).toMatchObject({ windowClosesAt: null, pending: [], pairing: { mayAskWithoutWindow: 'own-user', showRequest: 'dialog' } })
     expect((await send('POST', REACH_PATHS.window, undefined, origin)).status).toBe(200)
     expect(JSON.parse((await send('GET', REACH_PATHS.pending)).body)).toMatchObject({ windowClosesAt: home.clock.now + 5 * 60 * 1000 })
     // Pins the origin check on a state change: a page on another site cannot open the window.
