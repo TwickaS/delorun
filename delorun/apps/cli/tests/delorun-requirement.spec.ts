@@ -43,9 +43,15 @@ describe('the Delorun axis at, below and above the requirement', () => {
     expect(evaluateDelorunRequirement(manifest(RANGE), '1.4.0-rc.1')?.status).toBe('met')
   })
 
-  it('does not satisfy an empty, workspace or invalid range', () => {
-    for (const range of ['', 'workspace:*', 'not-a-range']) {
+  it('does not satisfy a workspace or invalid range', () => {
+    for (const range of ['workspace:*', 'not-a-range']) {
       expect(evaluateDelorunRequirement(manifest(range), DELORUN)?.status).toBe('unmet')
+    }
+  })
+
+  it('reads an empty or whitespace-only range as unreadable, never as any version', () => {
+    for (const range of ['', ' ', '  ', '\t\n']) {
+      expect(evaluateDelorunRequirement(manifest(range), DELORUN)).toEqual({ delorunVersion: DELORUN, status: 'unreadable' })
     }
   })
 })
@@ -131,6 +137,15 @@ describe('engines.delorun decides alone (A567)', () => {
   it('refuses an unreadable engines.delorun without falling back to a met engines.dsh', () => {
     const issue = evaluatePluginCompatibility(manifest(2, '>=0.0.0'), {}, DSH, DELORUN)
     expect(issue?.delorun?.status).toBe('unreadable')
+  })
+
+  it.each(['', ' ', '  '])('refuses an engines.delorun of %j as unreadable beside a met engines.dsh, and an unmet one too', (range) => {
+    for (const dsh of ['>=0.0.0', '<0.0.1']) {
+      const issue = evaluatePluginCompatibility(manifest(range, dsh), {}, DSH, DELORUN)
+      expect(issue?.delorun?.status).toBe('unreadable')
+      expect(issue?.requirements).toEqual({})
+      expect(issue?.exempted).toBe(false)
+    }
   })
 
   it('reads engines.dsh again on stock DSH, where Delorun\'s version is unknown', () => {

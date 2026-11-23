@@ -110,7 +110,7 @@ export type DecidedBy = 'delorun' | 'dsh' | 'peer' | 'none'
 export interface PluginVersionDecision {
   /** The declaration that decided: `engines.delorun` when present, else `engines.dsh`, else the DSH peers, else `none`. */
   readonly decidedBy: DecidedBy
-  /** The range that decided: `engines.delorun`'s or `engines.dsh`'s as written; for `peer`, each DSH peer as `name range`, joined by `, `; `null` for `none`, or when `engines.delorun` is not a string. */
+  /** The range that decided: `engines.delorun`'s or `engines.dsh`'s with leading and trailing whitespace trimmed; for `peer`, each DSH peer as `name range`, joined by `, `; `null` for `none`, when either engine is not a string, and for an empty or whitespace-only `engines.delorun`. */
   readonly range: string | null
   /** The version the range was checked against: Delorun's for `delorun`, DSH's for `dsh` and `peer`; `null` for `none`. */
   readonly checkedAgainst: string | null
@@ -174,13 +174,13 @@ function decideDetailed(manifest: Readonly<Record<string, unknown>>, delorun: st
   if (engines === undefined) return { decision: { decidedBy: 'none', range: null, checkedAgainst: null, verdict, readable }, unmet: {} }
   if (Object.hasOwn(engines, 'delorun')) {
     const range = engines['delorun']
-    // Upstream reads a non-string `engines.delorun` as unreadable without throwing, and refuses it.
-    const text = typeof range === 'string' ? range : null
+    // Upstream reads a non-string, empty or whitespace-only `engines.delorun` as unreadable without throwing, and refuses it.
+    const text = typeof range === 'string' && range.trim() !== '' ? range.trim() : null
     return { decision: { decidedBy: 'delorun', range: text, checkedAgainst: delorun, verdict, readable: readable && text !== null }, unmet: {} }
   }
   if (Object.hasOwn(engines, 'dsh')) {
     const range = engines['dsh']
-    return { decision: { decidedBy: 'dsh', range: typeof range === 'string' ? range : null, checkedAgainst: dsh, verdict, readable }, unmet: issue?.requirements ?? {} }
+    return { decision: { decidedBy: 'dsh', range: typeof range === 'string' ? range.trim() : null, checkedAgainst: dsh, verdict, readable }, unmet: issue?.requirements ?? {} }
   }
   const peers = dshPeers(manifest)
   if (peers.length === 0) return { decision: { decidedBy: 'none', range: null, checkedAgainst: null, verdict, readable }, unmet: {} }

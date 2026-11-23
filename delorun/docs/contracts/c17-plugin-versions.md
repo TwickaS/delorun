@@ -72,11 +72,11 @@ For each axis, with `semver.satisfies(version, range, { includePrerelease: true 
 | --- | --- | --- |
 | Range that the version satisfies | met | met |
 | Range that the version does not satisfy | unmet | unmet |
-| Empty string, a `workspace:` value or an invalid range | unmet | unmet |
+| Empty string, a `workspace:` value or an invalid range | unmet | unmet, except that an empty or whitespace-only `engines.delorun` is unreadable |
 | Not a string | unreadable | unreadable |
 | Absent | decided by the peer rule: met or unmet, or `none` when the plugin has no DSH peer | `none` |
 
-An unreadable declaration is treated as unmet: upstream refuses requirement metadata it cannot validate, and the Delorun axis does the same. An unreadable `engines.delorun` is refused and the upstream axis is not consulted in its place. Evaluation reads only the plugin's manifest and never imports plugin code.
+An unreadable declaration is treated as unmet: upstream refuses requirement metadata it cannot validate, and the Delorun axis does the same. An unreadable `engines.delorun` is refused and the upstream axis is not consulted in its place. An empty or whitespace-only `engines.delorun` is unreadable: it never means any version, and it never silences a DSH range, so the plugin is refused with `requirement-unreadable` even when its `engines.dsh` is met. Evaluation reads only the plugin's manifest and never imports plugin code.
 
 Where the axes are checked:
 

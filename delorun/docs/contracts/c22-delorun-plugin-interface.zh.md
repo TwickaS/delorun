@@ -97,7 +97,7 @@ With `--json` it prints one JSON object on one line, and no other output, for to
 | Field | Meaning |
 | --- | --- |
 | `decidedBy` | `delorun` when `engines.delorun` is declared, else `dsh` when `engines.dsh` is, else `peer` when a `@deepseek-ai/dsh*` peer is, else `none`. |
-| `range` | The range that decided, as written; `null` for `none`. |
+| `range` | The range that decided, with leading and trailing whitespace trimmed; `null` for `none`, and for an empty or whitespace-only `engines.delorun`. |
 | `checkedAgainst` | The version the range was checked against; `null` for `none`. |
 | `verdict` | `admitted` or `refused`. |
 | `readable` | `false` when a declaration is in a form Delorun cannot read. |
