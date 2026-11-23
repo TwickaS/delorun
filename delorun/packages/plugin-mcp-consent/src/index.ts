@@ -139,12 +139,16 @@ export class DelorunMcpConsent extends McpAddConsent implements McpReviews {
   private queue: Promise<unknown> = Promise.resolve()
   /** The latest refused review of each server name, until the person accepts it or a review allows the server. */
   private readonly reviews = new Map<string, PendingReview>()
+  /** Which servers ask first, from the row's `ask`. */
+  private readonly config: Pick<Config, 'ask'>
 
   /**
    * @param ctx - the plugin context.
+   * @param config - the row's ask mode; `outside` when a test mounts the class without one.
    */
-  constructor(ctx: Context, private readonly config: Pick<Config, 'ask'> = { ask: 'outside' }) {
+  constructor(ctx: Context, config: Pick<Config, 'ask'> = { ask: 'outside' }) {
     super(ctx)
+    this.config = config
     // The pending reviews under a name of their own, for the home process's `mcp.*` operations and the studio's routes.
     ctx.provide('mcpReviews', this)
   }
