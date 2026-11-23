@@ -1,4 +1,4 @@
-/** Copy of the Multiview entry points: the pin button, the header button, the popover footer and the Layout menu. */
+/** Copy of the Multiview entry points: the pin button, the toggle with its hint, the popover footer with the layouts, and the focus command. */
 
 /** English dictionary. */
 export const en = {
@@ -26,6 +26,11 @@ export const en = {
   'layout.grid': 'Grid',
   'layout.main-top': 'Main on top',
   'layout.reset': 'Reset to default',
+  'focus.command': 'Multiview: show the main chat only / show Multiview',
+  'focus.noChat': 'No chat is open.',
+  'focus.agentChat': 'This is an agent\'s own chat. Multiview belongs to the chat that started it.',
+  'hint.text': 'Drag panes to rearrange · more layouts in the agents list',
+  'hint.dismiss': 'Dismiss',
 }
 
 /** A key of the dictionaries. */
@@ -57,4 +62,9 @@ export const zh: Record<MultiviewLocaleKey, string> = {
   'layout.grid': '网格',
   'layout.main-top': '主窗格在上',
   'layout.reset': '恢复默认',
+  'focus.command': '多视图：仅显示主对话 / 显示多视图',
+  'focus.noChat': '没有打开的对话。',
+  'focus.agentChat': '这是智能体自己的对话。多视图属于启动它的对话。',
+  'hint.text': '拖动窗格可重新排列 · 智能体列表中有更多布局',
+  'hint.dismiss': '关闭',
 }

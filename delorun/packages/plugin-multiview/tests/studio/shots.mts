@@ -2,7 +2,7 @@
  * Pictures of Multiview's entry points in the built studio, with no model key: a scratch home from the demonstration-home
  * builder, one hand-written chat that lists two finished agents, the studio on a Multiview scratch port and headless
  * Chromium at 1440 px, light theme. Run from the repository root after `pnpm run build:artifacts`:
- * `node --import tsx/esm delorun/packages/plugin-multiview/tests/studio/shots.mts <shots-dir> [--keep]`.
+ * `node --import tsx/esm delorun/packages/plugin-multiview/tests/studio/shots.mts <shots-dir> [--keep] [--panes] [--header <tag>]`.
  * The agents are pinned through the page's own pin buttons. The script keeps nothing outside `/tmp/mvint-studio-*` and the
  * shots directory unless `--keep` is given, and it stops the studio it started.
  * @module @delorun/plugin-multiview/tests/studio/shots
@@ -24,7 +24,13 @@ const shots = process.argv[2]
 const keep = process.argv.includes('--keep')
 /** With `--panes` the script also opens Multiview and takes the pane pictures: 1440 light and dark, 390 light. */
 const panes = process.argv.includes('--panes')
-if (shots === undefined) throw new Error('usage: shots.mts <shots-dir> [--keep]')
+/**
+ * With `--header <tag>` the script also takes the header pictures named `<tag>-<state>-<width>-<scheme>.png`: the header strip, Multiview closed,
+ * open, the layouts popover a right-click opens, and open with the agents list showing, at 1440 and 390 px in the light and dark themes, plus the toggle's tooltip at
+ * 1440 px. The toggle is found by its name, so the same run serves the header before and after a change to it.
+ */
+const header = process.argv.includes('--header') ? process.argv[process.argv.indexOf('--header') + 1] : undefined
+if (shots === undefined) throw new Error('usage: shots.mts <shots-dir> [--keep] [--panes] [--header <tag>]')
 mkdirSync(shots, { recursive: true })
 
 const work = mkdtempSync('/tmp/mvint-studio-')
@@ -104,6 +110,54 @@ function writeAgentChats(cwd: string): { parent: string; agents: string[] } {
   return { parent, agents }
 }
 
+/**
+ * Take the header pictures with both agents pinned and Multiview closed at the start; it is closed again at the end.
+ * @param page - the signed-in studio page showing the chat.
+ * @param directory - where the pictures go.
+ * @param tag - the first part of each file name.
+ */
+async function headerShots(page: import('playwright').Page, directory: string, tag: string): Promise<void> {
+  const toggle = () => page.getByRole('button', { name: /^Multiview/ }).first()
+  console.log(await page.evaluate(() => {
+    const icon = document.querySelector('[data-sidebar-opener] svg')
+    const style = document.querySelector('style[data-plugin="@delorun/plugin-theme"]')
+    return `opener icon ${icon?.getAttribute('data-icon') ?? 'none'} mask=${icon === null ? '-' : getComputedStyle(icon).maskImage.slice(0, 40)} rules=${String(style?.textContent?.includes('data-sidebar-opener'))}`
+  }))
+  for (const scheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme: scheme })
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: width === 1440 ? 900 : 844 })
+      await page.waitForTimeout(2000)
+      const shot = (state: string) => page.screenshot({ path: join(directory, `${tag}-${state}-${String(width)}-${scheme}.png`) })
+      await shot('closed')
+      await page.screenshot({ path: join(directory, `${tag}-header-${String(width)}-${scheme}.png`), clip: { x: 0, y: 0, width, height: 56 } })
+      if (width === 1440) {
+        await toggle().hover()
+        await page.waitForTimeout(1200)
+        await shot('tooltip')
+        await page.mouse.move(700, 600)
+      }
+      await toggle().click()
+      await page.waitForTimeout(2500)
+      await shot('open')
+      await toggle().click({ button: 'right' })
+      await page.waitForTimeout(800)
+      await shot('layouts')
+      await page.keyboard.press('Escape')
+      await page.waitForTimeout(400)
+      await page.getByRole('button', { name: '2 subagents' }).click()
+      await page.waitForTimeout(1500)
+      await shot('list-open')
+      await page.keyboard.press('Escape')
+      await page.waitForTimeout(600)
+      await toggle().click()
+      await page.waitForTimeout(1500)
+    }
+  }
+  await page.emulateMedia({ colorScheme: 'light' })
+  await page.setViewportSize({ width: 1440, height: 900 })
+}
+
 try {
   execFileSync(tsx, ['delorun/apps/tools/src/demo-home.ts', '--home', home, '--projects', projects], { cwd: root, stdio: 'inherit' })
   const workspace = readdirSync(projects)[0]
@@ -162,6 +216,7 @@ try {
     await page.waitForTimeout(800)
     await page.screenshot({ path: join(shots, 'header-multiview-1440-light.png'), clip: { x: 264, y: 0, width: 1176, height: 120 } })
     console.log(JSON.stringify(await page.evaluate(() => localStorage.getItem(Object.keys(localStorage).find(key => key.startsWith('dsh.multiview')) ?? ''))))
+    if (header !== undefined) await headerShots(page, shots, header)
     if (panes) {
       await page.getByRole('button', { name: /^Multiview/ }).first().click()
       await page.getByRole('region', { name: 'Multiview' }).waitFor()

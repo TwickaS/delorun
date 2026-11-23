@@ -1,5 +1,5 @@
 /**
- * A page for the entry points' screenshots: the real pin button, popover footer and header button over the real colour
+ * A page for the entry points' screenshots: the real pin button, popover footer and Multiview toggle over the real colour
  * tokens, in a header and an agents popover whose chrome and rows stand in for the upstream catalog component.
  */
 import '../../../../../../packages/client/ui-theme/src/styles/base.css'
@@ -10,7 +10,7 @@ import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { useSyncExternalStore } from 'react'
 import { SessionId } from '@deepseek-ai/dsh-session/types'
 import { DEFAULT_MULTIVIEW_SETTINGS } from '../../../src/config.ts'
-import { Footer, HeaderButton, PinButton, type EntryInjected } from '../../../src/entry/Entry.tsx'
+import { Footer, MultiviewToggle, PinButton, type EntryInjected } from '../../../src/entry/Entry.tsx'
 import { en } from '../../../src/entry/locales.ts'
 import { MultiviewStore } from '../../../src/entry/state.ts'
 import css from './page.module.css'
@@ -80,8 +80,10 @@ function Page() {
     <div className={css.page}>
       <header className={css.header}>
         <span className={css.title}>Refactor billing service</span>
-        <button type="button" className={css.trigger} data-open>{AGENTS.length} subagents</button>
-        <HeaderButton {...props as never} />
+        <span className={css.action}>
+          <button type="button" className={css.trigger} data-open>{AGENTS.length} subagents</button>
+          <MultiviewToggle {...props as never} />
+        </span>
       </header>
       <div className={css.popover} role="tree" aria-label="Subagents" hidden={!popover}>
         {AGENTS.map(agent => (

@@ -40,6 +40,7 @@ import { installTouchInputs } from './touch-inputs.ts'
 import { EdgeController } from './edges.ts'
 import { effortBarsCss } from './effort.ts'
 import { composerFocusCss } from './focus.ts'
+import { panelGlyphsCss } from './panel-glyphs.ts'
 import { markMainLandmark } from './landmark.ts'
 import { COPY, COPY_ZH } from './copy.ts'
 import { VOCABULARY } from './vocabulary.ts'
@@ -249,7 +250,7 @@ function registerStockEntry(ctx: Context, form: ConfigForm<ThemeSettings>): Regi
  * @returns the registration set, which leaves upstream's look in place again once disposed.
  */
 function registerStudio(ctx: Context, form: ConfigForm<ThemeSettings>, initial: ThemeSettings): Registration {
-  const controller = new ThemeController(ctx.theme, `${fonts}\n${effortBarsCss()}\n${composerFocusCss()}`, document)
+  const controller = new ThemeController(ctx.theme, `${fonts}\n${effortBarsCss()}\n${composerFocusCss()}\n${panelGlyphsCss()}`, document)
   const t = ctx.locale.bind(NS)
   const conversationT = ctx.locale.bind(CONVERSATION.ns)
   const useStockLook = (): Promise<boolean> => form.set('studioAdditions', false)
