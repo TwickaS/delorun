@@ -12,7 +12,7 @@ An installed release ships a release-log bundle beside its manifest: the Rekor v
 
 ## Modules
 
-- `bundle`, `entry`, `json` and `merkle`: the five offline steps, the Rekor v2 body, the strict reader, and RFC 6962 hashing. The leaf is the entry body's bytes as the bundle carries them, so the same body serialised another way breaks the inclusion proof.
+- `bundle`, `entry`, `json` and `merkle`: the five offline steps, the Rekor v2 body and its signature by a log-entry key the root allows, the checkpoint in a log the root lists, the strict reader, and RFC 6962 hashing. The leaf is the entry body's bytes as the bundle carries them, so the same body serialised another way breaks the inclusion proof.
 - `note`, `checkpoint` and `online`: signed notes, the stored checkpoint that never moves backwards, and the consistency check.
 - `transport`: `tilesTransport`, the online check's reads over an injected `fetch`: the latest checkpoint, and RFC 6962 consistency proofs built from the log's C2SP tlog-tiles hash tiles, since a Rekor v2 log serves no proof endpoint. `logEndpoints` derives both from the trusted root's `log.origin`, a host with an optional port: `https://<origin>/api/v2/checkpoint` and the tiles below `https://<origin>/api/v2/tile/`.
 - `state`, `start`, `record`, `service` and `paths`: the recorded check state, what a start does, the check with its two records (`checkAndStore`, which an installer runs before it installs, `recordResult`, and `checkAndRecord`, both together), the check service with its 15-minute retry, and the two files' paths.

@@ -15,7 +15,7 @@ The formats of a Delorun release, in one place that both sides use: the release 
 - `sign/json`: RFC 8785 canonical JSON, which every signature covers, and the strict reader that refuses a duplicate key.
 - `sign/envelope`: the signature envelope, key ids and signing, and `sign/schemas`, the readers of each signed file.
 - `sign/verify`: C2's client verification of the root chain, the timestamp, the channel's manifest and each file reference.
-- `log/entry`, `log/bundle`, `log/note`, `log/merkle` and `log/tiles`: the Rekor v2 entry with its Ed25519ph signature, the offline bundle check in C18's five steps, C2SP signed notes and cosignatures, RFC 6962 proofs, and proofs computed from `tlog-tiles`.
+- `log/entry`, `log/entry-keys`, `log/bundle`, `log/note`, `log/merkle` and `log/tiles`: the Rekor v2 entry signed with Ed25519ph or ECDSA P-256, the log-entry keys and logs a root allows (`listedEntryKey`, `entrySigners`, `trustedLogs`), shared with `@delorun/release-verify`, the offline bundle check in C18's five steps, C2SP signed notes and cosignatures, RFC 6962 proofs, and proofs computed from `tlog-tiles`.
 - `archive/*`: the deterministic tar, gzip and ZIP writers and readers, the archive entry rules, the inspection of the deterministic form, and the PE normalisation the rebuild comparison uses (`archive/pe`).
 - `brands`: the semantic-version and SHA-256 brands.
 - `gate/home-paths`: the scan for the building user's home directory, user name as a folder and unique build root in a directory's files and archives, which the release build and the launcher build run over their output and refuse on.

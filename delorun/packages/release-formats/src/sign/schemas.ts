@@ -31,6 +31,7 @@ import {
 } from '@delorun/contract-release-manifest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { z } from 'zod'
+import { entryPublicKey, isLogEntryKeyDetails } from '../log/entry-keys.ts'
 import { parseStrictJson, type JsonValue } from './json.ts'
 
 const sha256 = z.string().regex(/^[0-9a-f]{64}$/u).transform(value => brandString<Sha256Hex>(value))
@@ -44,6 +45,10 @@ const positive = z.number().int().min(1)
 const fileName = z.string().max(255).regex(/^[A-Za-z0-9._+-]+$/u).refine(name => name !== '.' && name !== '..', 'a file name, not . or ..')
 const fileRef = z.strictObject({ name: fileName, length: z.number().int().min(0), sha256 })
 const roleKeys = z.strictObject({ keyids: z.array(keyId), threshold: positive })
+
+const logIdentity = z.strictObject({ origin: z.string().min(1), vkey: z.string().min(1) })
+/** Standard base64 with padding that decodes to at least one byte and encodes back to itself. */
+const canonicalBase64 = z.string().min(4).refine(value => Buffer.from(value, 'base64').toString('base64') === value, 'canonical standard base64')
 
 /** The signed content of root metadata. */
 export const RootSchema = z.strictObject({
@@ -61,7 +66,14 @@ export const RootSchema = z.strictObject({
     timestamp: roleKeys,
     catalogue: roleKeys,
   }),
-  log: z.strictObject({ origin: z.string().min(1), vkey: z.string().min(1) }),
+  log: logIdentity,
+  logs: z.array(logIdentity).min(1).optional(),
+  logEntryKeys: z.array(z.strictObject({
+    keyDetails: z.string().regex(/^[A-Z][A-Z0-9_]{0,63}$/u),
+    public: canonicalBase64,
+    status: z.enum(['active', 'retired', 'revoked']),
+    lastRelease: version.optional(),
+  })).min(1).optional(),
   witnesses: z.strictObject({ keys: z.array(z.strictObject({ name: z.string().min(1), vkey: z.string().min(1) })), threshold: positive }),
 }).superRefine((root, context) => {
   const roles = new Map<string, string>()
@@ -80,6 +92,26 @@ export const RootSchema = z.strictObject({
   }
   const active = root.roles.targets.keys.filter(key => key.status === 'active').length
   if (active !== 1) context.addIssue({ code: 'custom', path: ['roles', 'targets', 'keys'], message: `${String(active)} targets keys are active; exactly one must be` })
+  if (root.logs !== undefined) {
+    if (!root.logs.some(log => log.origin === root.log.origin && log.vkey === root.log.vkey)) context.addIssue({ code: 'custom', path: ['logs'], message: 'logs does not list the root\'s log with its verifier key' })
+    const origins = new Set(root.logs.map(log => log.origin))
+    if (origins.size !== root.logs.length) context.addIssue({ code: 'custom', path: ['logs'], message: 'logs lists one origin more than once' })
+  }
+  if (root.logEntryKeys !== undefined) {
+    const seen = new Set<string>()
+    for (const [index, key] of root.logEntryKeys.entries()) {
+      const path = ['logEntryKeys', index]
+      if ((key.status === 'retired') !== (key.lastRelease !== undefined)) context.addIssue({ code: 'custom', path, message: 'a retired log-entry key carries lastRelease, and only a retired one' })
+      if (isLogEntryKeyDetails(key.keyDetails) && entryPublicKey(key.keyDetails, Buffer.from(key.public, 'base64')) === undefined) {
+        context.addIssue({ code: 'custom', path, message: `the ${key.keyDetails} log-entry key is not a DER public key of that type` })
+      }
+      if (seen.has(`${key.keyDetails} ${key.public}`)) context.addIssue({ code: 'custom', path, message: `the ${key.keyDetails} log-entry key is listed more than once` })
+      seen.add(`${key.keyDetails} ${key.public}`)
+    }
+    if (!root.logEntryKeys.some(key => key.status === 'active' && isLogEntryKeyDetails(key.keyDetails))) {
+      context.addIssue({ code: 'custom', path: ['logEntryKeys'], message: 'no log-entry key of a type this client verifies is active, so no release could be logged' })
+    }
+  }
 })
 
 /**

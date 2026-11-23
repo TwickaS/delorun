@@ -6,13 +6,13 @@
  * check, so a spec fails whenever that check goes away.
  */
 import { createHash, createPrivateKey, createPublicKey } from 'node:crypto'
+import { verifyLogEntry } from '@delorun/release-formats/log/entry-keys'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { describe, expect, it } from 'vitest'
 import { RELEASE_LOG_BUNDLE_SIZE_LIMIT, type ReleaseLogBundle } from '@delorun/contract-release-log'
 import type { SemanticVersion, Sha256Hex } from '@delorun/contract-release-manifest'
 import { BundleSchema, checkBundle, readBundle, verifyBundle } from '../src/bundle.ts'
 import { RELEASE_LOG_REFUSALS, ReleaseLogRefusalError, type ReleaseLogRefusal } from '../src/errors.ts'
-import { keyIdOf, verifyEd25519ph } from '../src/entry.ts'
 import { checkpointBody, parseCheckpoint, parseVerifierKey, splitNote, verifySignature } from '../src/note.ts'
 import {
   COSIGNED_AT,
@@ -35,6 +35,18 @@ import {
 } from './fixtures.ts'
 
 const SHA256 = createHash('sha256').update(MANIFEST).digest('hex')
+
+/**
+ * Whether an Ed25519ph signature verifies as a log entry's does.
+ * @param raw - the 32-byte raw public key.
+ * @param message - the signed bytes.
+ * @param signature - the signature.
+ * @returns whether it verifies.
+ */
+function verifyEd25519ph(raw: Uint8Array, message: Uint8Array, signature: Uint8Array): boolean {
+  const key = createPublicKey({ key: Buffer.concat([Buffer.from('302a300506032b6570032100', 'hex'), raw]), format: 'der', type: 'spki' })
+  return verifyLogEntry('PKIX_ED25519_PH', key, message, signature)
+}
 
 /**
  * The refusal one verification makes.
@@ -136,8 +148,8 @@ describe('step 1: the bundle covers the manifest the client verified', () => {
   })
 })
 
-describe('step 2: the entry is the manifest\'s, signed by a trusted targets key', () => {
-  it('refuses an entry by a key the root does not list as a targets key, which is the identity check', () => {
+describe('step 2: the entry is the manifest\'s, signed by a log-entry key the root lists', () => {
+  it('refuses an entry by a key the root does not list as a log-entry key, which is the identity check', () => {
     const fixture = scenario()
     const log = fixture.log
     const index = log.append(entryBody({ manifest: MANIFEST, signer: fixture.keys.other }))
@@ -145,13 +157,14 @@ describe('step 2: the entry is the manifest\'s, signed by a trusted targets key'
     expect(refusal(fixture, bundle)).toBe('entry-key-untrusted')
   })
 
-  it('refuses an entry signed by a targets key the root lists under another key\'s id', () => {
+  it('verifies the entry with the listed log-entry key alone, whatever key the targets role names', () => {
     const fixture = scenario()
-    const root = { ...fixture.root, roles: { ...fixture.root.roles, targets: { keys: [{ keyid: keyIdOf(rawPublic(fixture.keys.other)), status: 'active' as const }], threshold: 1 } } }
-    expect(refusalOf(() => verifyBundle(root, VERSION, MANIFEST, fixture.bundle))).toBe('entry-key-untrusted')
+    const revoked = fixture.root.roles.targets.keys.map(key => ({ ...key, status: 'revoked' as const }))
+    const root = { ...fixture.root, roles: { ...fixture.root.roles, targets: { keys: revoked, threshold: 1 } } }
+    expect(refusalOf(() => verifyBundle(root, VERSION, MANIFEST, fixture.bundle))).toBeUndefined()
   })
 
-  it('refuses an entry whose Ed25519ph signature does not verify with the targets key', () => {
+  it('refuses an entry whose Ed25519ph signature does not verify with the listed key', () => {
     const fixture = scenario()
     const log = fixture.log
     const forged = entryBody({ manifest: MANIFEST, signer: fixture.keys.targets })
@@ -160,21 +173,10 @@ describe('step 2: the entry is the manifest\'s, signed by a trusted targets key'
     expect(refusal(fixture, bundle)).toBe('entry-signature-invalid')
   })
 
-  it('refuses a revoked targets key, and keeps a retired key to its last release', () => {
-    const fixture = scenario()
-    const id = keyIdOf(rawPublic(fixture.keys.targets))
-    const revoked = { ...fixture.root, roles: { ...fixture.root.roles, targets: { keys: [{ keyid: id, status: 'revoked' as const }], threshold: 1 } } }
-    expect(refusalOf(() => verifyBundle(revoked, VERSION, MANIFEST, fixture.bundle))).toBe('entry-key-untrusted')
-    const retired = { ...fixture.root, roles: { ...fixture.root.roles, targets: { keys: [{ keyid: id, status: 'retired' as const, lastRelease: brandString<SemanticVersion>(VERSION) }], threshold: 1 } } }
-    expect(refusalOf(() => verifyBundle(retired, VERSION, MANIFEST, fixture.bundle))).toBeUndefined()
-    const later = { ...fixture.bundle, manifest: { ...fixture.bundle.manifest, name: 'delorun-0.2.0.manifest.json' } }
-    expect(refusalOf(() => verifyBundle(retired, '0.2.0', MANIFEST, later))).toBe('entry-key-untrusted')
-  })
-
   it('refuses a version or a retired last release that is not a semantic version, instead of raising a TypeError', () => {
     const fixture = scenario()
-    const id = keyIdOf(rawPublic(fixture.keys.targets))
-    const retired = { ...fixture.root, roles: { ...fixture.root.roles, targets: { keys: [{ keyid: id, status: 'retired' as const, lastRelease: brandString<SemanticVersion>('v1.2') }], threshold: 1 } } }
+    const listed = fixture.root.logEntryKeys![0]!
+    const retired = { ...fixture.root, logEntryKeys: [{ ...listed, status: 'retired' as const, lastRelease: brandString<SemanticVersion>('v1.2') }] }
     expect(refusalOf(() => verifyBundle(retired, VERSION, MANIFEST, fixture.bundle))).toBe('entry-key-untrusted')
     expect(refusalOf(() => verifyBundle(fixture.root, 'v0.1', MANIFEST, fixture.bundle))).toBe('entry-key-untrusted')
     // The same refusals as a verdict, which is what a start records as `failed` instead of propagating an error.
@@ -324,13 +326,15 @@ describe('step 5: the root\'s threshold of listed witnesses cosigned', () => {
 describe('the trusted root', () => {
   it('refuses a root whose log key is not in signed-note verifier format', () => {
     const fixture = scenario()
-    const root = { ...fixture.root, log: { origin: fixture.log.origin, vkey: 'not a verifier key' } }
+    const log = { origin: fixture.log.origin, vkey: 'not a verifier key' }
+    const root = { ...fixture.root, log, logs: [log] }
     expect(refusalOf(() => verifyBundle(root, VERSION, MANIFEST, fixture.bundle))).toBe('log-origin-untrusted')
   })
 
   it('refuses a root whose log key is not a 32-byte Ed25519 note key', () => {
     const fixture = scenario()
-    const root = { ...fixture.root, log: { origin: fixture.log.origin, vkey: `${fixture.log.origin}+00000000+AQ==` } }
+    const log = { origin: fixture.log.origin, vkey: `${fixture.log.origin}+00000000+AQ==` }
+    const root = { ...fixture.root, log, logs: [log] }
     expect(refusalOf(() => verifyBundle(root, VERSION, MANIFEST, fixture.bundle))).toBe('log-origin-untrusted')
   })
 
@@ -339,18 +343,6 @@ describe('the trusted root', () => {
     const vkey = fixture.witness.vkey.replace(/\+([0-9a-f]{8})\+/u, '+00000000+')
     const root = { ...fixture.root, witnesses: { keys: [{ name: fixture.witness.name, vkey }], threshold: 1 } }
     expect(refusalOf(() => verifyBundle(root, VERSION, MANIFEST, fixture.bundle))).toBe('log-origin-untrusted')
-  })
-
-  it('refuses a root whose targets key is not 32-byte base64', () => {
-    const fixture = scenario()
-    const root = { ...fixture.root, keys: { ...fixture.root.keys, [keyIdOf(rawPublic(fixture.keys.targets)).toString()]: { algorithm: 'ed25519' as const, public: 'short' } } }
-    expect(refusalOf(() => verifyBundle(root, VERSION, MANIFEST, fixture.bundle))).toBe('entry-key-untrusted')
-  })
-
-  it('refuses a root that names a targets key it does not list', () => {
-    const fixture = scenario()
-    const absent = { ...fixture.root, keys: Object.fromEntries(Object.entries(fixture.root.keys).filter(([id]) => id !== keyIdOf(rawPublic(fixture.keys.targets)).toString())) }
-    expect(refusalOf(() => verifyBundle(absent, VERSION, MANIFEST, fixture.bundle))).toBe('entry-key-untrusted')
   })
 })
 
@@ -414,7 +406,7 @@ describe('the leaf is the entry body\'s exact bytes', () => {
     }
   })
 
-  it('refuses another key\'s valid signature under the targets key\'s identity', () => {
+  it('refuses another key\'s valid signature under the listed key\'s identity', () => {
     const fixture = scenario()
     const foreign = JSON.parse(entryBody({ manifest: MANIFEST, signer: fixture.keys.other }).toString('utf8')) as { spec: { hashedRekordV002: { signature: { content: string } } } }
     const mixed = entryBody({ manifest: MANIFEST, signer: fixture.keys.targets, signature: Buffer.from(foreign.spec.hashedRekordV002.signature.content, 'base64') })
@@ -483,7 +475,8 @@ describe('the keys a checkpoint is signed with', () => {
 
   it('refuses a root that names a witness\'s cosignature key as the log key', () => {
     const fixture = scenario()
-    const root = { ...fixture.root, log: { origin: fixture.log.origin, vkey: fixture.witness.vkey } }
+    const log = { origin: fixture.log.origin, vkey: fixture.witness.vkey }
+    const root = { ...fixture.root, log, logs: [log] }
     expect(refusalOf(() => verifyBundle(root, VERSION, MANIFEST, fixture.bundle))).toBe('log-origin-untrusted')
   })
 

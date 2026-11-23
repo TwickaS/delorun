@@ -1,23 +1,16 @@
 /**
- * The Rekor v2 entry of contract C18 as a client reads it: the entry body is a `hashedrekord` `0.0.2` whose digest is
- * the manifest file's SHA-512, whose key details are `PKIX_ED25519_PH`, and whose Ed25519ph signature over the manifest
- * file verifies with a targets key that is valid for the release. An entry of another kind, another API version,
- * another digest algorithm or a pure Ed25519 key is refused, and so is a valid signature made by a key the trusted
- * root does not list as a targets key for this release — the identity check of contract C18 step 2.
+ * The Rekor v2 entry of contract C18 as a client reads it: a `hashedrekord` `0.0.2` entry over the manifest file. Its key
+ * details must be an entry key type the trusted root lists in `logEntryKeys` and this client implements, its public key
+ * byte for byte a listed key of that type valid for the release, its digest the type's digest of the manifest file, and
+ * its signature valid under that listed key — the identity check of contract C18 step 2. A root without `logEntryKeys`
+ * trusts no entry. Any other kind, API version, digest algorithm or key type is refused, and so is a valid signature
+ * made by a key the trusted root does not list.
  *
  * @module @delorun/release-verify/entry
  */
-import { createHash, createPublicKey } from 'node:crypto'
-import {
-  RELEASE_LOG_ENTRY_API_VERSION,
-  RELEASE_LOG_ENTRY_DIGEST_ALGORITHM,
-  RELEASE_LOG_ENTRY_KEY_DETAILS,
-  RELEASE_LOG_ENTRY_TYPE,
-  type HashedRekordBody,
-} from '@delorun/contract-release-log'
-import type { KeyId, PublicKey, RootMetadata } from '@delorun/contract-release-manifest'
-import { brandString } from '@deepseek-ai/dsh-brand'
-import { ed25519ph } from '@noble/curves/ed25519.js'
+import { RELEASE_LOG_ENTRY_API_VERSION, RELEASE_LOG_ENTRY_TYPE } from '@delorun/contract-release-log'
+import type { RootMetadata } from '@delorun/contract-release-manifest'
+import { entryDigest, entryDigestAlgorithm, listedEntryKey, verifyLogEntry } from '@delorun/release-formats/log/entry-keys'
 import semver from 'semver'
 import { z } from 'zod'
 import { refuse } from './errors.ts'
@@ -45,12 +38,14 @@ export const EntryBodySchema = z.strictObject({
   }),
 })
 
-/** A parsed entry body, with its verifier's raw public key. */
+/** A parsed entry body, before any root decides whether its type and key are trusted. */
 export interface ReadEntry {
-  /** The body as it parsed. */
-  readonly body: HashedRekordBody
-  /** The verifier's 32-byte raw public key. */
-  readonly rawKey: Buffer
+  /** The entry's key details, the entry key type it claims. */
+  readonly keyDetails: string
+  /** The digest algorithm the entry claims. */
+  readonly algorithm: string
+  /** The verifier's DER (PKIX SubjectPublicKeyInfo) public key. */
+  readonly publicKey: Buffer
   /** The entry's signature over the manifest file. */
   readonly signature: Buffer
   /** The digest the entry claims for the manifest file, base64. */
@@ -58,39 +53,11 @@ export interface ReadEntry {
 }
 
 /**
- * The raw 32 bytes of a DER-encoded PKIX Ed25519 public key.
- * @param der - the DER bytes.
- * @returns the raw public key.
- * @throws ReleaseLogRefusalError `entry-key-untrusted` when the bytes are not a PKIX Ed25519 public key.
- */
-function rawKeyOf(der: Uint8Array): Buffer {
-  let x: string | undefined
-  try {
-    const key = createPublicKey({ key: Buffer.from(der), format: 'der', type: 'spki' })
-    if (key.asymmetricKeyType !== 'ed25519') throw new Error('not Ed25519')
-    x = key.export({ format: 'jwk' }).x
-  } catch {
-    throw refuse('entry-key-untrusted', 'the entry names a public key that is not a PKIX Ed25519 key')
-  }
-  if (x === undefined) throw refuse('entry-key-untrusted', 'the entry names a public key without a raw Ed25519 value')
-  return Buffer.from(x, 'base64url')
-}
-
-/**
- * A key's id: the lowercase hex SHA-256 of its 32-byte raw public key, as contract C2 names keys.
- * @param raw - the raw public key.
- * @returns the key id.
- */
-export function keyIdOf(raw: Uint8Array): KeyId {
-  return brandString<KeyId>(createHash('sha256').update(raw).digest('hex'))
-}
-
-/**
  * Parse a bundle's entry body.
  * @param bytes - the decoded body.
- * @returns the entry.
- * @throws ReleaseLogRefusalError `entry-malformed` when the body is not a Rekor v2 `hashedrekord` entry with a SHA-512
- * digest, and `entry-type-refused` when its key details are not `PKIX_ED25519_PH`.
+ * @returns the entry; its key details, digest algorithm and key are checked against a root by {@link verifyEntryIdentity}.
+ * @throws ReleaseLogRefusalError `entry-malformed` when the body is not a Rekor v2 `hashedrekord` entry body, and
+ * `entry-type-refused` when it is another kind or API version.
  */
 export function readEntryBody(bytes: Uint8Array): ReadEntry {
   let decoded: unknown
@@ -105,115 +72,51 @@ export function readEntryBody(bytes: Uint8Array): ReadEntry {
   if (parsed.data.kind !== RELEASE_LOG_ENTRY_TYPE || parsed.data.apiVersion !== RELEASE_LOG_ENTRY_API_VERSION) {
     throw refuse('entry-type-refused', `the log entry is ${parsed.data.kind} ${parsed.data.apiVersion}, not ${RELEASE_LOG_ENTRY_TYPE} ${RELEASE_LOG_ENTRY_API_VERSION}`)
   }
-  if (data.algorithm !== RELEASE_LOG_ENTRY_DIGEST_ALGORITHM) {
-    throw refuse('entry-type-refused', `the log entry's digest algorithm is ${data.algorithm}, not ${RELEASE_LOG_ENTRY_DIGEST_ALGORITHM}`)
-  }
-  if (signature.verifier.keyDetails !== RELEASE_LOG_ENTRY_KEY_DETAILS) {
-    throw refuse('entry-type-refused', `the log entry's key details are ${signature.verifier.keyDetails}, not ${RELEASE_LOG_ENTRY_KEY_DETAILS}`)
-  }
-  const body: HashedRekordBody = {
-    apiVersion: RELEASE_LOG_ENTRY_API_VERSION,
-    kind: RELEASE_LOG_ENTRY_TYPE,
-    spec: {
-      hashedRekordV002: {
-        data: { algorithm: RELEASE_LOG_ENTRY_DIGEST_ALGORITHM, digest: data.digest },
-        signature: {
-          content: signature.content,
-          verifier: { publicKey: { rawBytes: signature.verifier.publicKey.rawBytes }, keyDetails: RELEASE_LOG_ENTRY_KEY_DETAILS },
-        },
-      },
-    },
-  }
   return {
-    body,
-    rawKey: rawKeyOf(Buffer.from(signature.verifier.publicKey.rawBytes, 'base64')),
+    keyDetails: signature.verifier.keyDetails,
+    algorithm: data.algorithm,
+    publicKey: Buffer.from(signature.verifier.publicKey.rawBytes, 'base64'),
     signature: Buffer.from(signature.content, 'base64'),
     digest: data.digest,
   }
 }
 
 /**
- * Verify an Ed25519ph signature over a message, as RFC 8032 defines it with an empty context and canonical encodings.
- * @param rawKey - the 32-byte raw public key.
- * @param message - the message; Ed25519ph signs its SHA-512.
- * @param signature - the 64-byte signature.
- * @returns `true` when the signature verifies.
- */
-export function verifyEd25519ph(rawKey: Uint8Array, message: Uint8Array, signature: Uint8Array): boolean {
-  try {
-    return ed25519ph.verify(signature, message, rawKey, { zip215: false })
-  } catch {
-    // A signature that does not decode or does not verify is one refusal, not two.
-    return false
-  }
-}
-
-/**
  * Refuse a release version that is not a semantic version: a retired key's last release is compared with it, and a
  * comparison of a version this client cannot read would raise instead of refusing.
- * @param version - the release's version.
- * @throws ReleaseLogRefusalError `entry-key-untrusted` when the version is not a semantic version, because no targets
+ * @param version - the release's version, from its signed manifest.
+ * @throws ReleaseLogRefusalError `entry-key-untrusted` when the version is not a semantic version, because no log-entry
  * key's validity for that release can be shown.
  */
 export function requireReleaseVersion(version: string): void {
   if (semver.valid(version) === null) {
-    throw refuse('entry-key-untrusted', `release version ${JSON.stringify(version)} is not a semantic version, so no targets key can be shown valid for it`)
+    throw refuse('entry-key-untrusted', `release version ${JSON.stringify(version)} is not a semantic version, so no log-entry key can be shown valid for it`)
   }
 }
 
 /**
- * The targets keys that may verify a release: the active key, and each retired key whose last release is at or above
- * the release's version. A revoked key verifies nothing, so a release never verifies with it.
- *
- * A version that is not a semantic version, and a retired key whose last release is not one either, are refused rather
- * than compared: `semver.lte` raises a `TypeError` on either, which is no verdict a start can record, and a key whose
- * retirement point cannot be read is trusted for nothing.
+ * Verify that the entry is the manifest's, made by a log-entry key the trusted root lists for the release (contract C18
+ * step 2).
  * @param root - the trusted root.
- * @param version - the release's version.
- * @returns the keys with their ids.
- * @throws ReleaseLogRefusalError `entry-key-untrusted` when the version or a retired key's last release is not a
- * semantic version, when a listed key is not a 32-byte base64 Ed25519 key, or when a key is listed under an id that is
- * not its own digest.
- */
-export function targetsKeysFor(root: RootMetadata, version: string): readonly { readonly keyid: KeyId, readonly rawKey: Buffer }[] {
-  requireReleaseVersion(version)
-  const allowed = root.roles.targets.keys.filter((key) => {
-    if (key.status === 'active') return true
-    if (key.status !== 'retired' || key.lastRelease === undefined) return false
-    if (semver.valid(key.lastRelease) === null) {
-      throw refuse('entry-key-untrusted', `retired targets key ${key.keyid} names a last release ${JSON.stringify(key.lastRelease)} that is not a semantic version`)
-    }
-    return semver.lte(version, key.lastRelease)
-  })
-  return allowed.map((key) => {
-    const entry: PublicKey | undefined = root.keys[key.keyid]
-    if (entry === undefined) throw refuse('entry-key-untrusted', `the trusted root names targets key ${key.keyid} without listing it`)
-    const raw = Buffer.from(entry.public, 'base64')
-    if (raw.byteLength !== 32 || raw.toString('base64') !== entry.public) throw refuse('entry-key-untrusted', `targets key ${key.keyid} is not a 32-byte base64 Ed25519 key`)
-    if (keyIdOf(raw) !== key.keyid) throw refuse('entry-key-untrusted', `targets key ${key.keyid} is listed under an id that is not the digest of its key`)
-    return { keyid: key.keyid, rawKey: raw }
-  })
-}
-
-/**
- * Verify that the entry is the manifest's, made by a targets key valid for the release (contract C18 step 2).
- * @param root - the trusted root.
- * @param version - the release's version.
+ * @param version - the release's version, from its signed manifest; never from the log entry or the bundle.
  * @param manifest - the manifest file's bytes.
  * @param entry - the parsed entry.
- * @returns the id of the targets key that signed the entry.
- * @throws ReleaseLogRefusalError `manifest-digest-mismatch` when the entry's digest is not the manifest's SHA-512,
- * `entry-key-untrusted` when the verifier key is no targets key valid for the release, and `entry-signature-invalid`
- * when the Ed25519ph signature does not verify.
+ * @returns the id of the listed key that signed the entry, the lowercase hex SHA-256 of its DER.
+ * @throws ReleaseLogRefusalError `entry-key-untrusted` when the root lists no `logEntryKeys` or the verifier key is no
+ * listed key valid for the release, `entry-type-refused` when the entry's key type or digest algorithm is not one the
+ * root lists, `manifest-digest-mismatch` when the entry's digest is not the manifest's, and `entry-signature-invalid`
+ * when the signature does not verify.
  */
-export function verifyEntryIdentity(root: RootMetadata, version: string, manifest: Uint8Array, entry: ReadEntry): KeyId {
-  const sha512 = createHash('sha512').update(manifest).digest('base64')
-  if (entry.digest !== sha512) throw refuse('manifest-digest-mismatch', 'the log entry is not a SHA-512 hashedrekord of the manifest file')
-  const keyid = keyIdOf(entry.rawKey)
-  const targets = targetsKeysFor(root, version).find(key => key.keyid === keyid)
-  if (targets === undefined) throw refuse('entry-key-untrusted', `the log entry is signed by key ${keyid}, which is no targets key valid for release ${version}`)
-  if (!verifyEd25519ph(targets.rawKey, manifest, entry.signature)) {
-    throw refuse('entry-signature-invalid', `the log entry's Ed25519ph signature over the manifest does not verify with targets key ${keyid}`)
+export function verifyEntryIdentity(root: RootMetadata, version: string, manifest: Uint8Array, entry: ReadEntry): string {
+  requireReleaseVersion(version)
+  if (root.logEntryKeys === undefined) throw refuse('entry-key-untrusted', `root ${String(root.version)} lists no logEntryKeys, so it trusts no log entry`)
+  const listed = listedEntryKey(root.logEntryKeys, version, entry.keyDetails, entry.publicKey)
+  if (!listed.ok) throw refuse(listed.reason === 'type-refused' ? 'entry-type-refused' : 'entry-key-untrusted', listed.detail)
+  const algorithm = entryDigestAlgorithm(listed.keyDetails)
+  if (entry.algorithm !== algorithm) throw refuse('entry-type-refused', `the log entry's digest algorithm is ${entry.algorithm}, not ${algorithm}, which ${listed.keyDetails} carries`)
+  if (entry.digest !== entryDigest(listed.keyDetails, manifest)) throw refuse('manifest-digest-mismatch', `the log entry is not a ${algorithm} hashedrekord of the manifest file`)
+  if (!verifyLogEntry(listed.keyDetails, listed.key, manifest, entry.signature)) {
+    throw refuse('entry-signature-invalid', `the log entry's ${listed.keyDetails} signature over the manifest does not verify with log-entry key ${listed.id}`)
   }
-  return keyid
+  return listed.id
 }
