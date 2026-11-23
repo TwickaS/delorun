@@ -93,6 +93,7 @@ const OUTSIDE_DELORUN: Readonly<Record<string, string>> = {
   SigningRefusal: RELEASE_PIPELINE,
   PublishRefusal: 'the release channel\'s publish command under delorun/apps/release-channel, which delorun does not import',
   VersionsError: 'raised by the studio\'s version-history routes, which answer the browser over HTTP',
+  RunError: 'raised by the studio\'s How Delorun runs routes, which answer the browser over HTTP',
   CreateRefusal: 'raised by the studio\'s create-plugin routes, which answer the browser over HTTP',
   ScaffoldError: 'caught by delorun plugin new, which prints it as its own usage or failure refusal',
   FeedFailure: 'caught by the release\'s advisory check and the plugin install check, which report the feed as unreachable',

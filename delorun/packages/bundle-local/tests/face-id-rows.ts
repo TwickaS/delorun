@@ -15,6 +15,8 @@ const ROUTE_ACTIONS: Readonly<Record<string, string>> = {
   'route:plugin-permission-defaults/src/command-network.ts#NETWORK_SET_PATH': 'plugin-permission-defaults/network-set',
   'route:bundle-local/src/profile-versions.ts#PROFILE_VERSION_ROUTES.save': 'bundle-local/profile-save',
   'route:bundle-local/src/profile-versions.ts#PROFILE_VERSION_ROUTES.switch': 'bundle-local/profile-switch',
+  'route:bundle-local/src/run-settings.ts#RUN_ROUTES.prompts': 'bundle-local/run-prompts',
+  'route:bundle-local/src/run-settings.ts#RUN_ROUTES.background': 'bundle-local/run-background',
   'route:bundle-local/src/report.ts#REPORT_ROUTE': 'bundle-local/report-details',
   'route:plugin-trash/src/index.ts#path (write)': 'plugin-trash/purge',
   'route:plugin-packs/src/routes.ts#path (write)': 'plugin-packs/add',

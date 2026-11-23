@@ -32,7 +32,7 @@ The rest of this page is for when you need it.
 ## I want to get started
 
 - **Decide whether Delorun suits me, and how it compares with other tools:** [Why Delorun](why-delorun.md). It covers what you get, what Delorun changes from DeepSeek Harness and when another tool fits better.
-- **Install Delorun and have a first chat:** [Install and first run](get-started/install.md). It covers what you need first, [setup by how you will use Delorun](get-started/install.md#setup-how-you-will-use-delorun), [the studio and your first chat](get-started/install.md#the-studio-and-your-first-chat) and [a computer without a browser](get-started/install.md#a-computer-without-a-browser).
+- **Install Delorun and have a first chat:** [Install and first run](get-started/install.md). It covers what you need first, [setup in a few questions](get-started/install.md#setup-a-few-questions), [the studio and your first chat](get-started/install.md#the-studio-and-your-first-chat) and [a computer without a browser](get-started/install.md#a-computer-without-a-browser).
 - **Bring my DeepSeek Harness chats:** [Switching from DeepSeek Harness](get-started/switching.md). It explains what stays the same and what is different, what is copied, what stays behind and [how to go back](get-started/switching.md#going-back).
 - **Find out whether it is safe and what the catch is:** [Questions and answers](help/questions.md).
 

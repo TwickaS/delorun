@@ -22,6 +22,7 @@ import { VerificationError } from '@delorun/release-formats/sign/verify'
 import { RELEASE_VERIFY_DESCRIBERS } from '@delorun/release-verify/refusal'
 import { PackRefusal } from '@delorun/release-formats/packs/archive'
 import { runtimeStoreDescriber } from '@delorun/runtime-store'
+import { SetupApplyError } from '@delorun/setup-apply'
 import { engineDescriber, supervisorDescriber } from '@delorun/supervisor'
 import { TrashError } from '@delorun/trash'
 import { DataSafetyError, UpdateReportError } from '@delorun/update'
@@ -115,6 +116,8 @@ function updateReportRefusal(error: UpdateReportError): Refusal {
  */
 export const CLI_DESCRIBERS: readonly RefusalDescriber[] = [
   refusalDescriber(CliError, error => ({ lead: error.message, remedies: [] })),
+  // A profile file setup writes that is not one it can use; the exit code is `failed`, as for a CliError.
+  refusalDescriber(SetupApplyError, error => ({ lead: error.message, remedies: [] })),
   refusalDescriber(SetupCancelled, error => ({ lead: error.message, remedies: [] })),
   // `delorun recover packs` and an update's carry of the installed packs refuse through this class.
   refusalDescriber(PackRefusal, error => ({ lead: 'Delorun could not verify or fetch a plugin pack.', reason: codedReason(error.code, error.message), remedies: ['Check your connection, then run: delorun recover packs', 'After an update, restart Delorun to finish it.'] })),

@@ -3,37 +3,37 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delorun/docs/guide/get-started/install.md
 /:
-  en: 2b359b2d522d0402
+  en: 226bedf2060f7a49
   zh: ebb159c8b469170e
 /install-and-first-run:
   en: a05fc71b71d0e8e0
   zh: e198a2ef5b02cc62
 /install-and-first-run/summary:
-  en: 843ce7dfc9f58704
+  en: 848d99a4ef731a84
   zh: c7abdde5738d85e9
 /install-and-first-run/contents:
-  en: 776582009e5ac8ef
-  zh: 26fd3efaf2fed812
+  en: 52e1295328b12601
+  zh: b9b8bf698429acc8
 /install-and-first-run/before-you-start:
-  en: ce6c91c8f7bc6f7d
-  zh: 3aa5758a0b4475eb
+  en: 2162cf09e59c297a
+  zh: 04cb0ad5bd624e78
 /install-and-first-run/install:
-  en: 4dfcd2dea420263b
+  en: e97a66ec3e97d565
   zh: 9f784000022324cb
 /install-and-first-run/windows-through-wsl2:
   en: 83ad661794134640
   zh: cb11ff7565e0a33e
 /install-and-first-run/what-the-launcher-verifies:
   en: 173983c921575a34
-  zh: 58af82a986d3fecd
-/install-and-first-run/setup-how-you-will-use-delorun:
-  en: 77503c18f0c9218f
-  zh: 9cb69aea7fe97aea
+  zh: cfc25cb8201c36e6
+/install-and-first-run/setup-a-few-questions:
+  en: 76e093700e8f697f
+  zh: 06f54fbd07d4f060
 /install-and-first-run/the-studio-and-your-first-chat:
-  en: 0353f78331ac0582
-  zh: 200769f63036fa97
+  en: 50425f156fbe7ad9
+  zh: d7d880aef30cbc41
 /install-and-first-run/the-default-workspace:
-  en: 8714d0aade64b4fe
+  en: cd9b0470e5235efa
   zh: 94fe515b6c8d8e07
 /install-and-first-run/a-computer-without-a-browser:
   en: 23ade51fc41e5ed7

@@ -272,6 +272,8 @@ export class GrantStore {
   private readonly holds = new Map<string, StoredHold>()
   private readonly passes = new Map<string, StoredPass>()
   private seq = 0
+  /** How many times every grant and pass was ended at once; a ceremony that started before the last one may not mint after it. */
+  private ended = 0
 
   /**
    * @param options - the clock, the random source and the log.
@@ -480,8 +482,18 @@ export class GrantStore {
     }
   }
 
+  /**
+   * How many times {@link GrantStore.endAll} has run. A confirmation reads it before its first await and compares it
+   * before it mints a grant or opens a pass, so one that was in flight when every session ended mints nothing.
+   * @returns the count.
+   */
+  get generation(): number {
+    return this.ended
+  }
+
   /** End every hold, grant and pass of every device: all sessions were rotated. */
   endAll(): void {
+    this.ended += 1
     this.grants = []
     this.answers = []
     this.holds.clear()

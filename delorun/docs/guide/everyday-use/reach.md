@@ -58,7 +58,7 @@ Do this once, so that your phone has an address to open. In a terminal on your c
 delorun reach on tailscale
 ```
 
-You can also choose "Also from my phone or another device" when `delorun setup` asks how you will use Delorun, or answer yes to its remote access question.
+You can also answer Yes to `Use Delorun from your other devices too? (phone, tablet, another computer, over Tailscale)` when `delorun setup` asks it, or pass `--phone` (or `--devices`).
 
 The command checks Tailscale and asks `This changes Tailscale on this computer … Continue? (y/N)`. Answer `y`. With `--yes` it does not ask, and without a terminal and without `--yes` it refuses, so that nothing changes Tailscale unseen. It then saves the setting in your [profile](../../reference/glossary.md#profile) and prints your address, `https://<your computer's name>.<your tailnet>.ts.net`. When Delorun is running, it applies the change at once and prints whether the address is ready. Otherwise remote access starts the next time you run `delorun start`.
 
@@ -84,7 +84,7 @@ If the command prints a refusal instead, find its words in [Troubleshooting](../
 <summary>Go further</summary>
 
 - `delorun reach status` shows whether remote access is on and whether the address is ready, and prints the sign-in address with the steps for adding a phone.
-- Choose "Also from my phone or another device" in `delorun setup`, or run `delorun setup reach`, to turn it on while you set up.
+- Answer Yes to the other-devices question in `delorun setup`, or run `delorun setup reach`, to turn it on while you set up.
 
 </details>
 
@@ -135,7 +135,7 @@ A phone that Tailscale reports as signed in as the user you allowed can ask outs
 <summary>Go further</summary>
 
 - Run `delorun devices approve --profile <name>` to approve a device for another profile.
-- Approved devices stay approved when you turn remote access off and on again ([Turn remote access off](#turn-remote-access-off)).
+- Approved devices stay on the list when you turn remote access off and on again, but each signs in again ([Turn remote access off](#turn-remote-access-off)).
 
 </details>
 
@@ -339,7 +339,7 @@ Run `delorun reach off`.
 
 You should see "Remote access is off for the profile default." and "Tailscale no longer serves this computer's studio." A running Delorun closes the remote listener at once, and none opens at its next start. While Delorun runs, it rechecks Tailscale every minute and stops serving if Funnel is turned on for your address.
 
-Approved devices stay approved, so turning remote access on again does not ask for them again. Remove them if you no longer want them.
+Turning remote access off also signs every approved device out and ends its Face ID pass, in the terminal and in Settings → General → How Delorun runs alike. The devices stay on the list, so turning remote access on again does not ask you to approve them again, but each one signs in again first, and an old session or pass is never accepted. Remove a device if you no longer want it. If Delorun is not running, `delorun reach off` removes the stored sessions itself, so none is there when it starts again. If `delorun reach off` reports a failure, restart Delorun before turning access on again.
 
 <details>
 <summary>Edge cases</summary>

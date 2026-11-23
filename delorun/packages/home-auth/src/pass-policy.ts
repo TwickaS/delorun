@@ -6,8 +6,8 @@
  * - **Admits:** while the device holds a live pass, the row needs no grant for the call.
  * - **Always asks:** the row needs a one-action grant for the call even during a pass, and a Face ID that confirms its
  *   grant action opens no pass: adding or removing devices and passkeys, the Face ID settings, the pass setting, turning
- *   Changes protection off, a workspace's full access, and an approval answer that grants full access (whose Face ID,
- *   confirming an answer rather than actions, still opens a pass).
+ *   Changes protection off, a workspace's full access, turning a prompt off for every chat, and an approval answer that
+ *   grants full access (whose Face ID, confirming an answer rather than actions, still opens a pass).
  *
  * @module @delorun/home-auth/pass-policy
  */
@@ -21,6 +21,7 @@ export const PASS_ALWAYS_ASK: Readonly<Record<string, string>> = {
   'auth:/auth/passkey/pass (write)': PASS_SETTING_ACTION,
   'changes:protection-off': 'changes/protection-off',
   'route:plugin-permission-defaults/src/routes.ts#PERMISSION_ROUTES.setFullAccess': 'plugin-permission-defaults/set-full-access',
+  'route:bundle-local/src/run-settings.ts#RUN_ROUTES.prompts': 'bundle-local/run-prompts',
   // An answer's action is `answer/<grants marker>`, as the studio names it; a Face ID on an answer still opens a pass.
   'answer:full-access': 'answer/full-access',
 }
@@ -85,6 +86,7 @@ export const PASS_ADMITS: ReadonlySet<string> = new Set([
   'route:bundle-local/src/profile-versions.ts#PROFILE_VERSION_ROUTES.save',
   'route:bundle-local/src/profile-versions.ts#PROFILE_VERSION_ROUTES.switch',
   'route:bundle-local/src/report.ts#REPORT_ROUTE',
+  'route:bundle-local/src/run-settings.ts#RUN_ROUTES.background',
   'route:plugin-trash/src/index.ts#path (write)',
   'route:plugin-packs/src/routes.ts#path (write)',
   'route:plugin-new-workspace/src/index.ts#PLACES_PATH',

@@ -183,6 +183,24 @@ interface SettingsServiceView {
   mutate(ns: string, ops: readonly { readonly op: 'unset'; readonly path: readonly string[] }[]): Promise<void>
 }
 
+/**
+ * Check a secrets directory the way the home does before it opens the stores: an absolute path whose parent is the Delorun
+ * home's `secrets` directory. The running home and `delorun reach off` both call this, so they cannot disagree on which
+ * directory is the home's.
+ * @param directory - the configured directory, or the Delorun home's own `secrets/home-auth` when the row names none.
+ * @returns the same directory.
+ * @throws {Error} when it is not absolute or does not lie in the home's `secrets` directory.
+ */
+export function checkSecretsDirectory(directory: string): string {
+  if (!directory.startsWith('/')) {
+    throw new Error(`home-auth: the secrets directory must be an absolute path, got ${JSON.stringify(directory)}`)
+  }
+  if (basename(dirname(directory)) !== DELORUN_HOME_ENTRIES.secrets) {
+    throw new Error(`home-auth: the secrets directory must lie in the Delorun home's ${DELORUN_HOME_ENTRIES.secrets} directory, got ${JSON.stringify(directory)}`)
+  }
+  return directory
+}
+
 /** The settings writes a reach device is refused: any write to the home-auth row, whose `pairing` and `secretsDirectory` decide who is admitted. */
 export const HOME_AUTH_SWITCH: ComputerOnlySwitch = { ns: 'delorun-home-auth', field: EVERY_FIELD, label: 'the home-auth settings' }
 
@@ -230,12 +248,7 @@ export class HomeAuthService extends Service {
    * @throws Error when the secrets directory is not an absolute path; the filesystem failure of `mkdir`.
    */
   protected async [Service.init](): Promise<void> {
-    if (!this.secretsDirectory.startsWith('/')) {
-      throw new Error(`home-auth: the secrets directory must be an absolute path, got ${JSON.stringify(this.secretsDirectory)}`)
-    }
-    if (basename(dirname(this.secretsDirectory)) !== DELORUN_HOME_ENTRIES.secrets) {
-      throw new Error(`home-auth: the secrets directory must lie in the Delorun home's ${DELORUN_HOME_ENTRIES.secrets} directory, got ${JSON.stringify(this.secretsDirectory)}`)
-    }
+    checkSecretsDirectory(this.secretsDirectory)
     const core = new HomeAuth({
       pairing: () => resolvePairing(this.config.pairing.get()),
       directory: this.secretsDirectory,
@@ -802,6 +815,15 @@ export class HomeAuthService extends Service {
    */
   devices(): Promise<DevicesListing> {
     return this.state().devices()
+  }
+
+  /**
+   * Sign every paired device out and keep the device list: every session, Face ID pass and unlock ends and their reach
+   * connections close, so no earlier cookie or pass is admitted again; a device signs in afresh.
+   * @returns how many sessions were removed.
+   */
+  signAllDevicesOut(): Promise<number> {
+    return this.state().signAllDevicesOut()
   }
 
   /**

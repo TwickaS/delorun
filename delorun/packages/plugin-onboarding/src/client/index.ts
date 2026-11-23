@@ -81,7 +81,7 @@ export type { KeyBannerInjected, KeyBannerProps } from './KeyBanner.tsx'
 export type { RenameModel, RenameRowProps } from './RenameRow.tsx'
 export { renameModel } from './RenameRow.tsx'
 export type { SetAsideInjected, SetAsideBannerProps } from './SetAsideBanner.tsx'
-export { hostApi, readReach, readStartId, readWorkspaceNotice, REACH_STATUS_PATH } from './host-api.ts'
+export { hostApi, readReach, readReachAddress, readStartId, readWorkspaceNotice, REACH_STATUS_PATH } from './host-api.ts'
 export type {
   AddedFolder, AppearanceTranslate, DelorunOnboarding, HostFace, LanguageFace, LookFace, NewWorkspaceOutcome, NoticeFace, OnboardingInjected, OnboardingStep,
   OnboardingStepProps, ReachState, SchemeFace, SchemePreference, StartFace, StartTarget, StaticServices, StepServices,
@@ -381,7 +381,7 @@ export function applyStudio(ctx: Context): void {
   const deferredOnly = createSnapshotStore(false)
   const face = (): OnboardingInjected => ({ progress, extra, loadRecord: loadSetupRecord, services: services(), startChat, aside: laterStore, deferredOnly })
   const deferredEntry: DeferredSetupInjected = {
-    host: { reach: hostApi.reach, defer: hostApi.defer },
+    host: { reach: hostApi.reach, reachAddress: hostApi.reachAddress, defer: hostApi.defer },
     loadRecord: loadSetupRecord,
     fetch: (input, init) => globalThis.fetch(input, init),
     atComputer: () => isLoopbackHostname(location.hostname),

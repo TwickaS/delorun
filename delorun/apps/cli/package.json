@@ -69,6 +69,7 @@
     "@delorun/release-formats": "workspace:*",
     "@delorun/release-verify": "workspace:*",
     "@delorun/runtime-store": "workspace:*",
+    "@delorun/setup-apply": "workspace:*",
     "@delorun/supervisor": "workspace:*",
     "@delorun/trash": "workspace:*",
     "@delorun/update": "workspace:*",

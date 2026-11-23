@@ -21,14 +21,13 @@ import { fakeTailscale, ownRule } from '../fixtures/fake-tailscale.ts'
 import { EXIT } from '../../src/exit.ts'
 import type { CommandContext } from '../../src/command.ts'
 import { createReachCommand, homeRuns, type ReachDependencies } from '../../src/reach/command.ts'
-import { localReach, reachRowsOf } from '../../src/reach/host.ts'
+import { localReach } from '../../src/reach/host.ts'
 import { createDevicesCommand, type DevicesDependencies } from '../../src/devices/command.ts'
 import { localDeviceApproval } from '../../src/devices/host.ts'
 import { readableTime } from '../../src/output.ts'
-import { listenerPortFor, readReachRow, REACH_OFF, writeReachRow } from '../../src/reach/row.ts'
-import { readPairingAt } from '../../src/reach/pairing-row.ts'
+import { listenerPortFor, readPairingAt, REACH_OFF, reachRowsOf, TRUST_STATEMENT } from '@delorun/setup-apply'
+import { readReachRow, writeReachRow } from '../../src/reach/row.ts'
 import { reachSection } from '../../src/reach/setup-section.ts'
-import { TRUST_STATEMENT } from '../../src/reach/trust.ts'
 import { BACK } from '../../src/setup/steps.ts'
 
 const HOST = 'home.example.ts.net'
@@ -71,6 +70,7 @@ function reach(overrides: Partial<ReachDependencies> = {}): ReturnType<typeof cr
     send: () => Promise.resolve([{ stream: 'out', line: '' }] as never),
     ask: () => Promise.resolve('y'),
     terminal: true,
+    installAnchor: () => Promise.resolve(join(delorunHome, 'package.json')),
     ...overrides,
   })
 }
@@ -186,6 +186,188 @@ describe('delorun reach', () => {
     await expect(reach({ tailscale: tailscale({}, calls) }).run(['off'], context)).resolves.toBe(EXIT.ok)
     expect(calls.map(call => call[0])).toEqual(['version', 'status', 'serve'])
     await expect(reach({ tailscale: () => Promise.reject(new Error('broken runner')) }).run(['off'], context)).rejects.toThrow('broken runner')
+  })
+
+  /** A paired device with one stored session, and a check of whether a token is still live in the stored sessions. */
+  async function pairedWithSession(secrets = join('secrets', 'home-auth')): Promise<{ directory: string, address: StudioAddress, device: { id: DeviceId }, old: { token: string }, live: (token: string) => Promise<boolean> }> {
+    const directory = join(delorunHome, secrets)
+    const address = brandString<StudioAddress>('http://127.0.0.1:3080')
+    const paired = new HomeAuth({ directory })
+    await paired.start()
+    const { device } = await paired.claim({ listener: 'loopback', host: '127.0.0.1:3080', source: 'local', ownerCode: (await paired.issueOwnerCode()).code, devicePublicKey: { kty: 'EC', crv: 'P-256', x: brandString<Base64Url>('A'.repeat(43)), y: brandString<Base64Url>('B'.repeat(43)) }, label: 'Phone', address })
+    const old = await paired.openSession({ deviceId: device.id, listener: 'reach-tailscale-private', address, factor: 'tailnet-membership', lifetimeMs: 60 * 60 * 1000 })
+    await paired.stop()
+    const live = async (token: string): Promise<boolean> => {
+      const reader = new HomeAuth({ directory })
+      await reader.start()
+      try { return (await reader.sessionOf(token)) !== undefined } finally { await reader.stop() }
+    }
+    return { directory, address, device, old, live }
+  }
+
+  it('signs every paired device out when it turns off with Delorun stopped, keeps the list, and restores no session when turned on again', async () => {
+    // Pins `signAllDevicesOut` in `turnOff`: a stored session that survived would be admitted again once access is on.
+    const { directory, address, device, old, live } = await pairedWithSession()
+    const open = async (): Promise<{ token: string }> => {
+      const again = new HomeAuth({ directory })
+      await again.start()
+      try { return await again.openSession({ deviceId: device.id, listener: 'reach-tailscale-private', address, factor: 'tailnet-membership', lifetimeMs: 60 * 60 * 1000 }) } finally { await again.stop() }
+    }
+    expect(await live(old.token)).toBe(true)
+    await reach().run(['on', 'tailscale'], context)
+    writeFileSync(join(delorunHome, 'profiles', 'default', 'cordis.patch.yml'), readFileSync(join(delorunHome, 'profiles', 'default', 'cordis.patch.yml'), 'utf8') + '- id: delorun-home-auth\n  config:\n    pairing:\n      mayAskWithoutWindow: tailnet\n')
+    out.stdout = ''
+    await expect(reach({ running: () => false }).run(['off'], context)).resolves.toBe(EXIT.ok)
+    expect(out.stdout).toContain('Every paired device is signed out and stays on the list')
+    expect(await live(old.token)).toBe(false)
+    const home = (patchRows() as { id: string, config: Record<string, unknown> }[]).find(row => row.id === 'delorun-home-auth')
+    expect(home?.config).toMatchObject({ pairing: { mayAskWithoutWindow: 'own-user' } })
+    const after = new HomeAuth({ directory })
+    await after.start()
+    expect((await after.devices()).devices.map(listed => listed.id)).toEqual([device.id])
+    await after.stop()
+    // Turned on again, the old cookie is still refused; a fresh sign-in gets a new one.
+    await reach().run(['on', 'tailscale'], context)
+    expect(await live(old.token)).toBe(false)
+    const fresh = await open()
+    expect(await live(fresh.token)).toBe(true)
+    expect(await live(old.token)).toBe(false)
+  })
+
+  it('signs the devices out whatever Tailscale or the running home answers, and says so only once it has', async () => {
+    const { old, live } = await pairedWithSession()
+    await reach().run(['on', 'tailscale'], context)
+    const failing = fakeTailscale(HOST, { 'serve off': { code: 1, stdout: '', stderr: 'serve is busy' } })
+    failing.config = ownRule(HOST, 443, readReachRow(delorunHome, 'default').listenerPort)
+    const failingServe = failing.run
+    // The home runs and answers: it signs out in its own apply, even though Tailscale could not remove the rule.
+    const sent: string[] = []
+    const answering = (answer: ResponseLine[] | Error) => (_home: string, _profile: string, request: UnsignedRequest): Promise<ResponseLine[]> => {
+      sent.push(request.op)
+      return answer instanceof Error ? Promise.reject(answer) : Promise.resolve(answer)
+    }
+    const off = [{ ok: true, options: [{ option: 'tailscale-private', state: 'off' }] }]
+    await expect(reach({ tailscale: failingServe, running: () => true, send: answering(off) }).run(['off'], context)).resolves.toBe(EXIT.failed)
+    expect(sent).toEqual(['reach.apply'])
+    expect(out.stderr).toContain('Tailscale may still serve this computer\'s studio')
+    expect(out.stdout).toContain('Every paired device is signed out')
+    // The home runs and does not answer: the stored sessions go here, and the restart is named.
+    expect(await live(old.token)).toBe(true)
+    out.stdout = ''
+    out.stderr = ''
+    await expect(reach({ tailscale: failingServe, running: () => true, send: answering(new Error('no socket')) }).run(['off'], context)).resolves.toBe(EXIT.failed)
+    expect(await live(old.token)).toBe(false)
+    expect(out.stderr).toContain('Restart Delorun to close it')
+    expect(out.stdout).toContain('Every paired device is signed out')
+  })
+
+  /** The home-level patch, which applies over every profile's own; it inserts the row, as a bundle's patch does in a real profile. */
+  function homePatch(secretsDirectory: string): void {
+    writeFileSync(join(delorunHome, 'cordis.patch.yml'), `- insert:\n    - id: delorun-home-auth\n      name: '@delorun/home-auth'\n      config:\n        secretsDirectory: ${secretsDirectory}\n`)
+  }
+
+  it('signs out the sessions in the secrets directory the home-level patch sets, not a fixed one', async () => {
+    // Pins the layers: the profile's own patch names no directory, so reading it alone finds the default and leaves these sessions.
+    const { old, live } = await pairedWithSession(join('secrets', 'configured-auth'))
+    await reach().run(['on', 'tailscale'], context)
+    homePatch(join(delorunHome, 'secrets', 'configured-auth'))
+    expect(await live(old.token)).toBe(true)
+    await expect(reach({ running: () => false }).run(['off'], context)).resolves.toBe(EXIT.ok)
+    expect(await live(old.token)).toBe(false)
+    expect(out.stdout).toContain('Every paired device is signed out')
+  })
+
+  it('reads the studio bundle\'s expression for the home\'s own directory as that directory, and refuses any other expression', async () => {
+    // Pins the expression: the real bundle sets the directory with it, so refusing it would leave no real profile able to sign out with Delorun stopped.
+    const { old, live } = await pairedWithSession()
+    await reach().run(['on', 'tailscale'], context)
+    const row = (expression: string): string => `- insert:\n    - id: delorun-home-auth\n      name: '@delorun/home-auth'\n      config:\n        secretsDirectory: !!js ${expression}\n`
+    writeFileSync(join(delorunHome, 'cordis.patch.yml'), row('process.env.ELSEWHERE'))
+    await expect(reach({ running: () => false }).run(['off'], context)).resolves.toBe(EXIT.failed)
+    expect(out.stderr).toContain('could not be resolved')
+    expect(await live(old.token)).toBe(true)
+    out.stdout = ''
+    writeFileSync(join(delorunHome, 'cordis.patch.yml'), row("dshHomePath('secrets', 'home-auth')"))
+    await expect(reach({ running: () => false }).run(['off'], context)).resolves.toBe(EXIT.ok)
+    expect(await live(old.token)).toBe(false)
+    expect(out.stdout).toContain('Every paired device is signed out')
+  })
+
+  it('does not say the devices are signed out when the home would refuse the configured directory, and still removes the serve rule', async () => {
+    // Pins the home's own check that the directory lies in `secrets`: a directory elsewhere is one the home never opens.
+    const { old, live } = await pairedWithSession(join('elsewhere', 'home-auth'))
+    await reach().run(['on', 'tailscale'], context)
+    homePatch(join(delorunHome, 'elsewhere', 'home-auth'))
+    out.stdout = ''
+    const served = fakeTailscale(HOST)
+    served.config = ownRule(HOST, 443, readReachRow(delorunHome, 'default').listenerPort)
+    await expect(reach({ tailscale: served.run, running: () => false }).run(['off'], context)).resolves.toBe(EXIT.failed)
+    expect(out.stdout).not.toContain('signed out')
+    expect(out.stderr).toContain('could not be resolved')
+    expect(served.config).toEqual({ TCP: {}, Web: {} })
+    expect(await live(old.token)).toBe(true)
+  })
+
+  it('has a home that started while the stored sessions were removed sign out too', async () => {
+    const { old, live } = await pairedWithSession()
+    await reach().run(['on', 'tailscale'], context)
+    const sent: string[] = []
+    const send = (_home: string, _profile: string, request: UnsignedRequest): Promise<ResponseLine[]> => {
+      sent.push(request.op)
+      return Promise.resolve([{ ok: true, options: [{ option: 'tailscale-private', state: 'off' }] }] as ResponseLine[])
+    }
+    // The first look finds no home; by the time the stored sessions are gone, one runs.
+    let looks = 0
+    await expect(reach({ running: () => (looks += 1) > 1, send }).run(['off'], context)).resolves.toBe(EXIT.ok)
+    expect(await live(old.token)).toBe(false)
+    expect(sent).toEqual(['reach.apply'])
+    expect(out.stdout).toContain('Every paired device is signed out')
+    // One that started and does not answer is named, with the restart that ends its sessions.
+    out.stderr = ''
+    looks = 0
+    await expect(reach({ running: () => (looks += 1) > 1, send: () => Promise.reject(new Error('no socket')) }).run(['off'], context)).resolves.toBe(EXIT.failed)
+    expect(out.stderr).toContain('Restart Delorun to end every session')
+  })
+
+  it('does not say the devices are signed out when the sign-out fails, and still removes the serve rule', async () => {
+    const { directory } = await pairedWithSession()
+    writeFileSync(join(directory, 'sessions.json'), 'not json')
+    await reach().run(['on', 'tailscale'], context)
+    out.stdout = ''
+    const live = fakeTailscale(HOST)
+    live.config = ownRule(HOST, 443, readReachRow(delorunHome, 'default').listenerPort)
+    await expect(reach({ tailscale: live.run, running: () => false }).run(['off'], context)).resolves.toBe(EXIT.failed)
+    expect(out.stdout).not.toContain('signed out')
+    expect(out.stderr).toContain('the paired devices could not be signed out')
+    expect(live.config).toEqual({ TCP: {}, Web: {} })
+  })
+
+  it('has the running Host sign the devices out after it has applied a row that leaves access off, even when the apply fails, and not for one that turns it on', async () => {
+    const signedOut = vi.fn(() => Promise.resolve(1))
+    const order: string[] = []
+    const service = { mounted: true, status: () => [], apply: async (): Promise<unknown> => { order.push('applied'); return Promise.resolve([{ option: 'tailscale-private', state: 'off' }]) } }
+    const homeAuth = { signAllDevicesOut: () => { order.push('signed out'); return signedOut() } }
+    const host = (rows: ReturnType<typeof reachRowsOf>) => localReach({ get: (name: string) => (name === 'homeAuth' ? homeAuth : service) } as never, () => rows)
+    await host(reachRowsOf({ ...REACH_OFF, enabled: false }))?.apply()
+    expect(order).toEqual(['applied', 'signed out'])
+    await host({})?.apply()
+    expect(signedOut).toHaveBeenCalledTimes(2)
+    await host(reachRowsOf({ ...REACH_OFF, enabled: true, address: `https://${HOST}` }))?.apply()
+    expect(signedOut).toHaveBeenCalledTimes(2)
+    // A listener that fails to stop still has the devices signed out, after it.
+    order.length = 0
+    service.apply = async () => { order.push('failed'); return Promise.reject(new Error('stuck')) }
+    await expect(host(reachRowsOf({ ...REACH_OFF, enabled: false }))?.apply()).rejects.toThrow('stuck')
+    expect(order).toEqual(['failed', 'signed out'])
+  })
+
+  it('has a Host without device sign-in refuse an apply that leaves access off, not report a sign-out that did not happen', async () => {
+    // Pins `signedOut`: with the optional call the apply answered ok, and the command printed that the devices were signed out and left the stored sessions.
+    const service = { mounted: true, status: () => [], apply: () => Promise.resolve([{ option: 'tailscale-private', state: 'off' }]) }
+    const host = (rows: ReturnType<typeof reachRowsOf>) => localReach({ get: (name: string) => (name === 'homeAuth' ? undefined : service) } as never, () => rows)
+    await expect(host(reachRowsOf({ ...REACH_OFF, enabled: false }))?.apply()).rejects.toThrow('no paired device was signed out')
+    // Turning access on needs no sign-out.
+    await expect(host(reachRowsOf({ ...REACH_OFF, enabled: true, address: `https://${HOST}` }))?.apply()).resolves.toBeDefined()
   })
 
   it('reports the row, and the running home\'s state', async () => {
@@ -711,7 +893,8 @@ describe('delorun devices elevate', () => {
 })
 
 describe('setup\'s reach section', () => {
-  const draft = { mode: 'full', answers: { reach: { option: 'none', identityFactor: null } }, secret: undefined } as never
+  const draft = { phase: 'single', answers: { reach: { option: 'none', identityFactor: null } }, secret: undefined } as never
+  const mainDraft = { phase: 'main', answers: { reach: { option: 'none', identityFactor: null } }, secret: undefined } as never
   const io = (answers: readonly (boolean | string | typeof BACK)[], notes: string[], initials: string[] = []) => {
     const queue = [...answers]
     return {
@@ -733,8 +916,6 @@ describe('setup\'s reach section', () => {
     expect(notes.some(note => note.includes(TRUST_STATEMENT[0]!))).toBe(true)
     const directory = join(delorunHome, 'profiles', 'default')
     const answers = { reach: { option: 'tailscale-private', identityFactor: 'tailnet-membership', pairing: 'tailnet' } } as never
-    expect(section.review?.(answers)).toBe('Remote access: from your phone over Tailscale; any device on your tailnet may ask to pair')
-    expect(section.review?.({ reach: { option: 'tailscale-private', identityFactor: 'tailnet-membership' } } as never)).toBe('Remote access: from your phone over Tailscale; only your own Tailscale user may ask to pair')
     await expect(section.apply({ home: delorunHome, env: {}, directory, secret: undefined }, answers)).resolves.toContain('ask to pair')
     expect(readPairingAt(join(directory, 'cordis.patch.yml')).mayAskWithoutWindow).toBe('tailnet')
     const row = readReachRow(delorunHome, 'default')
@@ -742,6 +923,34 @@ describe('setup\'s reach section', () => {
     // Applying again keeps the port chosen once.
     await section.apply({ home: delorunHome, env: {}, directory, secret: undefined }, answers)
     expect(readReachRow(delorunHome, 'default').listenerPort).toBe(row.listenerPort)
+  })
+
+  it('asks "Use Delorun from your other devices too? (phone, tablet, another computer, over Tailscale)" in the main flow with No preselected, runs the checks on Yes and keeps the safe pairing without asking', async () => {
+    const notes: string[] = []
+    const initials: string[] = []
+    const asked: string[] = []
+    const mainIo = (answers: readonly (string | typeof BACK)[]) => {
+      const queue = [...answers]
+      return {
+        confirm: (message: string) => { asked.push(message); return Promise.resolve(queue.shift()) },
+        select: (message: string, options: { value: string, label: string }[], initial: string) => { asked.push(`${message} ${options.map(option => option.label).join(' / ')}`); initials.push(initial); return Promise.resolve(queue.shift()) },
+        note: (body: string) => { notes.push(body) },
+      } as never
+    }
+    const section = reachSection(tailscale(), () => false)
+    const environment = { home: delorunHome, profile: 'default' } as never
+    await expect(section.ask(mainIo(['no']), mainDraft, environment)).resolves.toEqual({ answers: { useCase: 'local', reach: { option: 'none', identityFactor: null } }, status: 'answered' })
+    expect(asked).toEqual(['Use Delorun from your other devices too? (phone, tablet, another computer, over Tailscale) No, just this computer / Yes, over Tailscale'])
+    expect(initials).toEqual(['no'])
+    await expect(section.ask(mainIo(['yes']), mainDraft, environment)).resolves.toEqual({ answers: { useCase: 'remote', reach: { option: 'tailscale-private', identityFactor: 'tailnet-membership', pairing: 'own-user' } }, status: 'answered' })
+    expect(asked).toHaveLength(2)
+    expect(notes.some(note => note.includes(TRUST_STATEMENT[0]!))).toBe(true)
+    await expect(section.ask(mainIo([BACK]), mainDraft, environment)).resolves.toBe(BACK)
+    await expect(reachSection(tailscale({ version: { code: null, stdout: '', stderr: '' } }), () => false).ask(mainIo(['yes']), mainDraft, environment)).resolves.toEqual({ answers: { useCase: 'remote', reach: { option: 'none', identityFactor: null } }, status: 'answered' })
+    expect(notes.at(-1)).toContain('Remote access stays off')
+    const earlier = { phase: 'main', answers: { reach: { option: 'tailscale-private', identityFactor: 'tailnet-membership', pairing: 'tailnet' } }, secret: undefined } as never
+    await expect(section.ask(mainIo(['yes']), earlier, environment)).resolves.toMatchObject({ answers: { reach: { pairing: 'tailnet' } } })
+    expect(initials.at(-1)).toBe('yes')
   })
 
   it('leaves remote access off when the person says no, goes back, or a check fails', async () => {
@@ -758,7 +967,6 @@ describe('setup\'s reach section', () => {
     expect(notes.at(-1)).toContain('tailscale funnel --https=443 off, then try again\nRemote access stays off')
     await expect(reachSection(() => Promise.reject(new Error('broken')), () => false).ask(io([true], notes), draft, { home: delorunHome, profile: 'default' } as never)).rejects.toThrow('broken')
     const none = { reach: { option: 'none', identityFactor: null } } as never
-    expect(reachSection(tailscale(), () => false).review?.(none)).toBe('Remote access: off')
     await expect(reachSection(tailscale(), () => false).apply({ home: delorunHome, env: {}, directory: delorunHome, secret: undefined }, none)).resolves.toBeUndefined()
   })
 })

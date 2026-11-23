@@ -4,6 +4,11 @@
   gap: var(--onb-gap-1);
 }
 
+/* The studio's Tailscale address, which a long machine name would push past the step's width. */
+.address {
+  overflow-wrap: anywhere;
+}
+
 .tiles [role='radiogroup'] {
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
 }

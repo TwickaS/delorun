@@ -10,7 +10,6 @@
  *
  * @module @delorun/bundle-local/profile-versions
  */
-import type { IncomingMessage } from 'node:http'
 import type { Context } from '@deepseek-ai/cordis'
 // Type-only: the ctx.connection merge and its `connection/request` event.
 import type { ConnectionFetchRoute } from '@deepseek-ai/dsh-client-connection'
@@ -18,13 +17,14 @@ import type { ConnectionFetchRoute } from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-plugin-manager'
 import type { ProfileVersionId, VersionAdmission } from '@deepseek-ai/dsh-plugin-manager/history'
 import { discardImportReviews } from '@delorun/plugin-changes'
-import { gateByClass, isForeignFetchSite, isSameLoopbackOrigin, REACH_DEVICE, requireComputerOrDevice, routedPathname } from '@delorun/home-auth'
+import { gateByClass, REACH_DEVICE, requireComputerOrDevice, routedPathname } from '@delorun/home-auth'
 import {
   HOME_PATCH_COPY_FILENAME, isProfileSafetyError, listProfileVersions, openHistory, planRestore, saveProfileVersion, switchToVersion, UPDATE_REPORT_FILENAME,
   type RestorePlan,
 } from '@delorun/profile-safety'
 import { z } from 'zod'
 import { PROFILE_VERSION_ROUTES, type VersionChanges, type VersionEntry } from './client/versions-api.ts'
+import { fromStudioPage } from './studio-page.ts'
 
 /** The plugin's name in the loader's diagnostics. */
 export const name = 'delorun-profile-versions'
@@ -259,22 +259,6 @@ async function run(call: () => Promise<object>): Promise<Response> {
     if (error instanceof VersionsError) return json(VERSIONS_REFUSAL_STATUS[error.code], { error: error.code, message: error.message })
     throw error
   }
-}
-
-/**
- * Whether a state-changing request came from the studio's own page: no foreign `Sec-Fetch-Site`, and an `Origin`, when
- * sent, naming the request's own loopback host.
- * @param request - the request.
- * @returns whether the studio's page made it.
- */
-function fromStudioPage(request: Pick<IncomingMessage, 'headers'>, atComputer: boolean): boolean {
-  const site = request.headers['sec-fetch-site']
-  if (isForeignFetchSite(Array.isArray(site) ? site[0] : site)) return false
-  const { origin, host } = request.headers
-  if (origin === undefined) return true
-  if (atComputer) return isSameLoopbackOrigin(origin, host)
-  // A device's page is served from its reach address: its `Origin` must name the request's own `Host`.
-  return host !== undefined && URL.canParse(origin) && new URL(origin).host.toLowerCase() === host.toLowerCase()
 }
 
 /**

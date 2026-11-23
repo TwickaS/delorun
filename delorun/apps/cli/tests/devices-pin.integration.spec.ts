@@ -8,7 +8,8 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { PinModeStore } from '@delorun/home-auth'
 import { createReachCommand, homeRuns } from '../src/reach/command.ts'
-import { REACH_OFF, writeReachRow } from '../src/reach/row.ts'
+import { REACH_OFF } from '@delorun/setup-apply'
+import { writeReachRow } from '../src/reach/row.ts'
 import { sendHomeRequest, type LocalDeviceApproval, type UnsignedRequest } from '@delorun/home-process'
 import { EXIT } from '../src/exit.ts'
 import { PIN_OPTIONS_NO_EFFECT } from '../src/help.ts'
@@ -240,7 +241,7 @@ describe('delorun devices pin', () => {
   }, 60_000)
 
   it('is mentioned in one line by reach status when remote access is on and the mode is off', async () => {
-    const reach = createReachCommand({ tailscale: () => Promise.resolve({ code: 1, stdout: '', stderr: '' }), running: () => false, send: () => Promise.resolve([]), ask: () => Promise.resolve('y'), terminal: false })
+    const reach = createReachCommand({ tailscale: () => Promise.resolve({ code: 1, stdout: '', stderr: '' }), running: () => false, send: () => Promise.resolve([]), ask: () => Promise.resolve('y'), terminal: false, installAnchor: () => Promise.resolve('/unused/package.json') })
     await reach.run(['status'], context)
     expect(out.stdout).not.toContain('PIN mode')
     mkdirSync(join(home, 'profiles', PROFILE), { recursive: true, mode: 0o700 })

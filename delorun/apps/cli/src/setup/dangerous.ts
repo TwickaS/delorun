@@ -2,7 +2,8 @@
  * Dangerous mode, the third prompts answer of `delorun setup`: the warning and the two-step consent that precede it,
  * the refusals of the scripted forms and of a root user, and the grant file that makes full access available to every
  * chat. The `delorun-permission-defaults` row's `fullAccessEverywhere` setting alone grants nothing; the plugin honours
- * it only while this file is valid, and only `delorun setup` writes it.
+ * it only while this file is valid, and only `delorun setup` and the studio's computer-only confirmation write it. The
+ * warning text and the root check are `@delorun/setup-apply`'s.
  *
  * The grant file is `<home>/secrets/permission-defaults/full-access-everywhere.json`; the plugin's store module
  * (`@delorun/plugin-permission-defaults/store`) reads, writes and removes it.
@@ -13,6 +14,7 @@ import { join } from 'node:path'
 import { CLI_PROFILE } from '@delorun/contract-home-layout'
 import { DANGEROUS_PHRASE, type PromptsAnswer } from '@delorun/contract-setup-answers'
 import { dangerousGrantPath, readDangerousGrant } from '@delorun/plugin-permission-defaults/store'
+import { DANGEROUS_WARNING_LINES, runsAsRoot } from '@delorun/setup-apply'
 import { CliError, EXIT } from '../exit.ts'
 import { readPromptsAnswer } from './prompt-switches.ts'
 import { BACK, type Back, type StepIO } from './steps.ts'
@@ -20,27 +22,8 @@ import { BACK, type Back, type StepIO } from './steps.ts'
 /** The line `delorun` prints at start and `delorun status` prints while dangerous mode is on. */
 export const DANGEROUS_ON_LINE = 'Dangerous mode is on: any chat can switch to full access without asking. Turn it off with `delorun setup prompts`.'
 
-/** The warning of step 1, one paragraph per entry; {@link DANGEROUS_WARNING_VERSION} names this text. */
-export const DANGEROUS_WARNING_LINES: readonly string[] = [
-  'Dangerous mode lets any chat switch to full access without asking: a chat at this computer, a phone signed in over remote access, a scheduled task, a bot, or delorun headless.',
-  'A phone or browser signed in over remote access can then also do everything this computer can, except turn this mode on and approve new devices.',
-  'Commands then run outside the sandbox with everything your user can do, including reading and changing Delorun\'s home, its keys and the token that controls it.',
-  'The questions before writing AGENTS.md or skills, adding MCP servers and creating scheduled tasks are off, as in DeepSeek Harness.',
-  'Text the model reads (web pages, files, repositories) can tell it to do harmful things.',
-  'New chats still start on Workspace Write unless you choose otherwise.',
-  'Turn it off with `delorun setup prompts`.',
-]
-
 /** The sentence a refusal gives for a root user. */
 const ROOT_REFUSAL = 'dangerous mode is refused when running as root, because full access then reaches the whole computer, not one user\'s account; run delorun as an ordinary user, as Claude Code requires for its bypass mode'
-
-/**
- * Whether this process runs as the root user.
- * @returns true when the effective user id is 0; false on a platform without user ids.
- */
-export function runsAsRoot(): boolean {
-  return process.getuid?.() === 0
-}
 
 /**
  * Refuse a dangerous answer for a root user.

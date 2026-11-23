@@ -15,7 +15,7 @@ import { readFile, writeFile } from 'node:fs/promises'
 import { createServer, request as httpRequest, type IncomingMessage, type ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { REACH_SESSION_COOKIE, type DeviceId, type ReachListenerId, type StudioAddress } from '@delorun/contract-admission'
 import { HOME_AUTH_FILES } from '@delorun/contract-device-approval'
@@ -36,6 +36,8 @@ const FUNNEL: ReachListenerId = 'reach-tailscale-funnel'
 const PIN = '482916'
 /** Each secret comparison is one scrypt derivation at the production cost; these specs make a dozen or more, so they outlast the default 10 s under load. */
 const SCRYPT_TIMEOUT_MS = 60_000
+// Every spec and hook here may derive at the production cost, so the whole file gets the longer limit, not only the specs that make the most comparisons.
+vi.setConfig({ testTimeout: SCRYPT_TIMEOUT_MS, hookTimeout: SCRYPT_TIMEOUT_MS })
 const MINUTE = 60_000
 /** The one action the grant tests confirm, with the lowercase hex SHA-256 of its arguments the grant route requires. */
 const ACTION = 'pluginManager/installBundle'
@@ -404,6 +406,33 @@ describe('a device with no page unlock window', () => {
     expect(granted()).toBe(false)
     expect(running()).toBeUndefined()
   })
+
+  it('mints no grant when every device is signed out while the request body is still arriving', async () => {
+    // Pins the checks that run after the body is read: the route admitted the session before it, so the sign-out in between
+    // is seen only by the session check before the grant is minted.
+    await turnOn()
+    const reply = await new Promise<Reply>((resolve, reject) => {
+      const text = JSON.stringify({ secret: PIN, actions: [{ action: ACTION, hash: HASH }] })
+      const host = `127.0.0.1:${String(port)}`
+      const request = httpRequest({
+        host: '127.0.0.1', port, method: 'POST', path: `${PASSKEY_PATHS.pin}?reach`, setHost: false, agent: false,
+        headers: { host, cookie: `${REACH_SESSION_COOKIE}=${token}`, 'content-type': 'application/json', 'content-length': String(Buffer.byteLength(text)) },
+      }, (response) => {
+        let received = ''
+        response.setEncoding('utf8')
+        response.on('data', (chunk: string) => { received += chunk })
+        response.on('end', () => { resolve({ status: response.statusCode ?? 0, text: received, body: received === '' ? {} : JSON.parse(received) as Record<string, unknown> }) })
+      })
+      request.on('error', reject)
+      request.write(text.slice(0, 10))
+      // The first part has arrived and the route has admitted the session; the rest follows the sign-out.
+      setTimeout(() => {
+        home.auth.signAllDevicesOut().then(() => { request.end(text.slice(10)) }, reject)
+      }, 100)
+    })
+    expect(reply.status).toBeGreaterThanOrEqual(400)
+    expect(granted()).toBe(false)
+  }, SCRYPT_TIMEOUT_MS)
 
   it('gives no unlock window to a device with a passkey or without one, and a grant to both', async () => {
     await home.auth.passkeyStore.add({

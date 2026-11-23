@@ -53,7 +53,7 @@ describe("Delorun's layout", () => {
     expect(pages(projectLayout(layout, SECTION_ROWS, REGISTERED_ITEMS))).toEqual({
       General: [
         ': language', 'Look: delorun-look', 'Updates: delorun-update-check, delorun-versions', ': shortcuts',
-        'Getting started: delorun-onboarding', 'Advanced: developer-tools',
+        'Getting started: delorun-onboarding', 'delorun-setup-commands', 'Advanced: developer-tools',
       ],
       Appearance: ['delorun-appearance', 'Text and density: delorun-typeface, font-size, delorun-density'],
       Sidebar: ['delorun-sidebar', 'delorun-chat-states'],

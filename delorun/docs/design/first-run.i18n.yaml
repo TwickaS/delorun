@@ -3,22 +3,22 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delorun/docs/design/first-run.md
 /:
-  en: 1528c731488b199e
+  en: 254ed33d9dd40a4e
   zh: 6b5560819847283f
 /the-first-run:
   en: 3aaf5d0856fb6706
   zh: de79a71c043f03d9
 /the-first-run/summary:
-  en: 476d77e85bafecfd
+  en: 883855050b33a22b
   zh: c220f7af2e84b8bf
 /the-first-run/contents:
   en: 479fc10754bd01ac
   zh: 14a153171b4e29d8
 /the-first-run/what-exists-today:
-  en: b6129e0a0faef9cb
+  en: 674d6c5c8f82a2aa
   zh: 8ae27c1d57681ffe
 /the-first-run/the-rules:
-  en: f651c9f88182c94c
+  en: 8319c4cf77b38752
   zh: 2f557cc962bb1c22
 /the-first-run/what-this-does-not-protect-against:
   en: 225e17823c50fdf5
@@ -27,5 +27,5 @@
   en: 2481dbe2bba19a9b
   zh: 1de1e9d1596da47b
 /the-first-run/implementation-status:
-  en: 50f5ce5bc5c23942
+  en: 79e149b3e03bdd4d
   zh: 82f61c94a12d97dd

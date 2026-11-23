@@ -29,6 +29,7 @@
     "./agent-limits-locales": "./src/client/agent-limits-locales.ts",
     "./full-access": "./src/client/full-access.ts",
     "./profile-versions": "./src/profile-versions.ts",
+    "./run-settings": "./src/run-settings.ts",
     "./requirements": "./src/requirements.ts",
     "./requirements-api": "./src/client/requirements-api.ts",
     "./browser-check-api": "./src/client/browser-check-api.ts",
@@ -54,6 +55,9 @@
     "src/update-check.ts",
     "src/trust.ts",
     "src/profile-versions.ts",
+    "src/run-settings.ts",
+    "src/studio-page.ts",
+    "src/client/run-settings-api.ts",
     "src/requirements.ts",
     "src/client/requirements-api.ts",
     "src/browse-pairing.ts",
@@ -102,6 +106,8 @@
   },
   "dependencies": {
     "@deepseek-ai/dsh-app-boot": "workspace:*",
+    "@deepseek-ai/dsh-atomic-write": "workspace:*",
+    "@deepseek-ai/dsh-hmr": "workspace:*",
     "@deepseek-ai/dsh-home-paths": "workspace:*",
     "@deepseek-ai/dsh-native-command": "workspace:*",
     "@deepseek-ai/dsh-official-bundles": "workspace:*",
@@ -109,6 +115,7 @@
     "@deepseek-ai/dsh-subprocess": "workspace:*",
     "@delorun/agent-claude-code": "workspace:*",
     "@delorun/agent-codex": "workspace:*",
+    "@delorun/contract-reach-providers": "workspace:*",
     "@delorun/contract-setup-answers": "workspace:*",
     "@delorun/contract-update-report": "workspace:*",
     "@delorun/external-agents": "workspace:*",
@@ -135,6 +142,7 @@
     "@delorun/reach": "workspace:*",
     "@delorun/brand": "workspace:*",
     "@delorun/settings-controls": "workspace:*",
+    "@delorun/setup-apply": "workspace:*",
     "zod": "4.6.6"
   },
   "peerDependencies": {

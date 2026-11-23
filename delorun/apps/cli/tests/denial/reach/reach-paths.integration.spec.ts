@@ -159,6 +159,7 @@ const FACE_ROUTES: ReadonlySet<string> = new Set([
   '/api/delorunNewWorkspace.create', '/api/delorunNewWorkspace.places', '/api/delorunNewWorkspace.preview', '/api/delorunNewWorkspace.search', '/api/delorunNewWorkspace.setDefaults',
   '/api/delorunPacks.enqueue', '/api/delorunPacks.remove', '/api/delorunPacks.retry', '/api/delorunPermission.setFullAccess', '/api/delorunReport.details',
   '/api/delorunTrash.empty', '/api/delorunTrash.purge', '/api/delorunTrash.removeSetAside', '/api/delorunVersions.save', '/api/delorunVersions.switch',
+  '/api/delorunRun.prompts', '/api/delorunRun.background',
 ])
 const UPSTREAM_OWNER_ONLY = 'upstream declares no device admission, so only the owner reaches it'
 
@@ -170,6 +171,14 @@ const UPSTREAM_OWNER_ONLY = 'upstream declares no device admission, so only the 
 const FETCH_ROUTES: Readonly<Record<string, FetchDecision>> = {
   '/api/delorunBrowsePair.start': { device: 'refused', reason: 'pairing runs browse on the computer and links the person\'s own Chrome, with their sign-ins; only the computer\'s own studio starts it' },
   '/api/delorunBrowser.test': { device: 'refused', reason: 'the Settings Browser page\'s test starts a browser on the computer, outside the agent sandbox; only the computer\'s own studio asks (route-access C)' },
+  '/api/delorunRun.state': READ('reads the answers of How Delorun runs and what runs now: port numbers and whether phone access is on, with no key or path'),
+  '/api/delorunRun.prompts': UNLOCKED('turning questions off lets a chat do more without asking, so a device confirms `stock` with Face ID or its PIN every time; `safer` only tightens'),
+  '/api/delorunRun.background': UNLOCKED('keeping Delorun running after the terminal closes decides whether the studio stays reachable'),
+  '/api/delorunRun.dangerousBegin': { device: 'refused', reason: 'the first step of turning dangerous mode on, which only the person at the computer does (route-access C)', refusal: 'LOOPBACK_REQUIRED' },
+  '/api/delorunRun.dangerousConfirm': { device: 'refused', reason: 'turning dangerous mode on is done only at the computer, in dangerous mode and with an unlock too (route-access C)', refusal: 'LOOPBACK_REQUIRED' },
+  '/api/delorunRun.port': { device: 'refused', reason: 'the studio\'s port decides where it listens and changes its sign-in address (route-access C)', refusal: 'LOOPBACK_REQUIRED' },
+  '/api/delorunRun.reachPreview': { device: 'refused', reason: 'it reads Tailscale on the computer and issues the ticket that turning phone access on needs (route-access C)', refusal: 'LOOPBACK_REQUIRED' },
+  '/api/delorunRun.reach': { device: 'refused', reason: 'turning phone access on or off decides who can reach the home (route-access C)', refusal: 'LOOPBACK_REQUIRED' },
   '/api/delorunBrowser.install': { device: 'refused', reason: 'the Settings Browser page downloads a browser build onto the computer; only the computer\'s own studio asks (route-access C)' },
   '/api/delorunPreviewFlags.list': READ('names the declared preview flags and whether each is on, with no setting or data'),
   '/api/delorunChatStates.list': READ('snooze and settle states order the chat list, which a phone shows too'),
@@ -226,7 +235,7 @@ const FETCH_ROUTES: Readonly<Record<string, FetchDecision>> = {
   '/api/delorunPermission.review': OPEN('shows what full access would allow, before anything changes', 400),
   '/api/delorunPermission.setFullAccess': UNLOCKED('a workspace\'s full access lets a chat write outside the workspace sandbox'),
   '/api/delorunPermission.everywhere': READ('reading whether dangerous mode is on'),
-  '/api/delorunPermission.everywhereOff': OPEN('turning dangerous mode off only tightens; no route turns the mode on'),
+  '/api/delorunPermission.everywhereOff': OPEN('turning dangerous mode off only tightens; turning it on is the computer-only `delorunRun.dangerousConfirm`'),
   '/api/delorunMcpConsent.pending': READ('lists the MCP servers waiting for the person\'s OK'),
   '/api/delorunMcpConsent.accept': UNLOCKED('accepting a stdio MCP server lets its command run outside the sandbox'),
   '/api/delorunMcpConsent.decline': OPEN('declining only withholds consent', 400),

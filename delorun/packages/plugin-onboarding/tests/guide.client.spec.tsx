@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createGuide, fits, folderOf, presentConnections, type Loadable } from '../src/client/guide.ts'
-import { hostApi, readReach, REACH_STATUS_PATH } from '../src/client/host-api.ts'
+import { hostApi, readReach, readReachAddress, REACH_STATUS_PATH } from '../src/client/host-api.ts'
 import { KEY_TEST_PATH, READINESS_PATH, RECOMMEND_PATH, type KeyTestAnswer, type Readiness, type RecommendAnswer } from '../src/wire.ts'
 import { hostFake, KEYS, READY } from './fixtures.client.ts'
 
@@ -133,6 +133,20 @@ describe('the guide\'s requests', () => {
     expect(await readReach()).toBe(expected)
     expect(fetch.mock.calls[0]?.[0]).toBe(REACH_STATUS_PATH.slice(1))
     expect(hostApi.reach).toBe(readReach)
+  })
+
+  it.each<readonly [string, () => Response | Promise<Response>, string | undefined]>([
+    ['an option is ready with an address', () => json({ options: [{ state: 'off' }, { state: 'ready', address: 'https://my-pc.example.ts.net' }] }), 'https://my-pc.example.ts.net'],
+    ['the ready option has no address', () => json({ options: [{ state: 'ready' }] }), undefined],
+    ['only a degraded option has one', () => json({ options: [{ state: 'degraded', address: 'https://my-pc.example.ts.net' }] }), undefined],
+    ['the summary has no options', () => json({ options: 'none' }), undefined],
+    ['the home has no reach', () => json({}, 404), undefined],
+    ['the summary cannot be read', () => Promise.reject(new TypeError('network')), undefined],
+  ])('reads the address over Tailscale only from a ready option: when %s', async (_, answer, expected) => {
+    const fetch = stub(answer)
+    expect(await readReachAddress()).toBe(expected)
+    expect(fetch.mock.calls[0]?.[0]).toBe(REACH_STATUS_PATH.slice(1))
+    expect(hostApi.reachAddress).toBe(readReachAddress)
   })
 
   it('reads a studio opened through reach, on any hostname but this computer\'s, as remote without asking the home', async () => {

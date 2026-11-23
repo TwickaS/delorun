@@ -8,8 +8,8 @@ import { composeEntries, loadProfile } from '@deepseek-ai/dsh-app-boot'
 import { INSTALL_ANCHOR } from '@deepseek-ai/dsh/profile-boot'
 import * as UpdateCheck from '@delorun/bundle-local/update-check'
 import { ensureHomeTree, runDirectory } from '@delorun/home'
-import { PROFILE_STEP, PROGRESS_FILENAME, readProgress, sectionStep, type SetupStep } from '../../src/setup/progress.ts'
-import { runSetup, type SetupForm, type SetupHooks, type SetupRequest } from '../../src/setup/index.ts'
+import { PROFILE_STEP, PROGRESS_FILENAME, readProgress, sectionStep, writeProgress, type SetupStep } from '../../src/setup/progress.ts'
+import { runSection, runSetup, type SetupForm, type SetupHooks, type SetupRequest } from '../../src/setup/index.ts'
 import { CliError, EXIT } from '../../src/exit.ts'
 import { hasCliProfile, profileDirectory } from '../../src/profile.ts'
 import { scriptedPrompter, type Answer, type Recording } from './support.ts'
@@ -100,15 +100,16 @@ afterEach(() => {
   rmSync(osHome, { recursive: true, force: true })
 })
 
-const QUICK_WITH_ENVIRONMENT_KEY: readonly Answer[] = ['local', 'deepseek-official', 'environment', 'safer', 'save']
+/** The main flow's one question on a home without a stock home: no phone. */
+const NO_PHONE: readonly Answer[] = ['no']
 
 describe('setup forms', { timeout: SETUP_TIMEOUT_MS }, () => {
   it('interactive and --yes runs produce identical profile writes', async () => {
     const interactiveHome = join(osHome, 'interactive', '.delorun')
     await ensureHomeTree(interactiveHome, PROFILE)
-    expect(await setup(asked(QUICK_WITH_ENVIRONMENT_KEY), {}, undefined, interactiveHome)).toBe(EXIT.ok)
+    expect(await setup(asked(NO_PHONE), {}, undefined, interactiveHome)).toBe(EXIT.ok)
 
-    expect(await setup({ kind: 'yes' }, undefined, undefined, home, DEEPSEEK_CHOICE)).toBe(EXIT.ok)
+    expect(await setup({ kind: 'yes' })).toBe(EXIT.ok)
 
     expect(writesOf(interactiveHome).filter(line => !line.includes('setup-answers.json'))).toEqual(writesOf(home).filter(line => !line.includes('setup-answers.json')))
     const answersOf = (root: string): Record<string, unknown> => {
@@ -127,12 +128,14 @@ describe('setup forms', { timeout: SETUP_TIMEOUT_MS }, () => {
     expect(parse(patch)).toHaveLength(4)
   })
 
-  it('refuses the questions without a terminal, and writes nothing', async () => {
-    const error = await setup({ kind: 'interactive' }, {}).catch((caught: unknown) => caught)
-    expect(error).toBeInstanceOf(CliError)
-    expect((error as CliError).exit).toBe(EXIT.usage)
-    expect((error as Error).message).toContain('the questions need a terminal')
-    expect(hasCliProfile(home, PROFILE)).toBe(false)
+  it('takes the --yes answers when the questions have no terminal, and writes the same profile', async () => {
+    expect(await setup({ kind: 'interactive' }, {})).toBe(EXIT.ok)
+    expect(hasCliProfile(home, PROFILE)).toBe(true)
+    const yesHome = join(osHome, 'yes', '.delorun')
+    await ensureHomeTree(yesHome, PROFILE)
+    expect(await setup({ kind: 'yes' }, {}, undefined, yesHome)).toBe(EXIT.ok)
+    expect(writesOf(home).filter(line => !line.includes('setup-answers.json'))).toEqual(writesOf(yesHome).filter(line => !line.includes('setup-answers.json')))
+    expect(lines.join('')).toContain('Delorun has no telemetry of its own.')
   })
 
   it('--yes without --provider sets up no provider, writes no provider row and says how to add one', async () => {
@@ -160,40 +163,42 @@ describe('setup forms', { timeout: SETUP_TIMEOUT_MS }, () => {
 })
 
 describe('an interrupted setup', { timeout: SETUP_TIMEOUT_MS }, () => {
-  it('resumes at the first step that did not finish, without repeating a finished step or asking the key again', async () => {
+  it('resumes at the first step that did not finish, without repeating a finished step or asking the phone question again', async () => {
     const steps: SetupStep[] = []
     const interrupt: SetupHooks = {
       afterStep(step) {
         steps.push(step)
-        if (step === sectionStep('key')) throw new Error('interrupted')
+        if (step === sectionStep('reach')) throw new Error('interrupted')
       },
     }
-    const typed: readonly Answer[] = ['local', 'deepseek-official', 'prompt', 'typed-key-value', 'safer', 'save']
-    await expect(setup(asked(typed), {}, interrupt)).rejects.toThrow('interrupted')
-    expect(steps).toEqual([PROFILE_STEP, sectionStep('privacy'), sectionStep('import'), sectionStep('key')])
+    await expect(setup(asked(NO_PHONE), {}, interrupt)).rejects.toThrow('interrupted')
+    expect(steps).toEqual([PROFILE_STEP, sectionStep('privacy'), sectionStep('reach')])
     expect(readProgress(runDirectory(home, PROFILE))?.completed).toEqual(steps)
-    expect(parse(readFileSync(join(home, '.credentials.yaml'), 'utf8'))).toEqual({ version: 1, refs: { DEEPSEEK_API_KEY: 'typed-key-value' } })
 
     recording.asked.length = 0
     const resumed: SetupStep[] = []
-    // The key was stored before the interruption, so a resume that asks for it again fails on the empty script.
-    expect(await setup(asked([false]), {}, { afterStep: step => void resumed.push(step) })).toBe(EXIT.ok)
-    expect(resumed).toEqual([sectionStep('prompts'), sectionStep('background'), sectionStep('reach'), sectionStep('changes-protection'), sectionStep('profile')])
-    expect(recording.asked.filter(question => question.startsWith('secret'))).toEqual([])
+    // The phone answer was recorded before the interruption, so a resume that asks it again fails on the empty script.
+    expect(await setup(asked([]), {}, { afterStep: step => void resumed.push(step) })).toBe(EXIT.ok)
+    expect(resumed).toEqual(['changes-protection', 'import', 'key', 'prompts', 'background', 'profile'].map(sectionStep))
+    expect(recording.asked).toEqual([])
     expect(lines.join('')).toContain('Resuming the setup')
 
     const clean = join(osHome, 'clean', '.delorun')
     await ensureHomeTree(clean, PROFILE)
-    expect(await setup(asked(typed), {}, undefined, clean)).toBe(EXIT.ok)
+    expect(await setup(asked(NO_PHONE), {}, undefined, clean)).toBe(EXIT.ok)
     expect(writesOf(home)).toEqual(writesOf(clean))
   })
 
-  it('asks for the key again when the run stopped before the key section, and a non-terminal resume refuses', async () => {
+  it('asks for the key again when a recorded run chose to type it and stopped before the key section, and a non-terminal resume refuses', async () => {
     const interrupt: SetupHooks = { afterStep: (step) => { if (step === PROFILE_STEP) throw new Error('interrupted') } }
-    await expect(setup(asked(['local', 'deepseek-official', 'prompt', 'typed-key-value', 'safer', 'save']), {}, interrupt)).rejects.toThrow('interrupted')
+    await expect(setup(asked(NO_PHONE), {}, interrupt)).rejects.toThrow('interrupted')
+    // The main flow does not ask for a key; a run record from a flow that did (a --config document or an earlier release) is resumed the same way.
+    const progress = readProgress(runDirectory(home, PROFILE))
+    if (progress === undefined) throw new Error('the interrupted run left no record')
+    writeProgress(runDirectory(home, PROFILE), { ...progress, answers: { ...progress.answers, modelProvider: { id: 'deepseek-official', credential: { source: 'prompt' }, baseURL: null, model: null } } })
     await expect(setup({ kind: 'yes' })).rejects.toThrow('needs the model key')
     recording.asked.length = 0
-    expect(await setup(asked(['typed-key-value', false]), {})).toBe(EXIT.ok)
+    expect(await setup(asked(['typed-key-value']), {})).toBe(EXIT.ok)
     expect(recording.asked.filter(question => question.startsWith('secret'))).toEqual(['secret: DeepSeek API key'])
     expect(parse(readFileSync(join(home, '.credentials.yaml'), 'utf8'))).toEqual({ version: 1, refs: { DEEPSEEK_API_KEY: 'typed-key-value' } })
   })
@@ -201,7 +206,7 @@ describe('an interrupted setup', { timeout: SETUP_TIMEOUT_MS }, () => {
   it('records every step in order when nothing interrupts', async () => {
     const steps: SetupStep[] = []
     expect(await setup({ kind: 'yes' }, undefined, { afterStep: step => void steps.push(step) })).toBe(EXIT.ok)
-    expect(steps).toEqual([PROFILE_STEP, ...['privacy', 'import', 'key', 'prompts', 'background', 'reach', 'changes-protection', 'profile'].map(sectionStep)])
+    expect(steps).toEqual([PROFILE_STEP, ...['privacy', 'reach', 'changes-protection', 'import', 'key', 'prompts', 'background', 'profile'].map(sectionStep)])
     expect(existsSync(join(runDirectory(home, PROFILE), 'setup-progress.json'))).toBe(false)
     expect(statSync(join(profileDirectory(home, PROFILE), 'setup-answers.json')).mode & 0o777).toBe(0o600)
   })
@@ -244,12 +249,10 @@ describe('the first start after setup', { timeout: SETUP_TIMEOUT_MS }, () => {
     }
   }
 
-  it('update-notice-off-at-first-start: a setup that turns the check off under More settings has the row off in the profile the first start composes, so no check mounts', async () => {
-    const run = runSetup({
-      home, profile: PROFILE, output, env: {}, form: asked(['local', 'deepseek-official', 'environment', 'safer', 'more', 'off', 'yes', 'no', 'no', 'default', '3080', 'save']),
-      keyCheck: () => Promise.resolve({ ok: true }), portIsFree: () => Promise.resolve(true),
-    })
-    expect(await run).toBe(EXIT.ok)
+  it('update-notice-off-at-first-start: delorun setup privacy turning the check off puts the row off in the profile the first start composes, so no check mounts', async () => {
+    expect(await setup(asked(NO_PHONE), {})).toBe(EXIT.ok)
+    const again: SetupRequest = { home, profile: PROFILE, output, env: {}, form: asked(['off']) }
+    expect(await runSection(again, 'privacy')).toBe(EXIT.ok)
     const row = composedUpdateCheckRow()
     expect(row).toEqual({ id: 'delorun-update-check', name: '@delorun/bundle-local/update-check', config: { intervalHours: 24, timeoutSeconds: 15, enabled: false } })
     expect(await mountsCheck(row?.config)).toBe(false)

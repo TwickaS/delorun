@@ -1,0 +1,117 @@
+/**
+ * The How Delorun runs service over a real profile directory, the profile's real write lock and a real listening port,
+ * with only Tailscale, the reach service and the root check faked: a port another program holds is refused, concurrent
+ * changes keep every one of them, and the files a change writes are private to the user.
+ */
+import { createServer, type Server } from 'node:net'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterEach, describe, expect, it } from 'vitest'
+import { DANGEROUS_PHRASE } from '@delorun/contract-setup-answers'
+import { dangerousGrantPath, readDangerousGrant } from '@delorun/plugin-permission-defaults/store'
+import { isPortFree } from '@delorun/reach'
+import { fakeTailscale } from '../../reach/tests/fake-tailscale.ts'
+import { RunSettings, systemDependencies } from '../src/run-settings.ts'
+
+const roots: string[] = []
+const servers: Server[] = []
+afterEach(async () => {
+  for (const server of servers.splice(0)) await new Promise<void>(resolve => server.close(() => { resolve() }))
+  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
+})
+
+/** A real home with one profile that setup has run for, and a service over it. */
+function setup(runningPort?: number, hot: { readonly hmr?: unknown, readonly reloadWaitMs?: number } = {}) {
+  const home = mkdtempSync(join(tmpdir(), 'delorun-run-settings-it-'))
+  roots.push(home)
+  const profileDir = join(home, 'profiles', 'default')
+  mkdirSync(profileDir, { recursive: true })
+  writeFileSync(join(profileDir, 'package.json'), '{}\n')
+  writeFileSync(join(profileDir, 'cordis.patch.yml'), '[]\n')
+  writeFileSync(join(profileDir, 'setup-answers.json'), JSON.stringify({ version: 1, prompts: 'safer', background: true, profile: { name: null, port: null } }))
+  const scope = { get: (name: string) => (name === 'profileContext' ? { name: 'default', dir: profileDir, home } : name === 'webServer' && runningPort !== undefined ? { port: runningPort } : name === 'hmr' ? hot.hmr : undefined) }
+  const service = new RunSettings({ ...systemDependencies(scope as never), ...hot.reloadWaitMs === undefined ? {} : { reloadWaitMs: hot.reloadWaitMs }, tailscale: fakeTailscale('my-pc.example.ts.net').run, reach: () => undefined, runsAsRoot: () => false })
+  return { service, home, profileDir, record: (): Record<string, unknown> => JSON.parse(readFileSync(join(profileDir, 'setup-answers.json'), 'utf8')) as Record<string, unknown> }
+}
+
+/**
+ * Listen on a port the operating system picks.
+ * @returns the port.
+ */
+async function hold(): Promise<number> {
+  const server = createServer()
+  servers.push(server)
+  await new Promise<void>((resolve) => { server.listen(0, '127.0.0.1', () => { resolve() }) })
+  const address = server.address()
+  if (address === null || typeof address === 'string') throw new Error('no port')
+  return address.port
+}
+
+describe.skipIf(process.platform === 'win32')('the How Delorun runs service on a real profile', () => {
+  it('refuses a port another program holds, and writes the port it is given when free', async () => {
+    // Pins `isPortFree` against a real listener: a studio could not start on a port that is held.
+    const w = setup()
+    const busy = await hold()
+    await expect(w.service.port(busy)).rejects.toMatchObject({ code: 'PORT_BUSY' })
+    expect(readFileSync(join(w.profileDir, 'cordis.patch.yml'), 'utf8')).toBe('[]\n')
+    const free = await hold()
+    servers.pop()?.close()
+    await expect.poll(() => isPortFree(free)).toBe(true)
+    expect(await w.service.port(free)).toMatchObject({ port: free, restartNeeded: true })
+    expect(w.record()).toMatchObject({ profile: { port: free } })
+  })
+
+  it('keeps every change when several arrive together', async () => {
+    // Pins the profile's write lock: two unlocked read-modify-writes of the answers record would lose one.
+    const w = setup()
+    const port = await hold()
+    servers.pop()?.close()
+    await expect.poll(() => isPortFree(port)).toBe(true)
+    await Promise.all([w.service.background(false), w.service.prompts('stock'), w.service.port(port)])
+    expect(w.record()).toMatchObject({ prompts: 'stock', background: false })
+    expect(w.record()['profile']).toEqual({ name: null, port })
+  })
+
+  it('writes the record and the grant file at mode 0600, and takes the grant away again with a safer answer', async () => {
+    const w = setup()
+    const begun = w.service.dangerousBegin()
+    await w.service.dangerousConfirm({ nonce: begun.nonce, understood: true, phrase: DANGEROUS_PHRASE })
+    expect((await readDangerousGrant(dangerousGrantPath(w.home))).kind).toBe('valid')
+    expect(statSync(dangerousGrantPath(w.home)).mode & 0o777).toBe(0o600)
+    expect(statSync(join(w.profileDir, 'setup-answers.json')).mode & 0o777).toBe(0o600)
+    expect((await w.service.state()).dangerous).toBe('on')
+    await w.service.prompts('safer')
+    expect((await readDangerousGrant(dangerousGrantPath(w.home))).kind).toBe('absent')
+    expect((await w.service.state()).dangerous).toBe('off')
+  })
+
+  describe('the hot reload behind the restart note, through the real wiring', () => {
+    /** A fake hot-reload service whose `reconcileProfile` is the given one, run through `runExclusive` as the real one is. */
+    const hmr = (reconcileProfile: () => Promise<unknown>) => ({ runExclusive: <T>(run: () => Promise<T>): Promise<T> => run(), reconcileProfile })
+
+    it('answers no restart for a reload that settles, and one for a failure, a restart reason, no service or a reload that never settles', async () => {
+      // Pins the mapping in `reloaded`: only a settled reload with no restart reason leaves the note off.
+      const answer = async (hot: Parameters<typeof setup>[1]) => (await setup(undefined, hot).service.prompts('stock')).restartNeeded
+      expect(await answer({ hmr: hmr(() => Promise.resolve({ restartReason: undefined })) })).toBe(false)
+      // An entry that was already inactive is reported as a warning only: the reload settled, so nothing needs a restart (as `changes.reload` answers).
+      expect(await answer({ hmr: hmr(() => Promise.resolve({ restartReason: undefined, warnings: ['plugin was inactive'] })) })).toBe(false)
+      expect(await answer({ hmr: hmr(() => Promise.resolve({ restartReason: 'a plugin changed its service' })) })).toBe(true)
+      expect(await answer({ hmr: hmr(() => Promise.reject(new Error('a replacement failed'))) })).toBe(true)
+      expect(await answer({})).toBe(true)
+      expect(await answer({ hmr: hmr(() => new Promise<never>(() => undefined)), reloadWaitMs: 200 })).toBe(true)
+    })
+
+    it('leaves the profile lock free while a reload hangs, so a change that takes it is not blocked', async () => {
+      // Pins the order in `prompts`: written under the real file lock, released, then the bounded wait.
+      const w = setup(undefined, { hmr: hmr(() => new Promise<never>(() => undefined)), reloadWaitMs: 1500 })
+      const hung = w.service.prompts('stock')
+      await new Promise<void>((resolve) => { setTimeout(resolve, 100) })
+      const started = Date.now()
+      await w.service.background(false)
+      expect(Date.now() - started).toBeLessThan(1000)
+      expect(w.record()).toMatchObject({ prompts: 'stock', background: false })
+      expect(await hung).toEqual({ prompts: 'stock', restartNeeded: true })
+    })
+  })
+})

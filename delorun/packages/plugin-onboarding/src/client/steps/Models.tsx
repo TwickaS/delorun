@@ -389,7 +389,7 @@ function WalkScreen({ card, services, place, startReplacing = false, onBack, onS
         <div className={css.field}>
           {didNotPass(card.result)
             ? <StateLine tone="warning">{t('providers.foundFailed')}</StateLine>
-            : <StateLine tone="success">{t('providers.found')}</StateLine>}
+            : <StateLine tone="success">{t(services.remote ? 'providers.found.host' : 'providers.found')}</StateLine>}
           <FoundKey t={t} source={card.source} />
           <Button variant="outline" size="sm" className={`${css.replace} ${shared.inline}`} onClick={() => { setReplacing(true) }}>{t('providers.replace')}</Button>
         </div>

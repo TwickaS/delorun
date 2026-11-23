@@ -22,7 +22,7 @@ import { Config, installationNames, resolveSettings } from '@delorun/plugin-inst
 import { checkProfileTrust, forgetRemoved, LockfileError, reconcileProfile, recordInstalled, type InstallCheckSettings, type InstallFinding, type PackageCheck, type PendingRecord, type PluginTrustStatus } from '@delorun/plugin-install-check/check'
 import type { CommandOutput } from './command.ts'
 import { CliError, EXIT, type ExitCode } from './exit.ts'
-import { setPatchRow } from './setup/writes.ts'
+import { setPatchRow } from '@delorun/setup-apply'
 import { composedRow, isRecord, patchLayers } from './patch-layers.ts'
 import { printable } from './terminal-text.ts'
 

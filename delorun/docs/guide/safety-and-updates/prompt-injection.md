@@ -118,7 +118,7 @@ Only that computer can read and change the setting. A phone over remote access c
 <summary>Edge cases</summary>
 
 - If the file that holds the setting is damaged or other users can read it, then every workspace counts as Off — repair or remove the file that Settings, Safety, Network names.
-- If you chose [**Ask less (like DeepSeek Harness)**](../../reference/glossary.md#ask-less) in setup, then the page says the setting is not available — run `delorun setup prompts` and choose [Ask me first](../../reference/glossary.md#ask-me-first).
+- If you chose [**Ask less (like DeepSeek Harness)**](../../reference/glossary.md#ask-less) with `delorun setup prompts`, then the page says the setting is not available — run `delorun setup prompts` and choose [Ask me first](../../reference/glossary.md#ask-me-first).
 - If you are on a phone, then you cannot open the page — use the computer that runs Delorun.
 - If you tighten a setting while commands run, then they keep the network they started with — restart the workspace's terminals and jobs. A command whose list was removed loses its proxy and keeps no network.
 

@@ -23,7 +23,7 @@ import css from './DeferredSetupEntry.module.css'
 /** What the entry reads and calls. */
 export interface DeferredSetupInjected {
   /** The deferred steps' record and the reads that tell which are done. */
-  readonly host: Pick<HostFace, 'reach' | 'defer'>
+  readonly host: Pick<HostFace, 'reach' | 'reachAddress' | 'defer'>
   /** The home's setup record, which lists the deferred steps. */
   readonly loadRecord: () => Promise<SetupRecord>
   /** Sends the PIN read. */

@@ -5,23 +5,13 @@
  * @module @delorun/cli/reach/host
  */
 import type { Context } from '@deepseek-ai/cordis'
-import { brandString } from '@deepseek-ai/dsh-brand'
-import type { StudioAddress } from '@delorun/contract-admission'
 import type { ReachOptionStatus } from '@delorun/contract-home-process'
 import type { ReachConfigRows } from '@delorun/contract-reach-providers'
 import type { LocalReach } from '@delorun/home-process'
 import type { ReachStatus } from '@delorun/reach'
+import type {} from '@delorun/home-auth'
+import type { TailscalePrivateRow } from '@delorun/setup-apply'
 import { isRecord } from '../patch-layers.ts'
-import type { TailscalePrivateRow } from './row.ts'
-
-/**
- * The reach service's rows of a profile's Tailscale private row.
- * @param row - the row, as `readReachRow` reads it.
- * @returns the rows the service resolves.
- */
-export function reachRowsOf(row: TailscalePrivateRow): ReachConfigRows {
-  return { tailscalePrivate: { ...row, address: brandString<StudioAddress>(row.address) } }
-}
 
 /**
  * The `delorun-reach` row's config as a running Host holds it after a `reach.apply`: its boot config with
@@ -51,7 +41,20 @@ function optionLine(status: ReachStatus): ReachOptionStatus {
 }
 
 /**
- * The reach operations of a booted Host.
+ * Sign every paired device out through the Host's device sign-in.
+ * @param ctx - the Host's root context.
+ * @throws {Error} when the Host loads no device sign-in: nothing was signed out, and the caller must not report that it was.
+ */
+async function signedOut(ctx: Pick<Context, 'get'>): Promise<void> {
+  const homeAuth = ctx.get('homeAuth')
+  if (homeAuth === undefined) throw new Error('this Delorun loads no device sign-in, so no paired device was signed out')
+  await homeAuth.signAllDevicesOut()
+}
+
+/**
+ * The reach operations of a booted Host. An `apply` whose row leaves phone access off signs every paired device out and
+ * keeps the list once the listener has stopped, as turning access off in Settings does, so turning it on again restores
+ * no session.
  * @param ctx - the Host's root context.
  * @param rows - reads the profile's rows when `reach.apply` arrives.
  * @returns the operations, or undefined when the profile does not load `@delorun/reach`.
@@ -61,6 +64,14 @@ export function localReach(ctx: Pick<Context, 'get'>, rows: () => ReachConfigRow
   if (reach === undefined) return undefined
   return {
     status: () => (reach.mounted ? reach.status().map(optionLine) : undefined),
-    apply: async () => (await reach.apply(rows()))?.map(optionLine),
+    apply: async () => {
+      const wanted = rows()
+      try {
+        return (await reach.apply(wanted))?.map(optionLine)
+      } finally {
+        // After the listener has stopped, so a device that signed in again in the gap is signed out too; a failed apply still signs out.
+        if (wanted.tailscalePrivate?.enabled !== true) await signedOut(ctx)
+      }
+    },
   }
 }

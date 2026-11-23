@@ -274,6 +274,12 @@ export const LOCAL_ROWS: readonly LocalRow[] = [
     parity: { kind: 'disabled', reason: 'Stock has no report route, and a disabled row mounts nothing: no route.' },
   },
   {
+    id: 'delorun-run-settings',
+    kind: 'added',
+    reason: 'How Delorun runs in Settings: how much Delorun asks, running in the background, the studio\'s port and phone access are read for any signed-in studio and changed through the same writes `delorun setup` makes; turning questions off or the background on needs a device\'s Face ID or PIN, and dangerous mode, the port and phone access are answered only on the loopback listener, at the home\'s computer; upstream has no such page.',
+    parity: { kind: 'disabled', reason: 'Stock offers no such page, and a disabled row mounts nothing: no route.' },
+  },
+  {
     id: 'delorun-plugin-install-check',
     kind: 'added',
     reason: 'The plugin install check provides upstream\'s `pluginAudit` hook: every package an installation brings is checked for integrity, known advisories, very new versions and lookalike names, a known critical advisory needs the person\'s acceptance, and each installed plugin\'s files are recorded and compared at every start; upstream audits nothing.',

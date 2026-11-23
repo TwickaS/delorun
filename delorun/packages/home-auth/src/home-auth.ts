@@ -36,7 +36,7 @@ import { GrantStore } from './grants.ts'
 import { PASS_MINUTES_DEFAULT, PassSettingStore, type PassMinutes } from './pass-setting.ts'
 import { PasskeyAuth } from './passkey-auth.ts'
 import { PASSKEYS_FILE, PasskeyStore } from './passkeys.ts'
-import { PinUnlocks, type PinEvent } from './pin-unlocks.ts'
+import { PinUnlocks, type PinEvent, type UnlockAsker } from './pin-unlocks.ts'
 import { Elevations, isElevationMinutes, type ElevationChange, type ElevationRecord, type PendingElevation } from './elevation.ts'
 import { REACH_OPTION_LISTENERS } from '@delorun/contract-reach-providers'
 import { Approvals, type ApprovalRequestInput, type PendingSummary } from './approvals.ts'
@@ -346,8 +346,7 @@ export class HomeAuth {
       removeDevice: deviceId => this.revokeDevice(deviceId),
       currentSession: presented => this.successors.get(presented) ?? presented,
       sameSession: (presented, bound) => presented === bound || this.successors.get(presented) === bound,
-      stillAdmitted: asker => this.view?.sessions.get(asker.sessionId)?.listener === asker.listener
-        && this.view.devices.has(asker.deviceId) && this.served.has(asker.listener),
+      stillAdmitted: asker => this.admits(asker),
       report: (event) => { for (const listener of this.pinListeners) listener(event) },
     })
     this.removalListeners.add((deviceId) => { void this.pinStore.forget(deviceId).catch(() => undefined) })
@@ -362,6 +361,7 @@ export class HomeAuth {
       pin: this.pin,
       now: this.now,
       random: this.random,
+      stillAdmitted: asker => this.admits(asker),
       sameSession: (presented, bound) => presented === bound || this.successors.get(presented) === bound,
       log: options.log ?? (() => undefined),
     })
@@ -531,6 +531,37 @@ export class HomeAuth {
       const connections = this.closeReachConnections?.({ deviceId }) ?? 0
       await this.rotateAll()
       return { removed, sessions, connections }
+    })
+  }
+
+  /**
+   * Whether a session is still admitted on its listener: the session exists, its device is paired and the listener serves.
+   * @param asker - the device, listener and session.
+   * @returns whether it is.
+   */
+  private admits(asker: UnlockAsker): boolean {
+    return this.view?.sessions.get(asker.sessionId)?.listener === asker.listener
+      && this.view.devices.has(asker.deviceId) && this.served.has(asker.listener)
+  }
+
+  /**
+   * Sign every paired device out and keep the device list: remove every session, so each token is refused from this
+   * call on; end every Face ID pass, elevation, grant and hold; and close the reach connections the sessions admitted.
+   * Turning device access off calls this, so turning it on again restores no session: a device signs in again. The
+   * records of the devices, and their passkeys, stay.
+   * @returns how many sessions were removed.
+   */
+  async signAllDevicesOut(): Promise<number> {
+    return this.changing(async () => {
+      const ids = Object.keys(await this.sessions.all())
+      this.elevations.endAll('session-ended')
+      this.grants.endAll()
+      this.view?.sessions.clear()
+      for (const armed of this.expiries.values()) clearTimeout(armed.timer)
+      this.expiries.clear()
+      for (const id of ids) this.closeReachConnections?.({ sessionId: id })
+      await this.sessions.remove(ids)
+      return ids.length
     })
   }
 

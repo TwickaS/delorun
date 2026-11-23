@@ -63,6 +63,7 @@ import { join, relative, sep } from 'node:path'
 import { CLI_PROFILE } from '@delorun/contract-home-layout'
 import type { ResolvedProfileRuntime } from '@deepseek-ai/dsh/profile-boot'
 import type { PromptsAnswer } from '@delorun/contract-setup-answers'
+import { promptRows } from '@delorun/setup-apply'
 import type { CommandOutput } from './command.ts'
 import { DELORUN_PROFILE_BUNDLES, HEADLESS_BUNDLE } from '@delorun/bundle-local/profile'
 import { delorunRowIds, isDelorunPackage, OPT_IN_ROWS, packageOfModule, refuseSkippedDelorunBundles, skippedPackNotices, type BootedRow } from './delorun-bundles.ts'
@@ -74,7 +75,7 @@ import { safeModeNotice, safeModeStart, type SafeModeStart } from './safe-mode.t
 import { missingEscapeSocketDirectories, SANDBOX_ROW, sandboxProtection, startOnlySockets, writeSandboxOverlay, type SandboxProtection } from './sandbox-protection.ts'
 import { migrationsPath } from './profile-migrations.ts'
 import type { ReleasePacks } from './release-packs.ts'
-import { promptRows, readPromptsAnswer } from './setup/prompt-switches.ts'
+import { readPromptsAnswer } from './setup/prompt-switches.ts'
 
 /**
  * Which Host a composition boots: a CLI profile, which carries `@delorun/bundle-local` and `@delorun/bundle-studio`, or the

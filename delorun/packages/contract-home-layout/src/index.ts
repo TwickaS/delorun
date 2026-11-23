@@ -193,6 +193,8 @@ export const DELORUN_HOME_ENTRIES = {
 export const DELORUN_HOME_FILES = {
   /** The data-format record the running release keeps beside its chat data (C3). */
   dataFormat: 'data-format.json',
+  /** The full list of what setup's import would copy from DeepSeek Harness, for the person to read (C11). */
+  importPreview: 'import-preview.txt',
 } as const
 
 /**

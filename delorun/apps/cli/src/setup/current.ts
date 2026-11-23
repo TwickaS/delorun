@@ -9,12 +9,10 @@
  */
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { SETUP_DEFAULT_PORT, SETUP_DEFAULTS, type ReachAnswer, type SetupAnswers } from '@delorun/contract-setup-answers'
-import { readReachRowAt } from '../reach/row.ts'
+import { PAIRING_ASKERS, SETUP_DEFAULT_PORT, SETUP_DEFAULTS, type ReachAnswer, type SetupAnswers } from '@delorun/contract-setup-answers'
+import { ANSWERS_FILENAME, readPairingAt, readPromptsRows, readReachRowAt } from '@delorun/setup-apply'
 import { parseAnswers } from './answers.ts'
-import { readPromptsRows } from './prompt-switches.ts'
 import { readProviderAnswer } from './providers.ts'
-import { ANSWERS_FILENAME } from './progress.ts'
 import { profileStudioPort } from './sections.ts'
 import { readUpdateCheckRow } from './update-check.ts'
 
@@ -57,7 +55,10 @@ function livePort(directory: string, recorded: number | null): number | null {
 export function currentAnswers(directory: string): SetupAnswers {
   const recorded = recordedAnswers(directory)
   const patch = join(directory, 'cordis.patch.yml')
-  const reach: ReachAnswer = readReachRowAt(patch).enabled ? { option: 'tailscale-private', identityFactor: 'tailnet-membership' } : { option: 'none', identityFactor: null }
+  // The pairing choice rides along so that a re-run that keeps phone access on keeps who may ask to pair.
+  const asker = readPairingAt(patch).mayAskWithoutWindow
+  const pairing = PAIRING_ASKERS.find(each => each === asker)
+  const reach: ReachAnswer = readReachRowAt(patch).enabled ? { option: 'tailscale-private', identityFactor: 'tailnet-membership', ...pairing === undefined ? {} : { pairing } } : { option: 'none', identityFactor: null }
   return {
     ...recorded,
     updateCheck: readUpdateCheckRow(patch),

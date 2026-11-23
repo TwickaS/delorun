@@ -36,7 +36,7 @@ The rest of this page is for when you need it.
 ## 我想开始使用
 
 - **Decide whether Delorun suits me, and how it compares with other tools:** [Why Delorun](why-delorun.zh.md). It covers what you get, what Delorun changes from DeepSeek Harness and when another tool fits better.
-- **安装 Delorun 并进行第一次 chat：**[安装与首次运行](get-started/install.zh.md)。它涵盖你需要先准备什么、[按使用方式进行 setup](get-started/install.zh.md#setup-how-you-will-use-delorun)、[studio 与你的第一次 chat](get-started/install.zh.md#the-studio-and-your-first-chat)，以及[没有浏览器的电脑](get-started/install.zh.md#a-computer-without-a-browser)。
+- **安装 Delorun 并进行第一次 chat：**[安装与首次运行](get-started/install.zh.md)。它涵盖你需要先准备什么、[按使用方式进行 setup](get-started/install.zh.md#setup-a-few-questions)、[studio 与你的第一次 chat](get-started/install.zh.md#the-studio-and-your-first-chat)，以及[没有浏览器的电脑](get-started/install.zh.md#a-computer-without-a-browser)。
 - **带上我的 DeepSeek Harness chat：**[从 DeepSeek Harness 切换](get-started/switching.zh.md)。它说明哪些保持不变、哪些不同，哪些内容会被复制、哪些会留在原处，以及[如何切换回去](get-started/switching.zh.md#going-back)。
 - **Find out whether it is safe and what the catch is:** [Questions and answers](help/questions.zh.md).
 

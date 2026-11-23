@@ -8,8 +8,15 @@
  *   who may not gets `TAILSCALE_SERVE_NOT_PERMITTED` with the one command the person runs, and nothing is written;
  *   nothing runs through `sudo`. It then writes the profile's `delorun-reach` row with this machine's `ts.net` address
  *   and the fixed listener port, chosen once, and prints the address, the sign-in address and the trust statement.
- * - `off` turns the option off in the row, removes whatever Tailscale serves on the serve port at once, and confirms it
- *   is gone; a removal it cannot confirm exits non-zero with the reason.
+ * - `off` turns the option off in the row, resets who may ask to pair without a window, removes whatever Tailscale
+ *   serves on the serve port at once and confirms it is gone, then signs every paired device out (the device list stays).
+ *   The sign-out does not depend on what Tailscale or the home answers: a running home does it itself, after its
+ *   listener has stopped, when it applies the row; a home that does not answer, one that does not run, and one that
+ *   started meanwhile have their stored sessions removed (from the profile's configured secrets directory) or are asked
+ *   again. "Every paired device is signed out" is printed only once that succeeded; a removal Tailscale cannot confirm,
+ *   a sign-out that failed, or a home that did not apply the row exits non-zero with the reason. A sign-out failure never
+ *   stops the serve rule's removal, which comes first. What remains: a home that starts after the last look still
+ *   loads the sessions it finds, and a home that did not answer keeps its sessions in memory until it restarts.
  * - While the profile's home runs, `on` and `off` ask it over the update channel's `reach.apply` (C19) to restart its
  *   options from the row, and print the state it answers; a home that cannot apply it, or a start that is not
  *   `ready`, exits non-zero with the reason and the restart command.
@@ -23,18 +30,18 @@ import { pinOffHint } from '../devices/pin.ts'
 import { DEFAULT_SERVE_PORT } from '@delorun/contract-reach-providers'
 import type { ReachOptionStatus } from '@delorun/contract-home-process'
 import { checkServeAccess, ReachError, readTailscale, removeServe, serveTarget, systemTailscale, tailscaleAddress, type TailscaleRunner } from '@delorun/reach'
+import { listenerPortFor, readPairingAt, signInAddress, TRUST_STATEMENT, writeMayAskAt } from '@delorun/setup-apply'
 import { processExists, readHomeLock, resolveDelorunHome, runDirectory } from '@delorun/home'
 import { sendHomeRequest, type ResponseLine, type UnsignedRequest } from '@delorun/home-process'
-import type { PairingSpec } from '@delorun/home-auth'
+import { HomeAuth, HomeAuthError, type PairingSpec } from '@delorun/home-auth'
 import { CliError, EXIT } from '../exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandContext } from '../command.ts'
 import { hasCliProfile, selectProfile } from '../profile.ts'
 import { profileFlag } from '../open/studio.ts'
 import { printable } from '../terminal-text.ts'
 import { askOnTerminal, isYes } from '../trash/terminal.ts'
-import { readPairingAt } from './pairing-row.ts'
-import { listenerPortFor, profilePatchPath, readReachRow, signInAddress, writeReachRow } from './row.ts'
-import { TRUST_STATEMENT } from './trust.ts'
+import { profilePatchPath, readReachRow, writeReachRow } from './row.ts'
+import { homeAuthDirectory } from './secrets-directory.ts'
 
 /** What the command runs against. */
 export interface ReachDependencies {
@@ -64,6 +71,8 @@ export interface ReachDependencies {
   readonly ask: (question: string) => Promise<string>
   /** Whether a terminal can answer {@link ReachDependencies.ask}. */
   readonly terminal: boolean
+  /** @returns the installation's `package.json`, which a profile's bundles resolve from. */
+  readonly installAnchor: () => Promise<string>
 }
 
 /** The usage line. */
@@ -102,7 +111,7 @@ export function createReachCommand(dependencies: ReachDependencies): CliCommand 
 }
 
 /** `delorun reach`, over the system's `tailscale`, the home lock and the home socket. */
-export const reachCommand: CliCommand = createReachCommand({ tailscale: systemTailscale(), running: homeRuns, send: sendHomeRequest, ask: askOnTerminal, terminal: process.stdin.isTTY === true && process.stdout.isTTY === true })
+export const reachCommand: CliCommand = createReachCommand({ tailscale: systemTailscale(), running: homeRuns, send: sendHomeRequest, ask: askOnTerminal, terminal: process.stdin.isTTY === true && process.stdout.isTTY === true, installAnchor: async () => (await import('@deepseek-ai/dsh/profile-boot')).INSTALL_ANCHOR })
 
 /**
  * The home and profile of a command that changes the profile, refusing a home without the CLI profile.
@@ -290,29 +299,73 @@ async function turnOff(args: readonly string[], context: CommandContext, depende
   const { home, profile } = await preparedProfile('off', args, context)
   const row = readReachRow(home, profile)
   writeReachRow(home, profile, { ...row, enabled: false })
+  // Who may ask to pair without an approval window goes back to the safe default, as in Settings.
+  writeMayAskAt(profilePatchPath(home, profile), 'own-user')
   const running = dependencies.running(home, profile)
   const lines = [`Remote access is off for the profile ${profile}.`]
+  const problems: string[] = []
+  // Tailscale first, so the address stops answering; whatever it says, the devices are signed out below.
+  let failure: { readonly error: unknown } | undefined
   try {
     const host = URL.parse(row.address)?.hostname ?? (await readTailscale(dependencies.tailscale)).dnsName
     await removeServe(dependencies.tailscale, host, row.servePort, serveTarget(row.listenerPort))
     lines.push('Tailscale no longer serves this computer\'s studio.')
   } catch (error) {
-    if (!(error instanceof ReachError)) throw error
-    if (error.code !== 'TAILSCALE_NOT_INSTALLED') {
-      context.stdout(`${lines.join('\n')}\n`)
-      context.stderr(`delorun reach: Tailscale may still serve this computer's studio. ${error.detail} (${error.code})\n`)
-      return EXIT.failed
-    }
-    lines.push('Tailscale is not installed, so nothing serves this computer\'s studio.')
+    if (!(error instanceof ReachError)) failure = { error }
+    else if (error.code === 'TAILSCALE_NOT_INSTALLED') lines.push('Tailscale is not installed, so nothing serves this computer\'s studio.')
+    else problems.push(`Tailscale may still serve this computer's studio. ${error.detail} (${error.code})`)
   }
-  context.stdout(`${lines.join('\n')}\n`)
-  if (!running) return EXIT.ok
-  const answer = await askHome(dependencies, home, profile, 'reach.apply')
-  if (answer.kind === 'unavailable') {
-    context.stderr(`delorun reach: the running Delorun did not close its remote listener: ${answer.reason}.\nRestart Delorun to close it: ${restartCommand(profile)}.\n`)
+  // A running home signs the devices out itself when it applies the row, after its listener has stopped. When it does
+  // not answer, or while no home runs, the stored sessions go here, so none is there when it starts; a home that
+  // answered nothing keeps its sessions in memory until it restarts.
+  let signedOut = false
+  let live: readonly ReachOptionStatus[] = []
+  if (running) {
+    const answer = await askHome(dependencies, home, profile, 'reach.apply')
+    if (answer.kind === 'options') {
+      signedOut = true
+      live = answer.options
+    } else {
+      problems.push(`the running Delorun did not close its remote listener or end its sessions: ${answer.reason}.\nRestart Delorun to close it: ${restartCommand(profile)}.`)
+    }
+  }
+  if (!signedOut) {
+    let stored: string | undefined
+    // The directory the home itself would open; when it cannot be told, nothing is signed out and nothing is claimed.
+    let directory: string | undefined
+    try {
+      directory = homeAuthDirectory(home, profile, await dependencies.installAnchor())
+    } catch (error) {
+      stored = `the paired devices could not be signed out: the secrets directory of the home could not be resolved (${error instanceof Error ? error.message : String(error)})`
+    }
+    if (directory !== undefined) {
+      try {
+        await new HomeAuth({ directory }).signAllDevicesOut()
+        signedOut = true
+      } catch (error) {
+        if (!(error instanceof HomeAuthError)) throw error
+        stored = `the paired devices could not be signed out: ${error.message}`
+      }
+    }
+    // A home that started while the stored sessions were removed holds the old ones in memory: have it sign out too.
+    if (!running && dependencies.running(home, profile)) {
+      const answer = await askHome(dependencies, home, profile, 'reach.apply')
+      if (answer.kind === 'options') {
+        signedOut = true
+        live = answer.options
+      } else {
+        problems.push(`Delorun started while the devices were being signed out and did not answer: ${answer.reason}.\nRestart Delorun to end every session: ${restartCommand(profile)}.`)
+      }
+    }
+    if (!signedOut && stored !== undefined) problems.push(stored)
+  }
+  if (signedOut) lines.splice(1, 0, 'Every paired device is signed out and stays on the list; each signs in again when remote access is on.')
+  context.stdout(`${[...lines, ...live.map(liveLine)].join('\n')}\n`)
+  if (failure !== undefined) throw failure.error
+  if (problems.length > 0) {
+    context.stderr(problems.map(problem => `delorun reach: ${problem}\n`).join(''))
     return EXIT.failed
   }
-  context.stdout(`${answer.options.map(liveLine).join('\n')}\n`)
   return EXIT.ok
 }
 

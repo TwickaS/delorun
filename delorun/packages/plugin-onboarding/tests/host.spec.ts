@@ -93,7 +93,7 @@ describe('the setup record', () => {
   })
 
   it('reads the profile directory file name the CLI writes', () => {
-    const source = readFileSync(join(import.meta.dirname, '../../../apps/cli/src/setup/progress.ts'), 'utf8')
+    const source = readFileSync(join(import.meta.dirname, '../../setup-apply/src/answers-record.ts'), 'utf8')
     expect(source).toContain(`export const ANSWERS_FILENAME = '${SETUP_ANSWERS_FILENAME}'`)
   })
 

@@ -1,0 +1,28 @@
+{
+  "name": "@delorun/setup-apply",
+  "description": "The writes that apply a setup answer to a profile: the patch rows of the prompts, studio port and reach answers, the answers record, and the dangerous-mode warning, shared by the delorun command and the studio's How Delorun runs controls",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./warning": "./src/warning.ts",
+    "./trust": "./src/trust.ts"
+  },
+  "dependencies": {
+    "@deepseek-ai/dsh-brand": "workspace:*",
+    "@delorun/contract-admission": "workspace:*",
+    "@delorun/contract-oidc-passkeys": "workspace:*",
+    "@delorun/contract-parity-composition": "workspace:*",
+    "@delorun/contract-reach-providers": "workspace:*",
+    "@delorun/contract-setup-answers": "workspace:*",
+    "@delorun/home": "workspace:*",
+    "@delorun/home-auth": "workspace:*",
+    "@delorun/reach": "workspace:*",
+    "yaml": "^2.9.0"
+  },
+  "delorun": {
+    "state": "shipped"
+  }
+}

@@ -72,7 +72,9 @@ function useNoticeHold(start: OnboardingInjected['services']['start']): Told {
 interface Loaded {
   readonly record: SetupRecord
   readonly reach: ReachState
-  /** Whether PIN mode is on, read only on a phone, where the PIN step then leaves out. */
+  /** The studio's address over Tailscale, read where reach is set up. */
+  readonly deviceAddress: string | undefined
+  /** Whether PIN mode is on, read where reach is set up or the studio is on a phone, where the PIN step then leaves out. */
   readonly pinOn: boolean
   /** Whether the Browser plugin pack is in the profile and loaded, which shows its step where the guide does not offer the pack. */
   readonly browserAdded: boolean
@@ -102,8 +104,10 @@ function Dialog(props: OnboardingStepEntryProps & { readonly settings: Onboardin
   useEffect(() => {
     let live = true
     void Promise.all([loadRecord(), services.host.reach(), services.browser.setup.refresh()]).then(async ([record, reach, browser]) => {
-      const pinOn = reach === 'remote' && await readPinOn(services.pin.fetch)
-      if (live) setLoaded({ record, reach, pinOn, browserAdded: browserAdded(browser) })
+      // The computer reads it too: a first open leaves the PIN step out where PIN mode is already on.
+      const pinOn = reach !== 'off' && reach !== 'absent' && await readPinOn(services.pin.fetch)
+      const deviceAddress = reach === 'set-up' ? await services.host.reachAddress() : undefined
+      if (live) setLoaded({ record, reach, deviceAddress, pinOn, browserAdded: browserAdded(browser) })
     })
     return () => { live = false }
   }, [loadRecord, services.host, services.pin, services.browser])
@@ -134,7 +138,7 @@ function useInertRoot(): void {
 
 /** The steps, the current one and the buttons. */
 function Flow(props: OnboardingStepEntryProps & Loaded & { readonly settings: OnboardingSettings; readonly explicit: boolean; readonly told: Told; readonly guide: Guide; readonly later: () => void; readonly dismiss: () => void }): ReactNode {
-  const { t, later, dismiss, progress, extra, services: fixed, startChat, complete, completeStep, renderSection, settings, explicit, record, reach, pinOn, browserAdded: browserIsAdded, told, guide, deferredOnly } = props
+  const { t, later, dismiss, progress, extra, services: fixed, startChat, complete, completeStep, renderSection, settings, explicit, record, reach, deviceAddress, pinOn, browserAdded: browserIsAdded, told, guide, deferredOnly } = props
   const { start } = fixed
   useInertRoot()
   const addedSteps = useSyncExternalStore(useCallback(listener => extra.subscribe(listener), [extra]), () => extra.getSnapshot())
@@ -170,12 +174,12 @@ function Flow(props: OnboardingStepEntryProps & Loaded & { readonly settings: On
   // The Finish setup entry at the computer shows only the steps a phone deferred; they are read once, so finishing one does not remove it from under the person.
   const [only] = useState<readonly DeferrableStep[] | undefined>(() => (deferredOnly.getSnapshot() ? withSteps(record.deferred ?? []) : undefined))
   const steps = useMemo(
-    () => buildSteps({ services, guide, record, extra: addedSteps, reach, phone, target, notice, keepCurrent, pinOn, browserAdded: browserIsAdded, ...only === undefined ? {} : { only } }),
-    [services, guide, record, addedSteps, reach, phone, target, notice, keepCurrent, pinOn, browserIsAdded, only],
+    () => buildSteps({ services, guide, record, extra: addedSteps, reach, phone, deviceAddress, target, notice, keepCurrent, first: !explicit, pinOn, browserAdded: browserIsAdded, ...only === undefined ? {} : { only } }),
+    [services, guide, record, addedSteps, reach, phone, deviceAddress, target, notice, keepCurrent, explicit, pinOn, browserIsAdded, only],
   )
   const [index, setIndex] = useState(() => (notice === undefined ? Math.max(0, steps.findIndex(each => each.id === settings.step)) : 0))
   const current = Math.min(index, steps.length - 1)
-  // The list is never empty: Welcome, Workspace and Ready are always built.
+  // The list is never empty: Welcome and Ready are always built.
   const step = steps[current] as FlowStep
   const providersPhase = useSyncExternalStore(useCallback(listener => guide.providersPhase.subscribe(listener), [guide]), () => guide.providersPhase.getSnapshot())
   const stockScreen = useSyncExternalStore(useCallback(listener => guide.stockScreen.subscribe(listener), [guide]), () => guide.stockScreen.getSnapshot())
@@ -190,8 +194,8 @@ function Flow(props: OnboardingStepEntryProps & Loaded & { readonly settings: On
     if (only === undefined) save('step', (steps[to] as FlowStep).id)
   }
   const last = current === steps.length - 1
-  // With no workspace chosen and none to fall back on, the last button goes back to the Workspace step.
-  const needsFolder = only === undefined && last && workspace === undefined && target.kind !== 'other' && !(keepCurrent && target.kind === 'default')
+  // With no workspace chosen and none to fall back on, the last button goes back to the Workspace step; a first open has that step only without a default workspace.
+  const needsFolder = only === undefined && last && workspace === undefined && target.kind !== 'other' && !(keepCurrent && target.kind === 'default') && steps.some(each => each.id === STEPS.workspace.id)
   const advance = (): void => {
     step.onContinue?.()
     if (!last) {

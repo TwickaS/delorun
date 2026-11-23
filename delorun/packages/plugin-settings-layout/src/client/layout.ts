@@ -40,6 +40,7 @@ export const SECTIONS = {
   setupVersions: 'delorun-setup-versions',
   changes: 'delorun-changes',
   about: 'delorun-about',
+  setupCommands: 'delorun-setup-commands',
 } as const
 
 /** Ids of the `settings.general.item` rows the layout places, by the name its copy uses. */
@@ -126,6 +127,7 @@ export function delorunSettingsLayout(
               card('updates', 'card.updates', ['updateCheck', 'versions']),
               card('shortcuts', undefined, ['shortcuts']),
               card('getting-started', 'card.gettingStarted', ['onboarding']),
+              section(SECTIONS.setupCommands),
               card('advanced', 'card.advanced', ['developerTools']),
             ],
           },

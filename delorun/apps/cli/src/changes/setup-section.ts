@@ -1,5 +1,5 @@
 /**
- * Setup's `changes-protection` section, asked in Full setup and as `delorun setup changes-protection`: whether changes to
+ * Setup's `changes-protection` section, asked in the main flow after a phone Yes and as `delorun setup changes-protection`: whether changes to
  * the person's plugins and to Delorun itself wait for their review before they load (contract C21). The default is no,
  * which leaves the home's setting as it is; setup never turns protection off. A yes is applied through the terminal
  * proof `delorun changes protection on` uses, from setup's own standard input and output, and writes nothing when
@@ -12,8 +12,8 @@ import { CliError, EXIT } from '../exit.ts'
 import type { SetupSection } from '../setup/sections.ts'
 import { BACK } from '../setup/steps.ts'
 
-/** The section's place in the flow: after remote access, before the profile. */
-export const CHANGES_PROTECTION_SECTION_ORDER = 47
+/** The section's place in the flow: right after the phone question, which brings it. */
+export const CHANGES_PROTECTION_SECTION_ORDER = 13
 
 /** The streams whose being terminals proves the person is at their computer. */
 export type TerminalStreams = Parameters<typeof attestTerminal>[0]
@@ -65,7 +65,8 @@ export function changesProtectionSection(streams: TerminalStreams): SetupSection
   return {
     id: 'changes-protection',
     title: 'Changes protection',
-    plan: { local: 'more', remote: 'more', automation: 'more' },
+    // The phone answer brings this question: remote access without a hold on changes is the pairing the person should weigh.
+    inMainFlow: draft => draft.answers.reach.option === 'tailscale-private' ? 'asked' : 'never',
     asks: () => true,
     appliesTo: () => true,
     async ask(io, draft, environment) {
@@ -74,7 +75,6 @@ export function changesProtectionSection(streams: TerminalStreams): SetupSection
       const on = await io.confirm(PROTECTION_QUESTION, draft.answers.protectChanges || current === 'on')
       return on === BACK ? BACK : { answers: { protectChanges: on }, status: 'answered' }
     },
-    review: answers => `Changes protection: ${answers.protectChanges ? 'on' : 'unchanged'}`,
     async apply(context, answers) {
       if (!answers.protectChanges) return undefined
       if (await reported(() => readProtection(context.home)) === 'on') return undefined
