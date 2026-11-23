@@ -24,6 +24,7 @@ This page lists the rough edges you may meet in the preview. Each one says what 
 - [Face ID on phones](#face-id-on-phones)
 - [Several agents at once](#several-agents-at-once)
 - [Installing a plugin](#installing-a-plugin)
+- [Starting with Yarn's Plug'n'Play](#starting-with-yarns-plugnplay)
 - [Documentation languages](#documentation-languages)
 
 ## Where Delorun runs
@@ -113,6 +114,12 @@ This page lists the rough edges you may meet in the preview. Each one says what 
 **What happens.** `delorun plugin` runs DeepSeek Harness's plugin installer inside your Delorun home, without Delorun's protections. A plugin runs with the same full access as Delorun, and Delorun does not check a plugin's files again after you install it.
 
 **What to do.** Install only plugins you trust, from sources you trust. If one misbehaves, start in safe mode with `delorun recover safe-mode` ([Updates](../safety-and-updates/updates.md#going-back)).
+
+## Starting with Yarn's Plug'n'Play
+
+**What happens.** With versions up to 0.1.0-preview.3, `yarn add delorun` or `yarn dlx delorun` in a project that uses Yarn 4's default Plug'n'Play stops with `TRUST_STATE_INVALID: the trust file cannot be written`. `npx delorun` is not affected.
+
+**What to do.** Set `nodeLinker: node-modules` in `.yarnrc.yml`, or run `npx delorun`. Version 0.1.0-preview.3.1 fixes it.
 
 ## Documentation languages
 
