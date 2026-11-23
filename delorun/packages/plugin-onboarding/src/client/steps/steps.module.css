@@ -524,7 +524,6 @@
   color: var(--dsw-alias-label-tertiary);
   font-size: var(--onb-small-size);
   line-height: var(--onb-small-line);
-  font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

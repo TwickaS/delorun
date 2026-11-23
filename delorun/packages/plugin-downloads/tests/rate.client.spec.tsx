@@ -8,6 +8,7 @@ import { act, cleanup, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ItemList } from '../src/client/Items.tsx'
 import { fallbackTranslate as t } from '../src/client/locales.ts'
+import { Figures } from '../src/client/Figures.tsx'
 import { rateText } from '../src/client/rate.ts'
 import { createFakeDownloadsSource, type DownloadItem, type FakeDownloadsSource } from '../src/client/source.ts'
 import { useSyncExternalStore } from 'react'
@@ -106,5 +107,21 @@ describe('the words for a rate', () => {
     expect(rateText({}, t)).toBe('')
     expect(rateText({ speed: 6_700_000 }, t)).toBe('6.7 MB/s')
     expect(rateText({ speed: 6_700_000, secondsLeft: 125 }, t)).toBe('6.7 MB/s · ~2m 05s left')
+  })
+})
+
+describe('the figures of a status', () => {
+  it('keep the digits fixed-width and the decimal point, spaces and units in the font\'s own widths', () => {
+    const { container } = render(<p><Figures text="25% · 5.0 MB/s · ~34s left" /></p>)
+    expect(container.textContent).toBe('25% · 5.0 MB/s · ~34s left')
+    const fixed = [...container.querySelectorAll<HTMLElement>('[data-figures]')]
+    expect(fixed.map(each => each.textContent)).toEqual(['25', '5', '0', '34'])
+    expect(fixed.every(each => each.style.fontVariantNumeric === 'tabular-nums')).toBe(true)
+  })
+
+  it('draw a panel row\'s status through them', () => {
+    const source = createFakeDownloadsSource([downloading({ receivedBytes: 1 * MB })])
+    render(<List source={source} />)
+    expect(document.querySelector('[class*="status"] [data-figures]')?.textContent).toBe('5')
   })
 })
