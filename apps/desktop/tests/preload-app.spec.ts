@@ -320,12 +320,32 @@ it.each(['bundled', 'wsl', 'remote'] as const)('tells the application document t
   expect(electron.ipcRenderer.sendSync).toHaveBeenCalledWith(DESKTOP_IPC.homeKind)
 })
 
-it.each([undefined, null, 'local', 7, { kind: 'wsl' }])('exposes no home kind when main answers %j', async (answer) => {
+it.each([undefined, null, 'local', 7, { kind: 'wsl' }])('still claims delorunDesktop, with no homeKind, when main answers %j', async (answer) => {
   answerMain(answer)
   vi.stubGlobal('location', new URL('dsh-app://app/'))
   await import('../src/preload-app.ts')
-  expect(exposed('delorunDesktop')).toBeUndefined()
+  const claims = electron.contextBridge.exposeInMainWorld.mock.calls.filter(([name]) => name === 'delorunDesktop')
+  expect(claims).toHaveLength(1)
+  const api = claims[0]![1] as Record<string, unknown>
+  expect(Object.keys(api)).toEqual([])
+  expect(api).not.toHaveProperty('homeKind')
+  expect(Object.isFrozen(api)).toBe(true)
   expect(exposed('__DSH_DIRECTORY_PICKER__')).toBeUndefined()
+})
+
+it.each([undefined, 'local', 'bundled', 'wsl', 'remote'])('leaves a page script no way to write or redefine the claimed key (main answers %j)', async (answer) => {
+  answerMain(answer)
+  vi.stubGlobal('location', new URL('dsh-app://app/'))
+  await import('../src/preload-app.ts')
+  const api = exposed('delorunDesktop') as Record<string, unknown>
+  const before = { ...api }
+  expect(() => { (api as { homeKind?: string }).homeKind = 'remote' }).toThrow(TypeError)
+  expect(() => { Object.defineProperty(api, 'homeKind', { value: 'bundled' }) }).toThrow(TypeError)
+  expect(() => { (api as { extra?: string }).extra = 'x' }).toThrow(TypeError)
+  if ('homeKind' in api) expect(() => { delete (api as { homeKind?: string }).homeKind }).toThrow(TypeError)
+  expect({ ...api }).toEqual(before)
+  // The preload claims the key once, as one call; a second claim by another call would be a second owner.
+  expect(electron.contextBridge.exposeInMainWorld.mock.calls.filter(([name]) => name === 'delorunDesktop')).toHaveLength(1)
 })
 
 it.each(['dsh-app://shell/startup.html', 'https://example.com/'])('asks main for no home kind from %s', async (url) => {
