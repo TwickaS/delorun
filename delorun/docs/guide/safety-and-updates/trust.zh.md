@@ -70,7 +70,8 @@ Delorun 是预览版。它的发布版本使用预览密钥签名，尚未经过
 
 | | 值 |
 | --- | --- |
-| 发布根 1，`1.root.json` 的 SHA-256 | `e78c076567b1a2e104756409ad6f4a77c9b8caab95a3f38e857a94f82523b746` |
+| 发布根 2，`2.root.json` 的 SHA-256 | `9a8bc63834317c6c99901ec501325de9b2bf524b116b919b4b8443766d79ed03` |
+| Log-entry key (ECDSA P-256), SHA-256 of its DER public key | `27932e520626819cb536992fa705d9f7a53749a5b6cbae437f6fcbae77ad6eba` |
 | 根密钥 id | `d8cb882168a05fe18b7139ad904de8634bcac2e8b3bebad3776b7efb008be734` |
 | 目标密钥 id | `cd269895db6714d341b1fe23e6d290e42e141da44789d754f3729543fdc9d769` |
 | 时间戳密钥 id | `df07a99c3eab87eb0428a3f17ac561cafc7f3bf13444a10a66885d342662a971` |

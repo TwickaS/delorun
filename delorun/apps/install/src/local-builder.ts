@@ -16,10 +16,10 @@ import type { TrustedRoot } from '@delorun/release-formats/sign/verify'
 
 /**
  * SHA-256 of the pinned preview root file, which the trust page publishes. It is a fixed trust anchor, not a setting.
- * It names `1.root.json`, which lists no log-entry keys, so no release verifies under it; the root rotation of the
- * release runbook replaces it with the digest of `2.root.json` in the same change as the trust page.
+ * It names `2.root.json`, the first root that lists log-entry keys; a later root that chains from it keeps the allowance
+ * while it keeps root 2's active targets key (L196).
  */
-export const PREVIEW_ROOT_SHA256 = 'e78c076567b1a2e104756409ad6f4a77c9b8caab95a3f38e857a94f82523b746'
+export const PREVIEW_ROOT_SHA256 = '9a8bc63834317c6c99901ec501325de9b2bf524b116b919b4b8443766d79ed03'
 
 /**
  * The key ids of a root's `active` targets keys, sorted.

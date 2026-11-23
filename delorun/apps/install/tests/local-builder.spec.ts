@@ -27,9 +27,9 @@ function pinnedChain(): { keys: FixtureKeys, one: Buffer, two: Buffer, three: Bu
 }
 
 describe('localBuilderAllowed', () => {
-  it('pins the digest of root 1 that the trust page publishes', () => {
+  it('pins the digest of root 2 that the trust page publishes', () => {
     const page = readFileSync(new URL('../../../docs/guide/safety-and-updates/trust.md', import.meta.url), 'utf8')
-    expect(page).toContain(`| Release root 1, SHA-256 of \`1.root.json\` | \`${PREVIEW_ROOT_SHA256}\` |`)
+    expect(page).toContain(`| Release root 2, SHA-256 of \`2.root.json\` | \`${PREVIEW_ROOT_SHA256}\` |`)
   })
 
   it.each(['0.1.0', '0.1.0-preview.2.7', '0.9.9'])('allows %s under the pinned root', (version) => {
