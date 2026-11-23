@@ -175,9 +175,18 @@
   gap: 10px;
 }
 
+/* The Delorun look's glass surface (`@delorun/plugin-theme`'s alerts.css tokens); the fallbacks are the plain card. */
 .floating {
-  box-shadow: var(--dsw-shadow-lg, 0 8px 24px rgb(0 0 0 / 0.18));
-  background: var(--dsw-alias-surface-primary, var(--dsw-alias-settings-card-fill));
+  border: 1px solid var(--delorun-glass-edge, var(--dsw-alias-settings-card-stroke));
+  border-radius: var(--delorun-glass-radius, var(--dsw-radius-xl));
+  background: var(--delorun-glass-fill, var(--dsw-alias-settings-card-fill));
+  box-shadow: var(--delorun-glass-shadow-raised, var(--dsw-shadow-lg, 0 8px 24px rgb(0 0 0 / 0.18)));
+  -webkit-backdrop-filter: var(--delorun-glass-blur, none);
+  backdrop-filter: var(--delorun-glass-blur, none);
+}
+
+.floating.bad {
+  border-color: color-mix(in oklab, var(--dsw-alias-state-error-primary) 45%, var(--delorun-glass-edge, var(--dsw-alias-settings-card-stroke)));
 }
 
 .notes {
@@ -215,50 +224,13 @@
 }
 
 /* On a phone the sheet is the whole screen, with Back in its footer. */
-/* An ongoing state: one compact block, the text then its buttons, 44px targets on touch. */
-.alert {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  box-sizing: border-box;
-  width: 100%;
-  min-width: 0;
-  padding: 8px 10px;
-  border: 0.5px solid var(--dsw-alias-state-warning-primary, var(--dsw-alias-settings-card-stroke));
-  border-radius: var(--dsw-radius-lg);
-  background: var(--dsw-alias-settings-card-fill);
+/* An ongoing state is `@delorun/brand`'s Alert; the sidebar's foot is outside the chat list, so a tall one scrolls inside itself. */
+.pinned {
+  max-height: 25vh;
+  overflow-y: auto;
 }
 
-.alertText {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  margin: 0;
-  color: var(--dsw-alias-label-primary);
-  font-size: 13px;
-  line-height: 18px;
-  overflow-wrap: anywhere;
-}
-
-.alertActions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.alertClose {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-left: auto;
-  min-width: 32px;
-  min-height: 32px;
-  border: none;
-  background: transparent;
-  color: var(--dsw-alias-label-secondary);
-  cursor: pointer;
-}
-
+/* The Stop running chats menu on the waiting alert. */
 .alertMenuButton {
   display: inline-flex;
   align-items: center;
@@ -311,17 +283,10 @@
   line-height: 20px;
 }
 
-/* The sidebar's foot is outside the chat list, so a tall alert scrolls inside itself. */
-.alert[data-update-variant='alert'] {
-  max-height: 25vh;
-  overflow-y: auto;
-}
-
 @media (pointer: coarse) {
   .alertButton,
   .alertMenuButton,
-  .alertMenuItem,
-  .alertClose {
+  .alertMenuItem {
     min-width: 44px;
     min-height: 44px;
   }

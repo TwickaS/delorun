@@ -83,6 +83,9 @@ export const CONNECTION_ALERT_ATTRIBUTE = 'data-delorun-connection-alert'
 /** The Loader row id of the host half, which names the settings namespace the Updates section edits. */
 export const UPDATE_ROW_ID = 'delorun-plugin-update'
 
+/** The retry source of a connection handle that has none: no automatic attempt is ever scheduled. */
+const NO_RETRY = { getSnapshot: (): number | undefined => undefined, subscribe: (): (() => void) => () => {} }
+
 /** Required services. */
 export const inject = ['slots', 'locale', 'configForms', 'connection']
 
@@ -94,6 +97,7 @@ export function apply(ctx: Context): void {
   ctx.effect(() => ctx.locale.register(NS, { en, zh }), 'delorun-update: dictionaries')
   const t = ctx.locale.bind(NS)
   const connection = ctx.get('connection') as ConnectionHandle
+  const retry = connection.retry ?? NO_RETRY
   // Tells Settings' foot row to draw no connection pill: this plugin's alert shows the connection's state instead.
   ctx.effect(() => {
     document.documentElement.setAttribute(CONNECTION_ALERT_ATTRIBUTE, '')
@@ -126,7 +130,7 @@ export function apply(ctx: Context): void {
     inject: () => panel,
   }, UpdatePanel))
   const alerts: UpdateAlertsInjected = {
-    hooks: { load: controller.state, switching: controller.switching, connection: connection.state },
+    hooks: { load: controller.state, switching: controller.switching, connection: connection.state, retry },
     reconnect: () => { connection.reconnect() },
     cancel: () => controller.cancel(),
     stopChats: () => controller.stopChats(),
@@ -140,7 +144,7 @@ export function apply(ctx: Context): void {
     inject: (sessionId): StoppedChatInjected => ({ hooks: { load: controller.state }, sessionId, continueChat: id => controller.continueChat(id) }),
   }, StoppedChatDock))
   const overlay: UpdateOverlayInjected = {
-    hooks: { load: controller.state, switching: controller.switching, dialog, connection: connection.state },
+    hooks: { load: controller.state, switching: controller.switching, dialog, connection: connection.state, retry },
     reconnect: () => { connection.reconnect() },
     actions: { prepare: () => controller.prepare(), apply: body => controller.apply(body) },
     cancel: () => controller.cancel(),
