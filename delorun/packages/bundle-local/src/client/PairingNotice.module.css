@@ -1,8 +1,9 @@
-/* The pairing pop-up: the setup guide's frame (header, body, footer, divided by hairlines) around the device's details,
-   the code field and the footer's actions. */
+/* The pairing pop-up, laid out as the alert style's dialog (A630): the theme draws the quiet glass surface and its motion
+   over upstream's Modal, and the title, close and Submit take the shared `delorun-alert-*` classes. The `:where()` rules
+   below are zero-specificity fallbacks for the stock look, which keeps upstream's styles. */
 
-.dialog {
-  width: min(460px, 100%);
+div.dialog {
+  width: min(var(--delorun-alert-dialog-width, 440px), 100%);
   max-height: 100%;
   padding: 0;
   gap: 0;
@@ -21,18 +22,33 @@
   display: flex;
   flex: none;
   align-items: center;
-  gap: 8px;
-  padding: 16px 16px 12px 24px;
-  border-bottom: 0.5px solid var(--dsw-alias-border-l1);
+  gap: 12px;
+  padding: 24px 20px 0 24px;
+}
+
+/* The info glyph in a circle tinted at 14% of the accent text colour. */
+.icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: color-mix(in oklab, var(--dsw-alias-link) var(--delorun-alert-tint, 14%), transparent);
+  color: var(--dsw-alias-link);
 }
 
 .title {
   flex: 1;
   min-width: 0;
+}
+
+:where(.title) {
   margin: 0;
-  font-size: var(--dsw-font-l-20-font-size);
+  font-size: 14px;
   font-weight: 500;
-  line-height: var(--dsw-font-l-20-line-height);
+  line-height: 20px;
 }
 
 .count {
@@ -40,25 +56,29 @@
   color: var(--dsw-alias-label-secondary);
   font-size: 13px;
   font-variant-numeric: tabular-nums;
-  line-height: 20px;
+  line-height: 18px;
 }
 
 .close {
   flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border: none;
+}
+
+:where(.close) {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
   border-radius: var(--dsw-radius-sm);
   background: transparent;
-  color: var(--dsw-alias-label-secondary);
+  color: var(--dsw-alias-label-tertiary);
   cursor: pointer;
 }
 
-@media (hover: hover) {
-  .close:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.close:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
 }
 
 .body {
@@ -67,7 +87,7 @@
   flex-direction: column;
   gap: 16px;
   min-height: 0;
-  padding: 20px 24px 24px;
+  padding: 16px 24px 24px;
   overflow-y: auto;
 }
 
@@ -153,9 +173,8 @@
   flex: none;
   align-items: center;
   gap: 16px;
-  padding: 12px 24px;
-  padding-bottom: max(12px, env(safe-area-inset-bottom));
-  border-top: 0.5px solid var(--dsw-alias-border-l1);
+  padding: 0 24px 24px;
+  padding-bottom: max(24px, env(safe-area-inset-bottom));
 }
 
 .aside {
@@ -204,14 +223,41 @@
   font-size: 13px;
 }
 
-.submit {
+/* Submit sits in the shared dialog-actions row, level with the links beside it. */
+.footer .actions {
   flex: none;
-  min-width: 96px;
-  min-height: 44px;
+  margin-top: 0;
+}
+
+:where(.submit) {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--dsw-radius-sm);
+  background: color-mix(in oklab, var(--dsw-alias-link) 8%, transparent);
+  color: var(--dsw-alias-link);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.submit:disabled {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-tertiary);
+  cursor: default;
+  transform: none;
+}
+
+.submit:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
 }
 
 @media (max-width: 767px) {
-  .header { padding-left: 20px; }
+  .header { padding: 20px 16px 0 20px; }
   .body { padding: 16px 20px 20px; }
-  .footer { padding-right: 20px; padding-left: 20px; }
+  .footer { padding: 0 20px max(20px, env(safe-area-inset-bottom)); }
 }

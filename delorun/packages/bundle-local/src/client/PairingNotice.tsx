@@ -13,7 +13,7 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import type { ClipboardEvent, FormEvent, ReactNode } from 'react'
-import { Button, Checkbox, IconCloseOutlineRegular, IconWarningOutlineRegular, Modal, Toast } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Checkbox, IconCloseOutlineRegular, IconInfoOutlineRegular, IconWarningOutlineRegular, Modal, Toast } from '@deepseek-ai/dsh-client-ui-primitives'
 import { CodeCells } from '@delorun/brand'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { PAIRING_WRONG_CODES } from '@delorun/home-auth/wire'
@@ -30,6 +30,17 @@ const CODE_LENGTH = 8
 
 /** The error code of a wrong match code. */
 const CODE_MISMATCH = 'APPROVAL_CODE_MISMATCH'
+
+/**
+ * The shared alert-style class names (A630) the theme's stylesheet draws; `ALERT_CLASSES` of `@delorun/brand` names the
+ * same ones.
+ */
+const ALERT = {
+  title: 'delorun-alert-title',
+  close: 'delorun-alert-close',
+  primary: 'delorun-alert-primary',
+  dialogActions: 'delorun-alert-dialog-actions',
+} as const
 
 /** How often the countdown redraws. */
 const TICK_MS = 1000
@@ -261,10 +272,11 @@ export function PairingDialog({ t, request, place, total, hide, onClose, onDecli
   return <Modal open headless title={title} onClose={onClose} className={css.dialog as string}>
     <form className={css.frame} onSubmit={(event) => { void submit(event) }} noValidate>
       <header className={css.header}>
-        <h2 className={css.title}>{title}</h2>
+        <span className={css.icon} aria-hidden="true"><IconInfoOutlineRegular size={14} /></span>
+        <h2 className={`${ALERT.title} ${css.title as string}`}>{title}</h2>
         {total > 1 ? <span className={css.count} data-pairing-count>{t('pairing.box.count', { n: String(place), total: String(total) })}</span> : null}
-        <button type="button" className={css.close} aria-label={t('pairing.box.close')} onClick={onClose}>
-          <IconCloseOutlineRegular size={14} />
+        <button type="button" className={`${ALERT.close} ${css.close as string}`} aria-label={t('pairing.box.close')} onClick={onClose}>
+          <IconCloseOutlineRegular size={12} />
         </button>
       </header>
       <div className={css.body}>
@@ -303,7 +315,9 @@ export function PairingDialog({ t, request, place, total, hide, onClose, onDecli
           <button type="button" className={css.notYou} disabled={busy} onClick={() => { void onDecline() }}>{t('pairing.box.notYou')}</button>
           {hide === undefined ? null : <Checkbox className={css.hide} checked={hide.checked} onChange={hide.onChange} label={t('pairing.box.hide')} />}
         </div>
-        <Button type="submit" variant="primary" className={css.submit} disabled={!ready}>{t('pairing.box.submit')}</Button>
+        <div className={`${ALERT.dialogActions} ${css.actions as string}`}>
+          <button type="submit" className={`${ALERT.primary} ${css.submit as string}`} disabled={!ready}>{t('pairing.box.submit')}</button>
+        </div>
       </footer>
     </form>
   </Modal>
