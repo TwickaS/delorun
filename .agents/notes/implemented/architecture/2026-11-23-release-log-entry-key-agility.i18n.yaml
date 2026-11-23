@@ -1,0 +1,25 @@
+# Bilingual-pair consistency record for 2026-11-23-release-log-entry-key-agility.md (docs/i18n/README.md): per heading
+# section, a hash of its English and Chinese blocks outside code blocks and generated regions.
+# After editing either side, bring the other along and re-record with:
+#   pnpm run verify-translation-pairing --write .agents/notes/implemented/architecture/2026-11-23-release-log-entry-key-agility.md
+/agent-note-the-release-root-lists-the-log-entry-keys-and-logs-it-trusts:
+  en: d139270f4971e709
+  zh: d7587666dd689329
+/agent-note-the-release-root-lists-the-log-entry-keys-and-logs-it-trusts/problem:
+  en: 73e63e3e48441540
+  zh: 73e63e3e48441540
+/agent-note-the-release-root-lists-the-log-entry-keys-and-logs-it-trusts/decision:
+  en: 14347cdaeccc396c
+  zh: 14347cdaeccc396c
+/agent-note-the-release-root-lists-the-log-entry-keys-and-logs-it-trusts/verification:
+  en: f2ae70241b777698
+  zh: f2ae70241b777698
+/agent-note-the-release-root-lists-the-log-entry-keys-and-logs-it-trusts/related:
+  en: f334c6164bef2587
+  zh: f334c6164bef2587
+/agent-note-the-release-root-lists-the-log-entry-keys-and-logs-it-trusts/alternatives-considered:
+  en: 937efba51b4eeb97
+  zh: 937efba51b4eeb97
+/agent-note-the-release-root-lists-the-log-entry-keys-and-logs-it-trusts/consequences:
+  en: 15bbe376158b9307
+  zh: 15bbe376158b9307

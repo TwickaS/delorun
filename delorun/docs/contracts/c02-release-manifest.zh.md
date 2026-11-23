@@ -121,7 +121,9 @@ description: "约定 C2：Delorun 发布的文件、已签名的发布 manifest 
 | `keys` | 由 `keyid` 映射到 `{ "algorithm": "ed25519", "public": <base64 32 bytes> }` 的映射 | 任一角色所指明的每个密钥。 |
 | `roles.root`、`roles.timestamp`、`roles.catalogue` | `{ "keyids": [...], "threshold": n }` | 该角色的当前密钥。 |
 | `roles.targets` | `{ "keys": [{ "keyid", "status", "lastRelease"? }], "threshold": n }` | `status` 为 `active`、`retired` 或 `revoked`；`retired` 密钥携带 `lastRelease`，即它签名的最后一个 Delorun 版本。 |
-| `log` | `{ "origin", "vkey" }` | 发布日志的检查点来源行与验证密钥（[C18](c18-release-log.zh.md)）。 |
+| `log` | `{ "origin", "vkey" }` | The release log's checkpoint origin line and verifier key ([C18](c18-release-log.zh.md)): the log new releases are logged in and the online check reads. |
+| `logs` | `[{ "origin", "vkey" }]` | Every log whose checkpoints verify a bundle, `log` among it with the same verifier key, each origin once; an earlier log, such as a previous shard, keeps the releases logged there verifying. A checkpoint of a listed log still needs the witnesses' cosignatures. |
+| `logEntryKeys` | `[{ "keyDetails", "public", "status", "lastRelease"? }]` | The keys trusted to sign release log entries, in the order the signing tool tries them ([C18](c18-release-log.zh.md#log-entry)). `keyDetails` is the entry key type, upper-case letters, digits and `_` (`PKIX_ED25519_PH` and `PKIX_ECDSA_P256_SHA_256` are defined; a client ignores a type it does not implement); `public` is the base64 DER (PKIX SubjectPublicKeyInfo) public key, a key of the type's kind for a defined type; `status` is `active`, `retired` (with `lastRelease`, the last version whose entry it signed, compared with the version of the signed manifest) or `revoked`, which verifies no release whatever `lastRelease` says. Each key is listed once and at least one key of a defined type is `active`. A listed key is not in `keys` and signs no metadata; a targets key signs log entries only when it is listed here. |
 | `witnesses` | `{ "keys": [{ "name", "vkey" }], "threshold": n }` | 见证者的验证密钥，以及必须联署的见证者数量（[C18](c18-release-log.zh.md)）。 |
 
 npm 启动器内嵌打包时所带的根版本，不内嵌任何根版本时拒绝每次安装。客户端只有从其信任的最新版本起依次走过 `n + 1, n + 2, …`，才会信任更新的根，其中每个新版本都须以上一版本根密钥的阈值以及其自身根密钥的阈值通过验证。客户端信任的根若已过期，会阻止每次安装与更新，直到更新的根通过验证；它不会阻止启动。根密钥持有者至少在当前版本过期前 30 天签名下一个版本。
@@ -234,6 +236,8 @@ CLI 运行时的每次启动时，npm 启动器用它携带的最新根（或者
 - 例行的 targets 轮换会让旧密钥退役。被泄露的 targets 密钥会被吊销：新的活动密钥在不改动内容的前提下，重新签名仍在提供或为回滚而保留的发布的 manifest 与文件列表，重新签名的文件替换 GitHub Releases 上的旧文件，并获得新的日志条目。
 - 没有任何客户端获取已安装发布的重新签名 manifest 与文件列表。若启动器携带一个吊销已安装运行时密钥的根，启动会像遇到错误签名一样无法通过启动检查，并提供该检查的补救措施。
 - 时间戳密钥与插件索引密钥通过新的根版本轮换；轮换之后，它们的旧密钥不验证任何内容。
+- `logEntryKeys` and `logs` change only by a new root version, so the offline root key alone adds or removes a log-entry key type, a log-entry key or a log; the timestamp and targets keys cannot. A log-entry key that stops signing is `retired` with its `lastRelease`, so installed releases keep verifying at start; a compromised one is `revoked`. A client keeps the newest root it verified, so an older root that a channel replays cannot bring back a removed key or log.
+- A release verifies only under a root that carries `logEntryKeys` and `logs`. Both fields are optional in the schema only so that a root chain can still read `1.root.json`, which predates them; no release verifies under it, and releases signed under it are not re-signed.
 
 <a id="rebuild-before-signing"></a>
 
@@ -265,7 +269,7 @@ CLI 运行时的每次启动时，npm 启动器用它携带的最新根（或者
 - 草稿的 `install.sh` 或 `install.ps1` 不是零长度的占位文件，因为重建比较尚未覆盖安装脚本；
 - 某个 `npm` 条目的打包 tarball（发布目录中的 `<name>-<version>.tgz`）缺失，或其 `sha512-` integrity，或其 `package/package.json` 中的名称与版本，与该条目不同。
 
-`local-release.ts` 为它自己的通道目录构建并签名发布，不进行重建，也不进行安全公告检查。其 manifest 把构建者指明为 `local release (no independent rebuild)`；它拒绝其 SHA-256 或根、targets、时间戳密钥 id 列于 `delorun/release/production-keys.json` 的根文件；从生产发布位置获取内容的启动器会拒绝指明该构建者的 manifest，除非以下两点都成立：该版本是 0.x 版本，且验证它的根是预览根（根版本 1，`1.root.json`，SHA-256 为 `e78c076567b1a2e104756409ad6f4a77c9b8caab95a3f38e857a94f82523b746`）。在 `1.0.0` 之前，签名仪式推迟，所以维护者在维护者的电脑上构建并签署 0.x 版本，没有独立重建；`1.0.0` 版本（包括它的预发布版本）、更晚的根下的版本以及其他根下的版本都会被拒绝。本约定的其他所有检查对这种版本照常适用。
+`local-release.ts` builds and signs a release for a channel directory of its own, with no rebuild and no advisory check. Its manifest names the builder `local release (no independent rebuild)`; it refuses a root file whose SHA-256, or a root, targets or timestamp key id, `delorun/release/production-keys.json` lists; and a launcher fetching from the production publication refuses a manifest that names that builder unless both hold: the release is a 0.x release, and the root that verified it is the preview root, the one root file the launcher pins by its SHA-256 (`PREVIEW_ROOT_SHA256` in `delorun/apps/install/src/local-builder.ts`, which the [Trust page](../guide/safety-and-updates/trust.zh.md#how-releases-are-signed-in-the-preview) publishes; it moves from `1.root.json` to `2.root.json` with the root rotation that adds the log-entry keys). Until `1.0.0` the signing ceremony is deferred, so the maintainer builds and signs 0.x releases on the maintainer's PC with no independent rebuild; a `1.0.0` release (a prerelease of it too) and a release under any other root file are refused, so the allowance ends with the ceremony's root. Every other check of this contract applies to such a release unchanged.
 
 签名命令只接受一份重建记录；维护者持有密钥后 N 个中两个构建者的要求见[发布工作流设计](../design/release-workflow.zh.md)，尚未构建。
 
@@ -395,7 +399,7 @@ acceptances:
 | `sign-release-refuses-npm-integrity-mismatch` | release-chain | 签名拒绝其打包 tarball 的 integrity 与条目不同的 `npm` 条目。 |
 | `local-release-refuses-production-keys` | release-chain | 本地发布拒绝 `production-keys.json` 所列的根文件或根、targets、时间戳密钥 id，且不写入任何内容。 |
 | `c02-start-anchors-on-newest-shipped-root` | release-chain | 由携带的最新根所撤销的 targets 密钥签名的运行时无法通过启动检查，即使已存储的根是列出该密钥的较旧根，且不会启动任何进程。 |
-| `c02-production-refuses-local-release` | release-chain | 从生产发布位置获取内容的通道，在安装与更新检查中都会拒绝构建者为 `local release (no independent rebuild)` 的 manifest，除非该版本是在预览根下验证的 0.x 版本；`1.0.0`、`1.0.0-rc.1`、更晚的根和其他根都会拒绝，签名或摘要有误则无论构建者是谁都会拒绝。它自己的通道会安装它。 |
+| `c02-production-refuses-local-release` | release-chain | A channel that fetches from the production publication refuses a manifest whose builder is `local release (no independent rebuild)`, on install and on the update check, unless the release is a 0.x release verified under the pinned preview root; `1.0.0`, `1.0.0-rc.1` and every other root file refuse, and a bad signature or digest refuses whatever the builder. A channel of its own installs it. |
 | `c02-setup-installs-pinned-launcher` | release-chain | Setup 按启动器在 `DELORUN_LAUNCHER_VERSION` 中指定的版本安装 `delorun@<version>`，启动器未指定版本时不提供安装。 |
 | `c02-rebuild-difference-blocks-signing` | `release` | `compare-rebuild.ts` 在出现 `rebuild-exceptions.json` 之外的差异时以 1 退出，签名步骤停止。 |
 | `c02-signing-refuses-without-rebuild` | `release` | 没有重建记录的签名会被拒绝，并给出指明所需来源的消息。 |
@@ -425,6 +429,10 @@ acceptances:
 | `patch-rule-refuses-patch-without-earlier-release` | update-notice | 没有 `v0.1.x` 发布标签时 `0.1.3` 被拒绝并指明 `--first-of-line`，带上该选项则可以签名；对 `0.2.0` 以及 `v0.1.2` 已打标签时，该选项被拒绝。 |
 | `patch-rule-refuses-tag-on-wrong-commit` | update-notice | 被移到不是发布提交祖先的提交上的更早发布标签会导致拒绝。 |
 | `patch-rule-refuses-release-missing-from-changelog` | update-notice | 发布提交的 `changelog.json` 未列出其版本的标签、已列出但没有标签的同一次版本的更早版本，或缺失、无法读取的 `changelog.json`，都会导致拒绝。 |
+| `c02-rotation-adds-log-entry-key` | `install` | A release logged with an ECDSA P-256 key, refused under a root without `logEntryKeys`, installs once the home adopts a root 2, signed by root 1's threshold and its own, that lists the key; the home then keeps root 2. |
+| `c02-log-entry-keys-unverified-root-refused` | `install`, `release` | A root 2 listing a log-entry key that root 1's keys did not sign is refused, and its list is never read. |
+| `c02-replayed-root-cannot-restore-type` | `install` | After a root 3 revokes a log-entry key, an entry by that key is refused, and a timestamp naming root 2, which listed it, is refused as older than the trusted root. |
+| `local-builder-pins-root-digest` | `install` | A locally built 0.x release from the production channel installs under the root 2 the launcher pins by digest, and is refused under the same root 2 when the pin names root 1. |
 | `c02-summary-lone-surrogate-refused` | update-notice | 含有孤立的高位或低位 UTF-16 代理的摘要会被 manifest 读取方与签名拒绝；代理对可以读取。 |
 
 <a id="what-this-does-not-prove"></a>

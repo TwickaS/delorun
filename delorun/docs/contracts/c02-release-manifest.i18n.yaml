@@ -27,8 +27,8 @@
   en: ca2eb1cd0a8c756a
   zh: 3e62ee4122748c66
 /c2-release-manifest-and-signature/root-metadata:
-  en: bbc79c5325bcb32f
-  zh: dbd84e539e4e0852
+  en: 15f6de2ca3eb4335
+  zh: d906efa8b207b980
 /c2-release-manifest-and-signature/timestamp-metadata:
   en: fcc74d28d68ce6e3
   zh: fea8e84698a80e6a
@@ -48,11 +48,11 @@
   en: 7ea8a30581b611ed
   zh: c4e366c00a7a9112
 /c2-release-manifest-and-signature/key-rotation:
-  en: aeff340b7ac251a7
-  zh: 15a7d8e3db1d6ea6
+  en: 8024d115c5a94383
+  zh: c1be981de7179247
 /c2-release-manifest-and-signature/rebuild-before-signing:
-  en: 98435e444de556d9
-  zh: 28b0105ce9ec995b
+  en: d2305ec7206f9c29
+  zh: ad4558673315ea6c
 /c2-release-manifest-and-signature/dependency-advisory-check:
   en: 77a34af58b6f0eff
   zh: a608438665d86d2b
@@ -78,8 +78,8 @@
   en: 4739d95131498523
   zh: 8579be6852ef8bcf
 /c2-release-manifest-and-signature/security/denial-tests:
-  en: f2d8f16970441c5d
-  zh: 2934ed9697f82954
+  en: 56b1883f79d58e4c
+  zh: d9f2b2cf52a0dc82
 /c2-release-manifest-and-signature/security/what-this-does-not-prove:
   en: 6e87204f048d03d1
   zh: ad527b41af729604

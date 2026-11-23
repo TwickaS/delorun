@@ -109,7 +109,7 @@ When the output goes to a file or a pipe instead of a terminal, each step is one
 
 - **Channel.** A preview is published on the channel named `stable`, so the first step says so.
 - **Signature.** Delorun's release keys sign the release. The launcher checks the signatures and that the downloaded file matches. If anything does not match, nothing is installed.
-- **Built on one machine.** Until `1.0.0`, the maintainer builds and signs each release on the maintainer's PC, and no second builder rebuilds it. The launcher installs such a 0.x release when it verifies under the preview root. It refuses a release built this way when it is a `1.0.0` release or is signed under a later root ([What you trust](../safety-and-updates/trust.md#how-releases-are-signed-in-the-preview)).
+- **Built on one machine.** Until `1.0.0`, the maintainer builds and signs each release on the maintainer's PC, and no second builder rebuilds it. The launcher installs such a 0.x release when it verifies under the preview root. It refuses a release built this way when it is a `1.0.0` release or is signed under another root ([What you trust](../safety-and-updates/trust.md#how-releases-are-signed-in-the-preview)).
 - **Public release log.** Every release is also entered in a public, append-only [release log](../../reference/glossary.md#release-log). The launcher checks the entry. If the log cannot be reached, the launcher installs the release on its signature alone, prints a warning, and checks the log again at the next start that can reach it.
 - **Every start.** The launcher compares the installed files with the signed list. A start with a release installed needs no network.
 
@@ -119,6 +119,7 @@ You can run these checks again at any time with `delorun verify` ([Daily use](..
 <summary>Edge cases</summary>
 
 - If the log contradicts the release, then the install stops. Do not work around it; see [Installs and release checks](../help/troubleshooting.md#installs-and-release-checks).
+- If a copy on 0.1.0-preview.2.7 or earlier cannot update, then reinstall once with `npx delorun@latest`: your home, chats and settings stay. Releases from 0.1.0-preview.3 are verified under release root 2, which such a copy cannot read.
 - If you want a stricter full file check at every start, then set `DELORUN_RUNTIME_FULL_CHECK_DAYS` to `0`. The default hashes every file at least every 7 days; the largest value is 30.
 
 </details>

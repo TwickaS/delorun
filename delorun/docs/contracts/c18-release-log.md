@@ -43,17 +43,19 @@ The requirements and denial tests below that this list names as not built or rea
 
 ## Log entry
 
-One entry per signed manifest file, submitted by the release's `log-release` command after the targets key signs and before the release is published:
+One entry per signed manifest file, submitted by the release's signing command after the targets key signs and before the release is published. The entry is signed by an `active` key the trusted root lists in `logEntryKeys` ([C2](c02-release-manifest.md#root-metadata)): ECDSA P-256 first, with Ed25519ph by the targets key as the listed alternative. A root without the list, such as `1.root.json`, verifies no release.
 
 | Entry field | Value |
 | --- | --- |
 | Type | `hashedrekord`, API version `0.0.2` (Rekor v2) |
-| Digest | SHA-512 of the manifest file's bytes (the whole envelope), algorithm `SHA2_512` |
-| Signature | The targets key's Ed25519ph signature (RFC 8032, empty context) over the manifest file's bytes |
-| Key details | `PKIX_ED25519_PH` |
-| Public key | The active targets public key, DER-encoded PKIX |
+| Key details | The entry key type: `PKIX_ED25519_PH` or `PKIX_ECDSA_P256_SHA_256` |
+| Digest | The key type's digest of the manifest file's bytes (the whole envelope): SHA-512, algorithm `SHA2_512`, for `PKIX_ED25519_PH`; SHA-256, algorithm `SHA2_256`, for `PKIX_ECDSA_P256_SHA_256` |
+| Signature | Over the manifest file's bytes: Ed25519ph (RFC 8032, empty context) for `PKIX_ED25519_PH`; ECDSA P-256 with SHA-256, DER-encoded, for `PKIX_ECDSA_P256_SHA_256` |
+| Public key | The signing key's DER-encoded PKIX public key |
 
-The `log-release` command submits these fields as a `hashedRekordRequestV002` to the log's `/api/v2/log/entries`; the log builds the entry body from them, and the log's leaf is the RFC 8785 serialisation of that body. Rekor v2 accepts an Ed25519 key only with Ed25519ph, so the log refuses a pure Ed25519 (`PKIX_ED25519`) entry, and clients refuse one too.
+The signing command submits these fields as a `hashedRekordRequestV002` to the log's `/api/v2/log/entries`; the log builds the entry body from them, and the log's leaf is the RFC 8785 serialisation of that body. Rekor v2 accepts an Ed25519 key only with Ed25519ph, so the log refuses a pure Ed25519 (`PKIX_ED25519`) entry, and clients refuse one too.
+
+The signing command tries the root's listed `active` keys it holds in the root's order. Before each submission it verifies its own request as step 2 below does, under the root it signs for, and submits nothing that does not verify. It moves to the next key only when the log answers HTTP 400 with a JSON body whose `message` is exactly `invalid hashedrekord request` (Rekor v2) or `entry algorithms are not allowed` (Rekor v1), which is how a log refuses an entry key type; any other answer stops the release. The log accepting an entry proves nothing by itself: the bundle the command writes must verify as this page states. Before a cut, `apps/release/scripts/probe-log.ts` submits one entry over random bytes per listed `active` type, each signed by a throwaway key, and reports which types the log accepts.
 
 A re-signed manifest after a targets-key revocation ([C2](c02-release-manifest.md#key-rotation)) gets its own entry. A release is "logged" when its manifest file's entry verifies as this page states.
 
@@ -75,10 +77,10 @@ The bundle is published on GitHub Releases beside the manifest. The `log-release
 A bundle verifies when all of these hold, with the keys of the client's current trusted root:
 
 1. `manifest.sha256` equals the SHA-256 of the manifest file the client verified under [C2](c02-release-manifest.md).
-2. The entry body is a Rekor v2 `hashedrekord` (`0.0.2`) whose `SHA2_512` digest equals the SHA-512 of that manifest file, whose key details are `PKIX_ED25519_PH`, and whose Ed25519ph signature over the manifest file verifies with a targets key that is valid for the release.
+2. The entry body is a Rekor v2 `hashedrekord` (`0.0.2`), the root lists `logEntryKeys` (`entry-key-untrusted` otherwise), the entry's key details are a listed type this client implements (`entry-type-refused` otherwise), its public key is byte for byte a listed key of that type that is `active`, or `retired` with a `lastRelease` at or above the version of the signed manifest, never a version the bundle names (`entry-key-untrusted` otherwise, and always for a `revoked` key), its digest algorithm and digest are the type's over the manifest file, and its signature over the manifest file verifies with that listed key.
 3. The leaf hash of the entry body, the inclusion proof and `treeSize` reproduce `rootHash`.
-4. The checkpoint names the root metadata's log origin, its `treeSize` and `rootHash` match the proof, and its log signature verifies with the log's Ed25519 verifier key.
-5. Cosignatures from at least `witnesses.threshold` distinct listed witness keys verify over that checkpoint.
+4. The checkpoint names the origin of a log the root lists in `logs` (`log-origin-untrusted` otherwise, and always under a root without `logs`), its `treeSize` and `rootHash` match the proof, and its log signature verifies with that log's Ed25519 verifier key.
+5. Cosignatures from at least `witnesses.threshold` distinct listed witness keys verify over that checkpoint, whichever listed log signed it.
 
 A bundle without a valid witness cosignature fails step 5 and the entry is refused, whatever the log signature says.
 
@@ -94,6 +96,8 @@ A verified bundle shows the entry was in the log at the checkpoint it carries. T
 One rule sorts every outcome: anything before the checkpoint's log signature verifies leaves the release `unchecked`, and once it verifies, anything that does not hold together is `failed`. So no answer, a request past its 30-second timeout, a whole check past its 90-second deadline, a `5xx`, a `404` or `410`, a redirect to another host or an answer over its size limit for the checkpoint, and a body that is not a checkpoint the root's log key signed (a proxy's page, another log's note) leave the release `unchecked`; that is not a failure. A signed checkpoint smaller than the stored one, a consistency proof that does not verify, a tile that the signed tree size says exists answering `404` or `410`, with the wrong length, with more bytes than its format allows or with a redirect to another host, and a cosignature from a listed witness that is present and does not verify are `failed`. A latest checkpoint with fewer than `witnesses.threshold` counted listed cosignatures (one dated more than 5 minutes in the future is not counted, and the `detail` names it and the client's clock), or whose newest cosignature is older than 24 hours, leaves the release `unchecked`, and only after the rollback and consistency checks, so a log that contradicts the release cannot avoid them by leaving the cosignature out. The failure code of a present invalid cosignature is `witness-cosignature-missing`, and the check's `detail` says which witness and why. A failure of the client's own code is reported as an error of the client, never as an unreachable log.
 
 An install or update that finds `unchecked` goes on with the release's signature alone and tells the person so. The launcher marks the step "Release log not checked" with `!` and the reason, then prints the warning "Release <version> has not been checked against the release log; Delorun checks it at the next connection." It records the release as `unchecked`, with the reason as `detail`, in the check state file once the runtime store has installed the release; a release the store refuses leaves no record. Whoever can block a person's connection to the log and its witness leaves that person with the signature alone; the inclusion proof in the release's own bundle is still verified, offline, before anything installs. An install or update that finds `failed` installs nothing and records no check state. The roots and the timestamp it verified, and the checkpoint a passing check verified, stay recorded under `trust/`, because a later install holds the root chain, the timestamp and the log to what they proved.
+
+The online check reads only the current log, the root's `log`. A release whose bundle's checkpoint is in an earlier log the root lists is verified offline at install and at each start and stays `unchecked` online, with a `detail` that names both logs.
 
 A `trust/checkpoint.json` an earlier install wrote with only a tree size and a root hash, and no signed note, is a floor the client cannot check by itself. The online check keeps it only when a consistency proof from it to the log's signed latest checkpoint verifies, and the verified checkpoint then replaces the file. When the proof does not verify, it sets no floor, the verified checkpoint replaces it, and the attempt records a notice naming its tree size; when the log cannot be reached, the file stays as it is. A `trust/checkpoint.json` that does not read at all sets no floor either: the floor starts again from the release's own checkpoint, and the attempt records a notice saying so, naming any releases the home recorded as `verified`, so a reset is never silent.
 
@@ -170,6 +174,16 @@ The bundle's `schema` names its major version. The log's origin and key and the 
 | `c18-wrong-inclusion-proof-refused` | `install` | A bundle whose proof does not reproduce `rootHash` is refused before installation. |
 | `c18-entry-for-other-manifest-refused` | `install` | A valid entry for a different manifest digest is refused. |
 | `c18-pure-ed25519-entry-refused` | `release`, `install` | An entry with a pure Ed25519 signature or `PKIX_ED25519` key details is refused; the same manifest's Ed25519ph entry verifies. |
+| `c18-root-without-log-trust-refused` | `release-verify`, `install` | Under a root without `logEntryKeys`, even an Ed25519ph entry by its targets key is refused; under a root without `logs`, every checkpoint is. |
+| `c18-listed-entries-only` | `release-verify` | A root that lists only an ECDSA P-256 key refuses an Ed25519ph entry by its targets key. |
+| `c18-revoked-entry-key-refused` | `release-verify` | A revoked log-entry key verifies no release, an older one too, whatever `lastRelease` it carries. |
+| `c18-retired-entry-key-by-signed-version` | `release-verify`, `install` | A retired log-entry key verifies a release up to its `lastRelease` by the signed manifest's version; a bundle that names the old release for a newer manifest is refused. |
+| `c18-listed-log-needs-witness` | `release-verify` | A checkpoint of an earlier log the root lists, with no cosignature from a listed witness, is refused. |
+| `c18-unlisted-entry-type-refused` | `release-verify` | An entry whose key type the root does not list is refused whatever its signature, in each direction between the two types. |
+| `c18-listed-type-other-key-refused` | `release-verify`, `install` | An entry of a listed type whose key is not a listed key of that type is refused, and one naming the listed key with another key's signature is refused. |
+| `c18-unlisted-log-origin-refused` | `release-verify` | A bundle whose checkpoint is in a log the root does not list is refused; one in an earlier log the root lists verifies only with that log's key. |
+| `log-fallback-only-on-type-refusal` | `release` | A log answering the first entry with a 400 whose body is not one of the two refusal messages, a 5xx or a 409 stops the release with no other key tried and the channel unchanged. |
+| `log-fallback-verifies-success` | `release` | A log that refuses the first type and accepts the second with an entry that is not the release's leaves the release unwritten. |
 | `c18-offline-start-warns` | CLI launcher, home process | A start with the log stand-in unreachable starts, prints the warning with the release's version and records `unchecked`. |
 | `c18-offline-recheck-on-connect` | home process | After the stand-ins become reachable, the home process's next retry records `verified`. |
 | `c18-offline-install-continues` | `install`, home process, desktop updater | An install or update attempted while the log is unreachable or its newest witnessed checkpoint is stale prints the reason and the warning, installs, and records `unchecked` with the reason. |
