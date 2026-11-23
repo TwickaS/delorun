@@ -9,7 +9,7 @@ describe('PluginEntryCard', () => {
   it('lays out the artwork, the title with its badges, the summary, the meta line, the content and the action', () => {
     render(
       <PluginEntryList label="Plugins">
-        <PluginEntryCard data-entry="alpha" title="Alpha" badges={<Tag>Official</Tag>} description="Counts words." meta="1.0.0 · Delo Run"
+        <PluginEntryCard data-entry="alpha" title="Alpha" badges={<Tag>Official</Tag>} description="Counts words." meta="1.0.0 · Delorun"
           action={<button type="button">Install</button>}>
           <p>Downloading</p>
         </PluginEntryCard>
@@ -17,7 +17,7 @@ describe('PluginEntryCard', () => {
     )
     const item = within(screen.getByRole('list', { name: 'Plugins' })).getByRole('listitem')
     expect(item.dataset['entry']).toBe('alpha')
-    expect(item.textContent).toBe('AlphaOfficialCounts words.1.0.0 · Delo RunDownloadingInstall')
+    expect(item.textContent).toBe('AlphaOfficialCounts words.1.0.0 · DelorunDownloadingInstall')
     // Without artwork the frame shows the default plugin artwork, hidden because the title names the plugin.
     expect(item.querySelector('span[aria-hidden="true"] > svg')).not.toBeNull()
     expect(item.dataset['static']).toBe('')
