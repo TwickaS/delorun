@@ -210,19 +210,47 @@ body[data-ds-dark-theme] {
   height: 12px;
 }
 
+.delorun-alert-primary:disabled,
+.delorun-alert-secondary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 @media (hover: hover) {
-  .delorun-alert-primary:hover { background: color-mix(in oklab, var(--dsw-alias-link) calc(var(--delorun-alert-button-tint) + 6%), transparent); }
-  .delorun-alert-secondary:hover,
+  .delorun-alert-primary:enabled:hover { background: color-mix(in oklab, var(--dsw-alias-link) calc(var(--delorun-alert-button-tint) + 6%), transparent); }
+  .delorun-alert-secondary:enabled:hover,
   .delorun-alert-close:hover { background: var(--dsw-alias-interactive-bg-hover); color: var(--dsw-alias-label-primary); }
 }
 
-.delorun-alert-primary:active,
-.delorun-alert-secondary:active,
+.delorun-alert-primary:enabled:active,
+.delorun-alert-secondary:enabled:active,
 .delorun-alert-close:active {
   transform: scale(0.97);
 }
 
-.delorun-alert :is(button, a):focus-visible {
+/* A coarse pointer reaches each button through a 44 px target around it. */
+@media (pointer: coarse) {
+  .delorun-alert-primary,
+  .delorun-alert-secondary,
+  .delorun-alert-close {
+    position: relative;
+  }
+
+  .delorun-alert-primary::after,
+  .delorun-alert-secondary::after {
+    position: absolute;
+    inset: calc((var(--delorun-alert-button-height) - 44px) / 2) 0;
+    content: '';
+  }
+
+  .delorun-alert-close::after {
+    position: absolute;
+    inset: calc((var(--delorun-alert-icon-size) - 44px) / 2);
+    content: '';
+  }
+}
+
+:is(.delorun-alert, .delorun-glass) :is(button, a):focus-visible {
   outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
   outline-offset: 2px;
 }

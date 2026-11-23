@@ -17,10 +17,12 @@ export type AlertKind = 'info' | 'success' | 'warning' | 'error' | 'progress'
 /** Where the alert sits: in a column (`inline`), floating (`toast`) or across a pane (`banner`). */
 export type AlertVariant = 'inline' | 'toast' | 'banner'
 
-/** An action: its localised label and what it does. */
+/** An action: its localised label and what it does; `disabled` with a `title` that says why, when it cannot run now. */
 export interface AlertAction {
   readonly label: string
   readonly onClick: () => void
+  readonly disabled?: boolean | undefined
+  readonly title?: string | undefined
 }
 
 /** The class names `@delorun/plugin-theme` styles; a surface that cannot use {@link Alert} uses them directly. */
@@ -48,14 +50,16 @@ export interface AlertOwnProps {
   readonly kind: AlertKind
   /** Defaults to `inline`. */
   readonly variant?: AlertVariant
-  /** The localised title, in a few words. */
-  readonly title: string
+  /** The localised title, in a few words; a node only to keep a part such as a version number unbroken. */
+  readonly title: ReactNode
   /** One muted line under the title. */
   readonly line?: ReactNode
   /** The tinted action. */
   readonly primary?: AlertAction | undefined
   /** The quiet action beside it. */
   readonly secondary?: AlertAction | undefined
+  /** A further control at the end of the action row, such as a menu button. */
+  readonly extra?: ReactNode
   /** The close button: its localised name and what it does. */
   readonly close?: AlertAction | undefined
   /** Overrides the role the kind gives; `note` marks a standing notice that is not announced as it appears. */
@@ -78,7 +82,7 @@ export type AlertProps = AlertOwnProps & { readonly [attribute: `data-${string}`
  * @param props - see {@link AlertProps}.
  * @returns the alert.
  */
-export function Alert({ kind, variant = 'inline', title, line, primary, secondary, close, role, closing = false, onClosed, className, outcome, ...data }: AlertProps) {
+export function Alert({ kind, variant = 'inline', title, line, primary, secondary, extra, close, role, closing = false, onClosed, className, outcome, ...data }: AlertProps) {
   const node = useRef<HTMLDivElement>(null)
   const latestOnClosed = useRef(onClosed)
   latestOnClosed.current = onClosed
@@ -100,7 +104,7 @@ export function Alert({ kind, variant = 'inline', title, line, primary, secondar
       element?.removeEventListener('transitionend', ended)
     }
   }, [closing])
-  const actions = primary !== undefined || secondary !== undefined
+  const actions = primary !== undefined || secondary !== undefined || extra !== undefined
   return (
     <div
       {...data}
@@ -116,9 +120,9 @@ export function Alert({ kind, variant = 'inline', title, line, primary, secondar
       <div className={ALERT_CLASSES.body}>
         <p className={ALERT_CLASSES.title}>{title}</p>
         {line === undefined ? null : <p className={ALERT_CLASSES.line}>{line}</p>}
-        {variant === 'banner' || !actions ? null : <AlertActions primary={primary} secondary={secondary} />}
+        {variant === 'banner' || !actions ? null : <AlertActions primary={primary} secondary={secondary} extra={extra} />}
       </div>
-      {variant === 'banner' && actions ? <AlertActions primary={primary} secondary={secondary} /> : null}
+      {variant === 'banner' && actions ? <AlertActions primary={primary} secondary={secondary} extra={extra} /> : null}
       {close === undefined
         ? null
         : (
@@ -131,16 +135,18 @@ export function Alert({ kind, variant = 'inline', title, line, primary, secondar
 }
 
 /**
- * The action row: the tinted action, then the quiet one.
+ * The action row: the tinted action, the quiet one, then a further control.
  * @param props.primary - the tinted action.
  * @param props.secondary - the quiet action.
+ * @param props.extra - a further control.
  * @returns the row.
  */
-function AlertActions({ primary, secondary }: { primary: AlertAction | undefined; secondary: AlertAction | undefined }) {
+function AlertActions({ primary, secondary, extra }: { primary: AlertAction | undefined; secondary: AlertAction | undefined; extra: ReactNode }) {
   return (
     <div className={ALERT_CLASSES.actions}>
-      {primary === undefined ? null : <button type="button" className={ALERT_CLASSES.primary} onClick={primary.onClick}>{primary.label}</button>}
-      {secondary === undefined ? null : <button type="button" className={ALERT_CLASSES.secondary} onClick={secondary.onClick}>{secondary.label}</button>}
+      {primary === undefined ? null : <button type="button" className={ALERT_CLASSES.primary} disabled={primary.disabled} title={primary.title} onClick={primary.onClick}>{primary.label}</button>}
+      {secondary === undefined ? null : <button type="button" className={ALERT_CLASSES.secondary} disabled={secondary.disabled} title={secondary.title} onClick={secondary.onClick}>{secondary.label}</button>}
+      {extra}
     </div>
   )
 }

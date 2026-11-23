@@ -63,6 +63,21 @@ describe('the anatomy', () => {
     expect(details).toHaveBeenCalledOnce()
   })
 
+  it('disables an action that cannot run now and says why', () => {
+    const cancel = vi.fn()
+    render(<Alert kind="progress" title="Switching" secondary={{ label: 'Cancel', onClick: cancel, disabled: true, title: 'Too late to cancel' }} />)
+    const button = screen.getByRole('button', { name: 'Cancel' })
+    expect(button.hasAttribute('disabled')).toBe(true)
+    expect(button.getAttribute('title')).toBe('Too late to cancel')
+    fireEvent.click(button)
+    expect(cancel).not.toHaveBeenCalled()
+  })
+
+  it('ends the action row with a further control', () => {
+    const { container } = render(<Alert kind="progress" title="Waiting for 2 chats" secondary={{ label: 'Cancel', onClick: () => {} }} extra={<button type="button">More</button>} />)
+    expect([...container.querySelectorAll(`.${ALERT_CLASSES.actions} button`)].map(button => button.textContent)).toEqual(['Cancel', 'More'])
+  })
+
   it('names the close button with the caller\'s label', () => {
     const close = vi.fn()
     render(<Alert kind="info" title="Saved" close={{ label: 'Hide this message', onClick: close }} />)
