@@ -147,7 +147,7 @@
       "state": "shipped",
       "standing": "on",
       "requires": [],
-      "files": 119,
+      "files": 122,
       "folder": "delorun/packages/plugin-multiview"
     },
     {
@@ -227,7 +227,7 @@
       "state": "shipped",
       "standing": "on",
       "requires": [],
-      "files": 98,
+      "files": 100,
       "folder": "delorun/packages/plugin-theme"
     },
     {
