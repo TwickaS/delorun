@@ -2227,6 +2227,9 @@ importers:
       '@delorun/contract-update-report':
         specifier: workspace:*
         version: link:../contract-update-report
+      '@delorun/desktop-home':
+        specifier: workspace:*
+        version: link:../desktop-home
       '@delorun/external-agents':
         specifier: workspace:*
         version: link:../external-agents

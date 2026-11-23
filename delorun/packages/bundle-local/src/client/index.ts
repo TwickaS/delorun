@@ -55,6 +55,7 @@ import { IconLinkOutlineMedium } from '@deepseek-ai/dsh-client-ui-primitives'
 import { SETUP_OPT_IN_ROWS, SETUP_UPDATE_CHECK_ROW } from '@delorun/contract-setup-answers'
 import { DelorunBrandMark, DelorunBrandName } from './brand.tsx'
 import { acknowledgeNotice, DelorunNotice, noticeAcknowledged, type DelorunNoticeInjected } from './DelorunNotice.tsx'
+import { pageAtComputer } from './at-computer.ts'
 import { DelorunVersionRow, type DelorunVersionRowInjected } from './DelorunVersionRow.tsx'
 import { en as devicesEn, zh as devicesZh, type DevicesLocaleKey } from './devices-locales.ts'
 import type { HostFetch } from './devices-api.ts'
@@ -512,16 +513,16 @@ export function apply(ctx: Context): void {
   }, PluginInstallsSection))
   // One function for the plugin's lifetime: the section's requests restart when its identity changes.
   const browserFetch: HostFetch = (input, init) => globalThis.fetch(input, init)
-  const { source: faceGrant, fetch: studioFetch, queue: faceQueue, pass: facePass, grant: proactiveGrant } = applyFaceGrant(ctx, browserFetch, (ctx.get('connection') as ConnectionHandle).isLoopback)
+  const { source: faceGrant, fetch: studioFetch, queue: faceQueue, pass: facePass, grant: proactiveGrant } = applyFaceGrant(ctx, browserFetch, pageAtComputer(ctx))
   registerReportSlots(ctx, () => t('about.nav'), versions)
   ctx.effect(() => ctx.locale.register(DEVICES_NS, { en: devicesEn, zh: devicesZh }), 'delorun-devices: section dictionaries')
   const devicesT = ctx.locale.bind(DEVICES_NS)
   ctx.effect(() => ctx.locale.register(FACE_ID_NS, { en: faceIdEn, zh: faceIdZh }), 'delorun-face-id: screen dictionaries')
-  const pin = applyPin(ctx, browserFetch, (ctx.get('connection') as ConnectionHandle).isLoopback)
-  const unlock = applyUnlock(ctx, browserFetch, (ctx.get('connection') as ConnectionHandle).isLoopback)
-  provideAgentSeatReach(ctx, (ctx.get('connection') as ConnectionHandle).isLoopback ? 'computer' : studioSurface(ctx) === 'approved device' ? 'device' : 'none', proactiveGrant)
+  const pin = applyPin(ctx, browserFetch, pageAtComputer(ctx))
+  const unlock = applyUnlock(ctx, browserFetch, pageAtComputer(ctx))
+  provideAgentSeatReach(ctx, pageAtComputer(ctx) ? 'computer' : studioSurface(ctx) === 'approved device' ? 'device' : 'none', proactiveGrant)
   // A reach page whose session a device approval, removal or passkey enrolment rotated (C4) reloads, so the sign-in page signs it in again.
-  if (!(ctx.get('connection') as ConnectionHandle).isLoopback) {
+  if (!pageAtComputer(ctx)) {
     const link = ctx.get('connection') as ConnectionHandle
     ctx.effect(() => watchSessionRotation(link.state, async () => (await browserFetch('/', { method: 'HEAD', cache: 'no-store' })).status, () => { globalThis.location.reload() }),
       'delorun-devices: sign in again after a session rotation')
@@ -536,7 +537,7 @@ export function apply(ctx: Context): void {
     openPairingCode: pairing.openCode,
     declinePairing: pairing.decline,
   })
-  if ((ctx.get('connection') as ConnectionHandle).isLoopback) {
+  if (pageAtComputer(ctx)) {
     ctx.slots.inject('shell.overlay', () => ctx.slots.register({
       name: 'shell.overlay',
       id: PAIRING_NOTICE_ID,
@@ -554,7 +555,7 @@ export function apply(ctx: Context): void {
   }, DevicesSection))
   ctx.effect(() => ctx.locale.register(PIN_MODE_NS, { en: pinModeEn, zh: pinModeZh }), 'delorun-pin-mode: section dictionaries')
   const pinModeT = ctx.locale.bind(PIN_MODE_NS)
-  const pinModeFace = (): PinModeSectionInjected => ({ fetch: browserFetch, atComputer: () => (ctx.get('connection') as ConnectionHandle).isLoopback })
+  const pinModeFace = (): PinModeSectionInjected => ({ fetch: browserFetch, atComputer: () => pageAtComputer(ctx) })
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
     id: PIN_MODE_SECTION_ID,
@@ -564,7 +565,7 @@ export function apply(ctx: Context): void {
     inject: pinModeFace,
   }, PinModeSection))
   const faceIdT = ctx.locale.bind(FACE_ID_NS)
-  const faceIdFace = (): FaceIdSectionInjected => ({ fetch: browserFetch, atComputer: () => (ctx.get('connection') as ConnectionHandle).isLoopback, hooks: { ...pin.hooks, ...facePass.hooks }, grant: proactiveGrant })
+  const faceIdFace = (): FaceIdSectionInjected => ({ fetch: browserFetch, atComputer: () => pageAtComputer(ctx), hooks: { ...pin.hooks, ...facePass.hooks }, grant: proactiveGrant })
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
     id: FACE_ID_SECTION_ID,
@@ -613,7 +614,7 @@ export function apply(ctx: Context): void {
   ctx.effect(() => ctx.locale.register(SETUP_COMMANDS_NS, { en: setupCommandsEn, zh: setupCommandsZh }), 'delorun-setup-commands: section dictionaries')
   const setupCommandsT = ctx.locale.bind(SETUP_COMMANDS_NS)
   const setupCommandsFace = (): SetupCommandsSectionInjected => ({
-    fetch: studioFetch, atComputer: () => (ctx.get('connection') as ConnectionHandle).isLoopback, openPin: () => { ctx.get('settingsShell')?.openSection(PIN_MODE_SECTION_ID) },
+    fetch: studioFetch, atComputer: () => pageAtComputer(ctx), openPin: () => { ctx.get('settingsShell')?.openSection(PIN_MODE_SECTION_ID) },
   })
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
@@ -625,8 +626,8 @@ export function apply(ctx: Context): void {
   }, SetupCommandsSection))
   ctx.effect(() => ctx.locale.register(VERSIONS_NS, { en: versionsEn, zh: versionsZh }), 'delorun-setup-versions: section dictionaries')
   const versionsT = ctx.locale.bind(VERSIONS_NS)
-  const isLoopback = (ctx.get('connection') as ConnectionHandle).isLoopback
-  const versionsFace = (): VersionsSectionInjected => ({ fetch: studioFetch, atComputer: () => isLoopback, saveFile: saveBrowserFile })
+  const onComputer = pageAtComputer(ctx)
+  const versionsFace = (): VersionsSectionInjected => ({ fetch: studioFetch, atComputer: () => onComputer, saveFile: saveBrowserFile })
   ctx.slots.inject('settings.section', () => ctx.slots.register({
     name: 'settings.section',
     id: SETUP_VERSIONS_SECTION_ID,
