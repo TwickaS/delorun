@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createGuide, fits, folderOf, presentConnections, type Loadable } from '../src/client/guide.ts'
-import { hostApi, readReach, readReachAddress, REACH_STATUS_PATH } from '../src/client/host-api.ts'
+import { hostApi, pageAtComputer, readReach, readReachAddress, REACH_STATUS_PATH } from '../src/client/host-api.ts'
 import { KEY_TEST_PATH, READINESS_PATH, RECOMMEND_PATH, type KeyTestAnswer, type Readiness, type RecommendAnswer } from '../src/wire.ts'
 import { hostFake, KEYS, READY } from './fixtures.client.ts'
 
@@ -157,6 +157,32 @@ describe('the guide\'s requests', () => {
     for (const hostname of ['localhost', '127.0.0.1', '[::1]']) {
       vi.stubGlobal('location', { hostname })
       expect(await readReach()).toBe('off')
+    }
+  })
+
+  // The desktop app's page host is `app`; its preload's home kind decides, and any other value leaves the host name test as it was.
+  it.each<readonly [string, unknown, boolean]>([
+    ['bundled', { homeKind: 'bundled' }, true],
+    ['wsl', { homeKind: 'wsl' }, true],
+    ['remote', { homeKind: 'remote' }, false],
+  ])('in the desktop app a %s home decides whether the page is at the computer, whatever the host', async (_, desktop, atComputer) => {
+    const fetch = stub(() => json({ options: [{ state: 'ready' }] }))
+    vi.stubGlobal('delorunDesktop', desktop)
+    for (const hostname of ['app', 'localhost', 'laptop.example.test']) {
+      vi.stubGlobal('location', { hostname })
+      expect(pageAtComputer()).toBe(atComputer)
+      expect(await readReach()).toBe(atComputer ? 'set-up' : 'remote')
+    }
+    expect(fetch).toHaveBeenCalledTimes(atComputer ? 3 : 0)
+  })
+
+  it('leaves the host name test alone when the desktop reports nothing usable', () => {
+    for (const desktop of [undefined, null, 'wsl', { homeKind: 'elsewhere' }, { homeKind: 7 }]) {
+      vi.stubGlobal('delorunDesktop', desktop)
+      vi.stubGlobal('location', { hostname: 'app' })
+      expect(pageAtComputer()).toBe(false)
+      vi.stubGlobal('location', { hostname: 'localhost' })
+      expect(pageAtComputer()).toBe(true)
     }
   })
 })

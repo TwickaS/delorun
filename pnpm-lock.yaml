@@ -3985,6 +3985,9 @@ importers:
       '@delorun/contract-setup-answers':
         specifier: workspace:*
         version: link:../contract-setup-answers
+      '@delorun/desktop-home':
+        specifier: workspace:*
+        version: link:../desktop-home
       '@delorun/external-agents':
         specifier: workspace:*
         version: link:../external-agents
