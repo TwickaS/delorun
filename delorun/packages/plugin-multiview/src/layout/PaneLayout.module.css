@@ -45,7 +45,8 @@
 
 .toolbar {
   display: flex;
-  flex: 1 1 0;
+  /* An automatic basis (its content's width) moves it below a full-width tab strip instead of squeezing it to nothing beside it. */
+  flex: 1 1 auto;
   align-items: center;
   min-width: 0;
 }
