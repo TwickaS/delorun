@@ -55,7 +55,7 @@ function installer() {
 const guide = () => createGuide(hostFake({ recommend: undefined }).host)
 
 describe('the recommended plugins step drawn as the plugin market', () => {
-  it('draws each offered plugin as a market entry: framed artwork, title, full description and Add', async () => {
+  it('draws each offered plugin as a market entry: its letter tile in the frame, title, description and Add', async () => {
     const { bundles } = installer()
     render(<PluginsStep services={stepServices({ bundles, plugins: ['@scope/alpha', '@scope/beta'] })} guide={guide()} />)
     await flush()
@@ -64,8 +64,8 @@ describe('the recommended plugins step drawn as the plugin market', () => {
       const row = entry(title)
       expect(within(row).getByText(description)).toBeTruthy()
       expect(within(row).getByRole('button', { name: `Add ${title}` }).textContent).toBe(en['bundle.add'])
-      // The default plugin artwork in the 48px frame, which assistive technology skips because the title names it.
-      expect(row.querySelector('span[aria-hidden="true"] > svg')).not.toBeNull()
+      // A plugin without artwork shows the guide's coloured letter tile in the market's frame, hidden because the title names it.
+      expect(row.querySelector('span[aria-hidden="true"] > [data-tint]')?.textContent).toBe(title.charAt(0))
       // A list with no page to open shows the whole description.
       expect(row.getAttribute('data-clamp')).toBe('false')
     }

@@ -14,13 +14,15 @@ const HEADINGS = { 2: 'h2', 3: 'h3', 4: 'h4', 5: 'h5', 6: 'h6' } as const
 
 /**
  * Render a plugin's artwork in the 48px icon frame. An absent address, or an image that fails to load, shows the
- * default plugin artwork.
+ * fallback, or the default plugin artwork when there is none.
  * @param props.src - the image address, if the plugin has artwork.
+ * @param props.fallback - what the frame shows without artwork, such as a list's own letter tile; 36px fits the frame.
  * @param props.skeleton - draw the frame as a loading placeholder instead.
  * @returns the frame, hidden from assistive technology because the title names the plugin.
  */
-export function PluginEntryIcon({ src, skeleton = false }: {
+export function PluginEntryIcon({ src, fallback, skeleton = false }: {
   src?: string | undefined
+  fallback?: ReactNode
   skeleton?: boolean
 }): ReactNode {
   const [failed, setFailed] = useState<string>()
@@ -28,7 +30,7 @@ export function PluginEntryIcon({ src, skeleton = false }: {
   return (
     <span className={css.icon} aria-hidden="true">
       {src === undefined || src === failed
-        ? <PluginArtworkDefault size={ARTWORK} />
+        ? fallback ?? <PluginArtworkDefault size={ARTWORK} />
         : (
           <img className={css.image} src={src} width={ARTWORK} height={ARTWORK} alt="" loading="lazy" referrerPolicy="no-referrer"
             onError={() => { setFailed(src) }} />
@@ -60,8 +62,10 @@ export function PluginEntryList({ busy, label, children }: PluginEntryListProps)
 export interface PluginEntryCardProps extends Omit<LiHTMLAttributes<HTMLLIElement>, 'title' | 'children'> {
   /** The plugin's title in the page's language. */
   title: string
-  /** The artwork's address; the default plugin artwork shows when absent. */
+  /** The artwork's address; `iconFallback`, or the default plugin artwork, shows when absent. */
   icon?: string | undefined
+  /** What the icon frame shows when the plugin has no artwork or it fails to load; the default plugin artwork when absent. */
+  iconFallback?: ReactNode
   /**
    * Open the plugin's page. When set, the title is a button that covers the whole card, and the action stays above it;
    * when absent, the card does not highlight on hover, since pressing it does nothing.
@@ -95,13 +99,13 @@ export interface PluginEntryCardProps extends Omit<LiHTMLAttributes<HTMLLIElemen
  * @returns the list item.
  */
 export function PluginEntryCard({
-  title, icon, onOpen, openLabel, heading, badges, description, clamp = true, meta, action, children, className, ...item
+  title, icon, iconFallback, onOpen, openLabel, heading, badges, description, clamp = true, meta, action, children, className, ...item
 }: PluginEntryCardProps): ReactNode {
   const Title = heading === undefined ? 'span' : HEADINGS[heading]
   return (
     <li {...item} className={className === undefined ? css.card : `${css.card} ${className}`}
       data-static={onOpen === undefined ? '' : undefined} data-clamp={clamp ? undefined : 'false'}>
-      <PluginEntryIcon src={icon} />
+      <PluginEntryIcon src={icon} fallback={iconFallback} />
       <div className={css.main}>
         <div className={css.titleRow}>
           {onOpen === undefined
