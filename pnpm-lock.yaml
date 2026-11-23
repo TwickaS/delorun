@@ -2673,6 +2673,8 @@ importers:
 
   delorun/packages/contract-verification-checks: {}
 
+  delorun/packages/desktop-home: {}
+
   delorun/packages/external-agents:
     dependencies:
       '@deepseek-ai/schemastery':

@@ -1,0 +1,15 @@
+{
+  "name": "@delorun/desktop-home",
+  "description": "Whether the studio's page is at the person's computer, read from the home kind the Delorun desktop app reports and otherwise from the caller's own test: a client gate only shows or hides controls",
+  "version": "0.0.0",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./package.json": "./package.json"
+  },
+  "delorun": {
+    "state": "shipped"
+  }
+}
