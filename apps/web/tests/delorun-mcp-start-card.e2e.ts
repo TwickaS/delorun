@@ -101,11 +101,19 @@ it.skipIf(webSnapshotMode() === 'record')('shows the MCP start card with Allow, 
     // Diagnosis of a missing card: what the Host holds, what the studio reads, and what the dock renders.
     const reviews = scaffold.ctx.get('mcpReviews')
     const rows = [...scaffold.ctx.loader.entries()].filter(entry => ['files-server', 'delorun-mcp-consent'].includes(entry.options.id))
-    const states = await Promise.all(rows.map(async entry => [entry.options.id, entry.options.disabled ?? false, await entry.fiber?.await().then(() => 'active', (failure: unknown) => String(failure).slice(0, 300)) ?? 'no fiber']))
+    const states = await Promise.all(rows.map(async entry => [entry.options.id, entry.options.disabled ?? false, String(entry.fiber?.state), await entry.fiber?.await().then(() => 'active', (failure: unknown) => String(failure).slice(0, 300)) ?? 'no fiber']))
     const read = await page.evaluate(async () => {
       const answer = await fetch('/api/delorunMcpConsent.pending')
       return { status: answer.status, body: (await answer.text()).slice(0, 600) }
     })
+    const consent = scaffold.ctx.get('mcpAddConsent')
+    const seen = {
+      consent: consent?.constructor.name, ask: consent === undefined ? undefined : Reflect.get(consent, 'config'),
+      row: scaffold.ctx.loader.entries().find(entry => entry.options.id === 'delorun-mcp-consent')?.options,
+      manager: scaffold.ctx.get('mcpManager')?.list(),
+      rows: [...scaffold.ctx.loader.entries()].filter(entry => entry.options.name.includes('mcp')).map(entry => [entry.options.id, entry.options.name]),
+    }
+    console.log('MCP-SEEN', JSON.stringify(seen, null, 1).slice(0, 3000))
     const statuses = await page.getByRole('status').allTextContents()
     const dock = await page.locator('[data-composer-input]').first().evaluate(input => input.closest('form, section, div')?.parentElement?.outerHTML.slice(0, 1500) ?? 'none')
     console.log('MCP-DIAG', JSON.stringify({ hasReviews: reviews !== undefined, pending: reviews?.pending().map(review => [review.serverName, review.origin, review.reason]), states, read, statuses, dock }, null, 1))
