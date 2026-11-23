@@ -530,7 +530,7 @@ export function apply(ctx: Context): void {
     fetch: browserFetch,
     hooks: { unlock: unlock.hooks.unlock, pairing: pairing.hooks.pairing, pairingForm: pairingWriter.form, pairingMutation: pairingWriter.state },
     startPairing: pairing.start,
-    setPairing: (field, value) => pairingWriter.set(field, value),
+    setPairing: async (field, value) => { await pairingWriter.set(field, value) },
     openPairingCode: pairing.openCode,
     declinePairing: pairing.decline,
   })
@@ -539,7 +539,7 @@ export function apply(ctx: Context): void {
       name: 'shell.overlay',
       id: PAIRING_NOTICE_ID,
       locale: DEVICES_NS,
-      inject: (): PairingNoticeInjected => pairing,
+      inject: (): PairingNoticeInjected => ({ ...pairing, showAsNotice: () => pairingWriter.showAsNotice() }),
     }, PairingNotice))
   }
   ctx.slots.inject('settings.section', () => ctx.slots.register({

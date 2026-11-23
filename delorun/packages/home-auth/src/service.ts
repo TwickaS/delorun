@@ -157,7 +157,7 @@ export const Config: schema<ConfigInput, Config> = schema.object({
     .description('The absolute path of the home-auth secrets directory, ~/.delorun/secrets/home-auth; the bundle sets it, and a profile row that omits it (as the CLI\'s pairing writes do) takes the Delorun home\'s own.'),
   pairing: schema.object({
     mayAskWithoutWindow: schema.union(WINDOWLESS_MODES).default(PAIRING_DEFAULTS.mayAskWithoutWindow).description('Who may ask to pair a device without an approval window: own-user (devices signed in as this computer\'s Tailscale user, the default), tailnet (any device on the tailnet) or window-only (no one).'),
-    showRequest: schema.union(REQUEST_DISPLAYS).default(PAIRING_DEFAULTS.showRequest).description('How the studio at this computer shows a request: notice (the default), dialog (opens the code box at once) or none (only the lists show it).'),
+    showRequest: schema.union(REQUEST_DISPLAYS).default(PAIRING_DEFAULTS.showRequest).description('How the studio at this computer shows a request: dialog (a pop-up with the code box, the default), notice (a quiet notice with Enter code) or none (only the lists show it).'),
     windowMinutes: pairingMinutes('windowMinutes', PAIRING_DEFAULTS.windowMs / MINUTE_MS).description('How long an approval window stays open, from 1 to 15 minutes; 5 by default.'),
     requestExpiryMinutes: pairingMinutes('requestExpiryMinutes', PAIRING_DEFAULTS.requestExpiryMs / MINUTE_MS).description('How long a request waits before it expires, from 1 to 10 minutes; 5 by default.'),
     pendingPerIdentity: pairingMinutes('pendingPerIdentity', PAIRING_DEFAULTS.pendingPerIdentity).description('How many requests one Tailscale user may have waiting without a window, from 1 to 5; 1 by default.'),

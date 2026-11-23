@@ -20,7 +20,7 @@ export const WINDOWLESS_MODES = ['own-user', 'tailnet', 'window-only'] as const
 /** One of {@link WINDOWLESS_MODES}. */
 export type WindowlessMode = (typeof WINDOWLESS_MODES)[number]
 
-/** How a window-less request is shown at the computer: a notice, the code box at once, or only in the lists. */
+/** How a window-less request is shown at the computer: a notice, the pop-up with the code box at once, or only in the lists. */
 export const REQUEST_DISPLAYS = ['notice', 'dialog', 'none'] as const
 
 /** One of {@link REQUEST_DISPLAYS}. */

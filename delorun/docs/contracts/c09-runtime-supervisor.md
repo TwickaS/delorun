@@ -201,8 +201,8 @@ Under S2, upstream's SSH helper inside each workspace container carries the work
 
 | Image | Name | Base | Runs |
 | --- | --- | --- | --- |
-| S2 workspace | `ghcr.io/delo-run/delorun-workspace-s2` | `docker.io/library/debian:bookworm-slim`, by digest | the helper, workspace commands and the egress proxy |
-| S3 harness | `ghcr.io/delo-run/delorun-harness-s3` | `docker.io/library/debian:bookworm-slim`, by digest | the harness with the runtime closure, workspace commands and the egress proxy |
+| S2 workspace | `ghcr.io/twickas/delorun-workspace-s2` | `docker.io/library/debian:bookworm-slim`, by digest | the helper, workspace commands and the egress proxy |
+| S3 harness | `ghcr.io/twickas/delorun-harness-s3` | `docker.io/library/debian:bookworm-slim`, by digest | the harness with the runtime closure, workspace commands and the egress proxy |
 
 - **Build.** Each image is built from its digest-pinned base within [C2](c02-release-manifest.md)'s reproducible-rebuild scope.
 - **Signature and digest.** The release manifest ([C2](c02-release-manifest.md)) lists each image's digest, and the manifest's Ed25519 signature is the image's signature; no registry-side signature is trusted.

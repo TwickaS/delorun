@@ -72,7 +72,7 @@ description: "约定 C2：Delorun 发布的文件、已签名的发布 manifest 
 | `*.blockmap` | 桌面文件的 electron-updater 块映射。 |
 | `latest.yml`、`latest-mac.yml`（stable）；`beta.yml`、`beta-mac.yml`（beta） | electron-updater 的更新源文件。它们不经签名；桌面应用只信任 manifest。 |
 
-不绑定于单个发布的发布元数据，以静态文件形式通过 GitHub Pages 从 `Delo-Run` 的一个仓库在 `releases.delorun.com` 提供：每个根版本 `n` 的 `root/<n>.root.json`，以及 `timestamp.json`。该托管方不受信任：每个文件都经过签名，客户端拒绝任何无法通过验证的文件。
+不绑定于单个发布的发布元数据在 `releases.delorun.com` 提供：每个根版本 `n` 的 `root/<n>.root.json`，以及 `timestamp.json`。同一主机还在 `releases/download/v<version>/<file>` 提供每个发布文件。两个镜像提供相同的字节：备用主机 `releases.delo.run` 提供每个文件，该标签的 GitHub release 提供发布文件。只有在前一个主机出现网络故障或 HTTP 状态错误，或返回与已签名引用不符的字节时，客户端才会尝试镜像。这些主机不受信任：每个文件都经过签名，客户端拒绝任何无法通过验证的文件。
 
 <a id="signature-envelope"></a>
 

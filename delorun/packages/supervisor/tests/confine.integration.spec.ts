@@ -60,7 +60,7 @@ const expectation = (overrides: Partial<ConfinementExpectation> = {}): Confineme
 })
 
 const body = (binds = workspaceBinds(ROOT, HELPER)): CreateBody => createBody({
-  name: 'delorun-ws-0123456789ab', image: `ghcr.io/delo-run/delorun-workspace-s2@sha256:${'a'.repeat(64)}`,
+  name: 'delorun-ws-0123456789ab', image: `ghcr.io/twickas/delorun-workspace-s2@sha256:${'a'.repeat(64)}`,
   labels: {}, user: { uid: 1000, gid: 1000 }, limits: PRESETS.small, diskQuota: false, networks: ['delorun-ws-0123456789ab'], binds, env: [],
 })
 

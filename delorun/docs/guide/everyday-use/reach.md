@@ -109,8 +109,8 @@ A phone that Tailscale reports as signed in as the user you allowed can ask outs
 <summary>Approving in the studio</summary>
 
 - In Settings → Devices, each waiting device has its own code field and a **Cancel request** button.
-- A device that asked without a window shows as a notice at the top of the studio: choose **Enter code**, type the 8 digits in the box that opens, and the box approves at the eighth digit. The notice never takes the keyboard from a field you are typing in.
-- Under Settings → Devices you can choose who may ask, whether a request shows as a notice, a code box or only in the list, and the window and request lifetimes. `delorun setup reach` lets you allow every device on your tailnet to ask without a window, and `delorun reach status` says who may ask. On a phone, this part says to change it at your computer.
+- A device that asked without a window opens a pop-up, "A device wants to pair", with the device's name, its Tailscale user, the address and the time left. Type or paste the 8 digits the phone shows and choose **Submit**. **Not you making this request?** declines it; **Close** or Escape leaves it waiting in Settings → Devices. While you are typing in a field, a notice with **Enter code** shows instead, so the pop-up never takes the keyboard from you.
+- Under Settings → Devices you can choose who may ask, whether a request shows as the pop-up, a notice or only in the list, and the window and request lifetimes. **Don't show this pop-up again** in the pop-up switches to the notice. `delorun setup reach` lets you allow every device on your tailnet to ask without a window, and `delorun reach status` says who may ask. On a phone, this part says to change it at your computer.
 
 </details>
 

@@ -8,7 +8,7 @@ English | [中文](c13-catalogue-revocation.zh.md)
 
 ## Summary
 
-The catalogue is a public index of plugins in a `Delo-Run` repository, `Delo-Run/delo-plugins`, where adding a plugin is a pull request. Its publish job signs two files with the catalogue key of [C2](c02-release-manifest.md#key-roles), the index and the revocation list, and GitHub Pages serves them at `catalogue.delorun.com`; the host is not trusted, because a client refuses a file whose signature does not verify. An index entry pins exact plugin versions with their integrity hashes, carries "tested with Delorun X" badges from the compatibility corpus, and may list findings, which the studio shows as the claims of the plugin's author or a named reviewer: Delorun runs no plugin audit and does not verify them. The revocation list names plugin versions Delorun disables at their next load, with sequence numbers against replay, an expiry and a maximum cache age of 24 hours; past that age the studio enters a stale state. The types live in [`@delorun/contract-catalogue-revocation`](../../packages/contract-catalogue-revocation/README.md).
+The catalogue is a public index of plugins in the repository `TwickaS/delorun-plugins`, where adding a plugin is a pull request. Its publish job signs two files with the catalogue key of [C2](c02-release-manifest.md#key-roles), the index and the revocation list, and GitHub Pages serves them at `catalogue.delorun.com`; the host is not trusted, because a client refuses a file whose signature does not verify. An index entry pins exact plugin versions with their integrity hashes, carries "tested with Delorun X" badges from the compatibility corpus, and may list findings, which the studio shows as the claims of the plugin's author or a named reviewer: Delorun runs no plugin audit and does not verify them. The revocation list names plugin versions Delorun disables at their next load, with sequence numbers against replay, an expiry and a maximum cache age of 24 hours; past that age the studio enters a stale state. The types live in [`@delorun/contract-catalogue-revocation`](../../packages/contract-catalogue-revocation/README.md).
 
 ## Status
 
@@ -194,7 +194,7 @@ Installing a plugin from a file or directly from npm does not use the catalogue,
 
 ## Consumers
 
-- `Delo-Run/delo-plugins`: the index, its schema check, the corpus and the publish job.
+- `TwickaS/delorun-plugins`: the index, its schema check, the corpus and the publish job.
 - `delorun/packages/catalogue/src/revocation/`: fetching, the stale state and disabling at load.
 - Discover's configuration and studio plugin: listing, badges, findings and installs.
 - `delorun verify` ([C15](c15-verification-checks.md)) and the update report ([C3](c03-update-report.md)).
@@ -228,8 +228,8 @@ Each file's `schema` names its major version, and readers refuse unknown fields,
 | `c13-revoked-disabled-at-next-load` | `catalogue` | A newly revoked installed version keeps running until restart, the restart prompt shows its reason, and after restart its row is disabled with a history version. |
 | `c13-revoked-install-refused` | Discover | Installing a revoked version is refused with the list's reason. |
 | `c13-integrity-mismatch-refused` | Discover | A tarball whose integrity differs from the index entry is refused. |
-| `c13-plugin-cannot-write-badge` | `delo-plugins` | A fixture plugin in the corpus job that tries to write a badge or push fails for lack of a token, and its attempt leaves no badge record. |
-| `c13-no-pull-request-target` | `delo-plugins` | A workflow lint fails on any catalogue workflow that uses `pull_request_target`. |
+| `c13-plugin-cannot-write-badge` | `delorun-plugins` | A fixture plugin in the corpus job that tries to write a badge or push fails for lack of a token, and its attempt leaves no badge record. |
+| `c13-no-pull-request-target` | `delorun-plugins` | A workflow lint fails on any catalogue workflow that uses `pull_request_target`. |
 | `c13-no-audited-wording` | Discover | Installing a fixture plugin renders no "audited", "safe" or "no findings" wording and does not call the plugin verified, and says that Delorun does not audit plugins. |
 | `c13-findings-labelled-as-claims` | Discover | A fixture entry's findings render with their author's role and name and the "not verified by Delorun" label. |
 | `c13-missing-ledger-asks-again` | Discover | With the acceptance ledger missing or malformed, the findings ask again before install. |
@@ -237,6 +237,6 @@ Each file's `schema` names its major version, and readers refuse unknown fields,
 ### What this does not prove
 
 - **Revocation takes effect at the next load.** A newly revoked version keeps running until the Host loads it again; the list cannot stop plugin code that is already running. Between a revocation and its effect lie up to 6 hours until the next refresh, plus the time until the person restarts.
-- **Badge writes.** That only the publish job writes badges is enforced by the CI configuration of `Delo-Run/delo-plugins`: the corpus job holds no write token, a separate job publishes, and a workflow lint refuses `pull_request_target`. A client verifies only the catalogue key's signature, so a compromised publish job or catalogue key could sign any badge; the denial tests for badge writes run in that repository, not in this one.
+- **Badge writes.** That only the publish job writes badges is enforced by the CI configuration of `TwickaS/delorun-plugins`: the corpus job holds no write token, a separate job publishes, and a workflow lint refuses `pull_request_target`. A client verifies only the catalogue key's signature, so a compromised publish job or catalogue key could sign any badge; the denial tests for badge writes run in that repository, not in this one.
 - **Listed findings.** Delorun does not verify listed findings. A finding states what its author claims, and the absence of findings says nothing about a plugin.
 - **Clock dependence.** The maximum cache age, the list's expiry and the index's expiry use the client's clock; a clock set back can keep a list in use past its real expiry.

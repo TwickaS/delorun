@@ -452,9 +452,9 @@ export const S3_USERS = {
 /** The images and where they are pulled from, by digest only. */
 export const IMAGES = {
   /** The S2 workspace image. */
-  s2: 'ghcr.io/delo-run/delorun-workspace-s2',
+  s2: 'ghcr.io/twickas/delorun-workspace-s2',
   /** The S3 harness image. */
-  s3: 'ghcr.io/delo-run/delorun-harness-s3',
+  s3: 'ghcr.io/twickas/delorun-harness-s3',
 } as const
 
 /** The base image both images are built from, pinned by digest in each build recipe. */

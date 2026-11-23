@@ -301,7 +301,7 @@ export async function releaseFixture(test: TestContext, options: FixtureOptions 
   await closures(release, 'workflow', version)
   await closures(rebuild, 'holder', version)
   const digest = `sha256:${'a'.repeat(64)}`
-  const image = { repository: 'ghcr.io/delo-run/fixture', index: digest, platforms: { 'linux/amd64': digest, 'linux/arm64': digest } }
+  const image = { repository: 'ghcr.io/twickas/fixture', index: digest, platforms: { 'linux/amd64': digest, 'linux/arm64': digest } }
   const recipe = recipeAt(repo, commit)
   let images: Record<'s2' | 's3', typeof image & { seccomp: FileRef }> | undefined
   for (const directory of [release, rebuild]) {
@@ -416,7 +416,7 @@ function contentRef(name: string, bytes: Uint8Array): FileRef {
 
 export function manifestContent(version: string, archive: Uint8Array): ReleaseManifest & Required<Pick<ReleaseManifest, 'desktop' | 'images' | 'install'>> {
   const digest = `sha256:${'b'.repeat(64)}`
-  const image = { repository: 'ghcr.io/delo-run/fixture', index: digest, platforms: { 'linux/amd64': digest, 'linux/arm64': digest } }
+  const image = { repository: 'ghcr.io/twickas/fixture', index: digest, platforms: { 'linux/amd64': digest, 'linux/arm64': digest } }
   const ref = contentRef('file', Buffer.from('x'))
   const desktop = { installer: { ...ref, sha512: 'A'.repeat(86) + '==' }, update: { ...ref, sha512: 'A'.repeat(86) + '==' }, blockmap: ref }
   const runtime = { archive: contentRef(`delorun-${version}-linux-x64.tar.gz`, archive), files: ref }

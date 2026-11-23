@@ -231,8 +231,8 @@ description: "约定 C9：运行时提供方 Service Definition 及其能力报�
 
 | 镜像 | 名称 | 基础镜像 | 运行 |
 | --- | --- | --- | --- |
-| S2 工作区 | `ghcr.io/delo-run/delorun-workspace-s2` | `docker.io/library/debian:bookworm-slim`，按摘要 | 辅助程序、工作区命令与出站代理 |
-| S3 harness | `ghcr.io/delo-run/delorun-harness-s3` | `docker.io/library/debian:bookworm-slim`，按摘要 | 带运行时发行包的 harness、工作区命令与出站代理 |
+| S2 工作区 | `ghcr.io/twickas/delorun-workspace-s2` | `docker.io/library/debian:bookworm-slim`，按摘要 | 辅助程序、工作区命令与出站代理 |
+| S3 harness | `ghcr.io/twickas/delorun-harness-s3` | `docker.io/library/debian:bookworm-slim`，按摘要 | 带运行时发行包的 harness、工作区命令与出站代理 |
 
 - **构建。** 每个镜像都在 [C2](c02-release-manifest.zh.md) 的可复现重建范围内，从按摘要固定的基础镜像构建。
 - **签名与摘要。** 发布 manifest（[C2](c02-release-manifest.zh.md)）列出每个镜像的摘要，manifest 的 Ed25519 签名即该镜像的签名；不信任任何镜像仓库侧的签名。

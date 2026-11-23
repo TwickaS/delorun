@@ -1,38 +1,263 @@
-/* The pairing code box: who asks, which device, and one field for the eight digits. */
+/* The pairing pop-up, laid out as the alert style's dialog (A630): the theme draws the quiet glass surface and its motion
+   over upstream's Modal, and the title, close and Submit take the shared `delorun-alert-*` classes. The `:where()` rules
+   below are zero-specificity fallbacks for the stock look, which keeps upstream's styles. */
 
-.who {
-  margin: 0 0 4px;
+div.dialog {
+  width: min(var(--delorun-alert-dialog-width, 440px), 100%);
+  max-height: 100%;
+  padding: 0;
+  gap: 0;
+}
+
+.frame {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  color: var(--dsw-alias-label-primary);
+}
+
+.header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 12px;
+  padding: 24px 20px 0 24px;
+}
+
+/* The info glyph in a circle tinted at 14% of the accent text colour. */
+.icon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: color-mix(in oklab, var(--dsw-alias-link) var(--delorun-alert-tint, 14%), transparent);
+  color: var(--dsw-alias-link);
+}
+
+.title {
+  flex: 1;
+  min-width: 0;
+}
+
+:where(.title) {
+  margin: 0;
   font-size: 14px;
   font-weight: 500;
   line-height: 20px;
+}
+
+.count {
+  flex: none;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  line-height: 18px;
+}
+
+.close {
+  flex: none;
+}
+
+:where(.close) {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.close:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+}
+
+.body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 0;
+  padding: 16px 24px 24px;
+  overflow-y: auto;
+}
+
+/* The device's details sit on a quiet inset panel, so they read as what is being approved rather than as instructions. */
+.device {
+  padding: 14px 16px;
+  border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-card-fill);
+}
+
+.label {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 22px;
   overflow-wrap: anywhere;
 }
 
-.device {
-  margin: 0 0 12px;
+.platform {
+  margin: 0;
   color: var(--dsw-alias-label-secondary);
   font-size: 13px;
   line-height: 20px;
   overflow-wrap: anywhere;
 }
 
-.explain {
-  margin: 0 0 12px;
+.facts {
+  display: grid;
+  gap: 4px;
+  margin: 10px 0 0;
+}
+
+.facts > div {
+  display: grid;
+  grid-template-columns: minmax(96px, auto) minmax(0, 1fr);
+  gap: 12px;
   font-size: 13px;
   line-height: 20px;
+}
+
+.facts dt {
+  color: var(--dsw-alias-label-secondary);
+}
+
+.facts dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.login {
+  display: block;
+  color: var(--dsw-alias-label-secondary);
+}
+
+.left {
+  font-variant-numeric: tabular-nums;
+}
+
+.explain {
+  margin: 0;
+  font-size: 14px;
+  line-height: 22px;
   overflow-wrap: anywhere;
 }
 
 .line {
-  margin: 8px 0 0;
+  margin: -8px 0 0;
   color: var(--dsw-alias-label-secondary);
-  font-size: 12px;
-  line-height: 18px;
+  font-size: 13px;
+  line-height: 20px;
 }
 
 .failed {
-  margin: 8px 0 0;
+  margin: -8px 0 0;
   color: var(--dsw-alias-state-error-primary);
-  font-size: 12px;
-  line-height: 18px;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.footer {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 16px;
+  padding: 0 24px 24px;
+  padding-bottom: max(24px, env(safe-area-inset-bottom));
+}
+
+.aside {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+
+/* "Not you making this request?" reads as a link: no fill, underlined on hover and focus. */
+.notYou {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--dsw-alias-label-primary);
+  font: inherit;
+  font-size: 14px;
+  line-height: 20px;
+  text-align: start;
+  text-decoration: underline;
+  text-decoration-color: var(--dsw-alias-border-l3);
+  text-underline-offset: 3px;
+  cursor: pointer;
+  transition: text-decoration-color 150ms ease-out;
+}
+
+.notYou:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+@media (hover: hover) {
+  .notYou:not(:disabled):hover { text-decoration-color: currentColor; }
+}
+
+.notYou:focus-visible {
+  border-radius: 2px;
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+}
+
+.hide {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+}
+
+/* Submit sits in the shared dialog-actions row, level with the links beside it. */
+.footer .actions {
+  flex: none;
+  margin-top: 0;
+}
+
+:where(.submit) {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: var(--dsw-radius-sm);
+  background: color-mix(in oklab, var(--dsw-alias-link) 8%, transparent);
+  color: var(--dsw-alias-link);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.submit:disabled {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-tertiary);
+  cursor: default;
+  transform: none;
+}
+
+.submit:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+}
+
+@media (max-width: 767px) {
+  .header { padding: 20px 16px 0 20px; }
+  .body { padding: 16px 20px 20px; }
+  .footer { padding: 0 20px max(20px, env(safe-area-inset-bottom)); }
 }

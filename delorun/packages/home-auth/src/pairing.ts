@@ -35,7 +35,7 @@ const MINUTE_MS = 60 * 1000
 /** Delorun's pairing values. */
 export const PAIRING_DEFAULTS: PairingSpec = {
   mayAskWithoutWindow: 'own-user',
-  showRequest: 'notice',
+  showRequest: 'dialog',
   windowMs: DEVICE_APPROVAL_LIMITS.approvalWindowMs,
   requestExpiryMs: DEVICE_APPROVAL_LIMITS.approvalRequestExpiryMs,
   pendingPerIdentity: 1,
