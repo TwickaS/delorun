@@ -238,6 +238,16 @@
     },
     {
       "area": "Install and update",
+      "section": "Changed",
+      "text": "An install, `delorun update`, `delorun repair` and a plugin pack download show a live bar with size, speed and time left, then a checklist with a tick and a time for each step. A log or a pipe gets one plain line per step and one line for each tenth of a download."
+    },
+    {
+      "area": "Install and update",
+      "section": "Changed",
+      "text": "The source code moved to github.com/twickas/delorun; the old address redirects."
+    },
+    {
+      "area": "Install and update",
       "section": "Fixed",
       "text": "`delorun recover restore` and `rollback` no longer say \"Your rows and settings are unchanged\" when the restore changed your profile's `cordis.patch.yml`. They say whether your rows and settings now match that version or already did, and say nothing when the file could not be read."
     },
@@ -584,31 +594,6 @@
     {
       "area": "Setup",
       "section": "Changed",
-      "text": "`delorun setup` opens with \"How will you use Delorun?\": just me on this computer, also from my phone or another device, or scripts and automation. The answer sets the defaults and decides which questions come next, so most people answer three: the model provider and its key, and how much Delorun asks. The review screen lists every answer, including the release check and the prompts answer, and its More settings choice asks the rest. This replaces the Quick or Full choice."
-    },
-    {
-      "area": "Setup",
-      "section": "Changed",
-      "text": "Every choice shows what it does, who it suits and how to change it later, and the recommended one is marked. The prompts choices are Ask me first, Ask less (like DeepSeek Harness) and Never ask (dangerous), which stays the third option with its two confirmations."
-    },
-    {
-      "area": "Setup",
-      "section": "Changed",
-      "text": "Each provider's key question names the provider's key page where one is known, says what an environment variable is, and warns at once, with the fix, when the variable you pick is not set in your terminal."
-    },
-    {
-      "area": "Setup",
-      "section": "Changed",
-      "text": "Setup ends by printing the next steps and starts nothing: `delorun` to start and open the studio, the install guide's section on your first chat, and `delorun setup <section>` to change an answer. Ctrl-C exits with code 130 and says nothing was saved. Choosing Back at the dangerous-mode confirmation returns to the prompts question."
-    },
-    {
-      "area": "Setup",
-      "section": "Changed",
-      "text": "An answers document may carry `\"useCase\": \"local\" | \"remote\" | \"automation\"`; without it, `local` is used."
-    },
-    {
-      "area": "Setup",
-      "section": "Changed",
       "text": "Each agent on the setup step (Claude Code and Codex) now says how a chat uses it, carries a use-at-your-own-risk warning, and adds with one press and no second confirmation. Claude Code also recommends running it from your home internet connection, not a VPN, proxy or cloud server. Delorun still asks at your computer the first time a chat hands an agent a task in a workspace."
     },
     {
@@ -678,6 +663,51 @@
     },
     {
       "area": "Setup",
+      "section": "Changed",
+      "text": "Every add in the setup guide shows in the downloads panel, including a plugin the plugin manager installs from npm and the browser download Browser needs; those two show in the tab that started them, with a bar that moves until the size is known."
+    },
+    {
+      "area": "Setup",
+      "section": "Changed",
+      "text": "A plugin card being added shows a full-width bar and one quiet line: its place in the queue, then the percentage with the speed and time left, then checking and installing. The Browser step shows the same."
+    },
+    {
+      "area": "Setup",
+      "section": "Changed",
+      "text": "Recommended plugins no longer offers the Browser pack beside the Browser step, and the packs for Claude Code and Codex hooks, already installed Claude Code or Codex, and your own Chrome have titles that read apart from the Agents and Browser steps."
+    },
+    {
+      "area": "Setup",
+      "section": "Changed",
+      "text": "Recommended plugins in the setup guide lists each plugin the way the plugin market does: its artwork in a frame, the title, the description with More, what it fits in a quiet line under it, and Add at the end of the row. Adding works as before, with the download under the description and the same row in the downloads panel."
+    },
+    {
+      "area": "Setup",
+      "section": "Changed",
+      "text": "`delorun setup` is short: one privacy line, then \"Use Delorun from your phone too?\", then, only if you have DeepSeek Harness chats, whether to copy them, and then it starts Delorun and opens the studio. The studio's welcome screen asks for your model key. The \"How will you use Delorun?\" question and the review screen are gone."
+    },
+    {
+      "area": "Setup",
+      "section": "Changed",
+      "text": "Setup picks the studio port itself: it takes 3080, or the next free port and says so. How much Delorun asks, running in the background, the profile name and phone access are in Settings → General → How Delorun runs, each with the `delorun setup` command that changes it."
+    },
+    {
+      "area": "Setup",
+      "section": "Changed",
+      "text": "The first start runs in the terminal; Ctrl+C stops it, and `delorun start --background` keeps it running after the terminal closes. Setup ends by asking whether to keep the `delorun` command."
+    },
+    {
+      "area": "Setup",
+      "section": "Changed",
+      "text": "A run without a terminal, or with `--yes`, asks nothing and takes safe defaults. `--phone` turns on phone access, `--import-dsh` copies your DeepSeek Harness chats, and `--port <n>` sets the studio port."
+    },
+    {
+      "area": "Setup",
+      "section": "Changed",
+      "text": "Turning phone access off in Settings signs every paired device out and keeps the paired list; each device signs in again when you turn access on. The studio port refuses the ports web browsers block and the port phone access listens on, and a prompt change tells you to restart when the profile has hot reload off."
+    },
+    {
+      "area": "Setup",
       "section": "Fixed",
       "text": "The Preview notice and cards in the Welcome step now carry their styling. Two packages shipped a stylesheet with the same file name, and the second one was never applied."
     },
@@ -725,6 +755,16 @@
       "area": "Setup",
       "section": "Fixed",
       "text": "Delorun no longer asks whether your key works every five seconds while no key is saved. It asks when you open it and when you return to the window."
+    },
+    {
+      "area": "Setup",
+      "section": "Fixed",
+      "text": "The end of setup no longer tells someone who ran `npx delorun` that their version \"is not on the npm registry\" and offers a package file that does not exist; it offers `npm install -g delorun@<version>`. Setup names the phone-pairing step only when you chose remote access."
+    },
+    {
+      "area": "Setup",
+      "section": "Fixed",
+      "text": "Setup's privacy note and release-check question name releases.delorun.com and GitHub for the release check when you ran Delorun from npm, instead of describing it as a launcher built for another release channel."
     },
     {
       "area": "Setup",
@@ -1153,6 +1193,11 @@
     },
     {
       "area": "Studio",
+      "section": "Added",
+      "text": "The setup guide's plugin cards and the downloads panel show a download's speed and, once its size is known, the time left, measured the same way as the terminal's install display. A download that stands still shows no speed."
+    },
+    {
+      "area": "Studio",
       "section": "Changed",
       "text": "The desktop app, the tray and the installed web app use Delorun's hex mark, in the brand colours, as their icon."
     },
@@ -1413,6 +1458,16 @@
     },
     {
       "area": "Studio",
+      "section": "Changed",
+      "text": "The docs sidebar groups pages for people using Delorun and people building on it; old page addresses redirect."
+    },
+    {
+      "area": "Studio",
+      "section": "Changed",
+      "text": "The docs sidebar and phone drawer end in one compact row: the language picker and a theme button that names the current theme. The site is now called Delorun Docs."
+    },
+    {
+      "area": "Studio",
       "section": "Fixed",
       "text": "Searching the sidebar now finds words inside chats. Before, the search showed \"Messages could not be searched.\" because the index it reads was switched off. The index is built in memory from your own chats when you first search; it sends nothing anywhere and leaves no copy of your chats on disk."
     },
@@ -1657,6 +1712,11 @@
       "text": "On a phone, the workspace and mode chips under \"What are we working on?\" wrap onto a second line instead of clipping the mode chip, and a long workspace name ends in an ellipsis."
     },
     {
+      "area": "Chats and workspaces",
+      "section": "Fixed",
+      "text": "Importing DeepSeek Harness chats no longer prints a MaxListenersExceededWarning for large chat logs."
+    },
+    {
       "area": "Safety and privacy",
       "section": "Added",
       "text": "On Linux, a sandboxed command on a workspace with the Open network is now refused while a program on your computer listens on an abstract socket, such as the display server or the session bus. The sandbox cannot hide those sockets, so a command could have used them to act outside it. The refusal names the sockets and the fixes: set the workspace's network to Allowlist or Off, or switch on \"Run commands even when desktop sockets are reachable\" beside Open in Settings, Safety, Network. With that switch on the command runs, and the sandbox reports that it confines only in part. The check runs when a command starts, so a socket that starts listening later is not caught."
@@ -1830,6 +1890,11 @@
       "area": "Safety and privacy",
       "section": "Changed",
       "text": "On a paired device, an action that asks you to confirm a second time, such as turning changes protection off, applying an agent's plugin request or applying a change the checks flagged, now needs Face ID or your PIN once. The confirmation you give after the first answer reuses it. Before, the first answer used it up and the confirmation asked again. The Face ID still covers exactly that action and nothing else of the request can change, it is used up when the action runs, and it still ends with its time limit."
+    },
+    {
+      "area": "Safety and privacy",
+      "section": "Changed",
+      "text": "The privacy page names the publisher, the footer reads \"Published by Delorun\", and the licence files and the SBOM name Delorun instead of \"Delo Run\"; the first-run notice no longer names a maintainer."
     },
     {
       "area": "Safety and privacy",
@@ -3003,6 +3068,115 @@
     }
   ],
   "versions": [
+    {
+      "version": "0.1.0-preview.3",
+      "date": "2026-11-23",
+      "preview": true,
+      "areas": [
+        {
+          "area": "Install and update",
+          "items": [
+            {
+              "section": "Changed",
+              "text": "An install, `delorun update`, `delorun repair` and a plugin pack download show a live bar with size, speed and time left, then a checklist with a tick and a time for each step. A log or a pipe gets one plain line per step and one line for each tenth of a download."
+            },
+            {
+              "section": "Changed",
+              "text": "The source code moved to github.com/twickas/delorun; the old address redirects."
+            }
+          ]
+        },
+        {
+          "area": "Setup",
+          "items": [
+            {
+              "section": "Changed",
+              "text": "Every add in the setup guide shows in the downloads panel, including a plugin the plugin manager installs from npm and the browser download Browser needs; those two show in the tab that started them, with a bar that moves until the size is known."
+            },
+            {
+              "section": "Changed",
+              "text": "A plugin card being added shows a full-width bar and one quiet line: its place in the queue, then the percentage with the speed and time left, then checking and installing. The Browser step shows the same."
+            },
+            {
+              "section": "Changed",
+              "text": "Recommended plugins no longer offers the Browser pack beside the Browser step, and the packs for Claude Code and Codex hooks, already installed Claude Code or Codex, and your own Chrome have titles that read apart from the Agents and Browser steps."
+            },
+            {
+              "section": "Changed",
+              "text": "Recommended plugins in the setup guide lists each plugin the way the plugin market does: its artwork in a frame, the title, the description with More, what it fits in a quiet line under it, and Add at the end of the row. Adding works as before, with the download under the description and the same row in the downloads panel."
+            },
+            {
+              "section": "Changed",
+              "text": "`delorun setup` is short: one privacy line, then \"Use Delorun from your phone too?\", then, only if you have DeepSeek Harness chats, whether to copy them, and then it starts Delorun and opens the studio. The studio's welcome screen asks for your model key. The \"How will you use Delorun?\" question and the review screen are gone."
+            },
+            {
+              "section": "Changed",
+              "text": "Setup picks the studio port itself: it takes 3080, or the next free port and says so. How much Delorun asks, running in the background, the profile name and phone access are in Settings → General → How Delorun runs, each with the `delorun setup` command that changes it."
+            },
+            {
+              "section": "Changed",
+              "text": "The first start runs in the terminal; Ctrl+C stops it, and `delorun start --background` keeps it running after the terminal closes. Setup ends by asking whether to keep the `delorun` command."
+            },
+            {
+              "section": "Changed",
+              "text": "A run without a terminal, or with `--yes`, asks nothing and takes safe defaults. `--phone` turns on phone access, `--import-dsh` copies your DeepSeek Harness chats, and `--port <n>` sets the studio port."
+            },
+            {
+              "section": "Changed",
+              "text": "Turning phone access off in Settings signs every paired device out and keeps the paired list; each device signs in again when you turn access on. The studio port refuses the ports web browsers block and the port phone access listens on, and a prompt change tells you to restart when the profile has hot reload off."
+            },
+            {
+              "section": "Fixed",
+              "text": "The end of setup no longer tells someone who ran `npx delorun` that their version \"is not on the npm registry\" and offers a package file that does not exist; it offers `npm install -g delorun@<version>`. Setup names the phone-pairing step only when you chose remote access."
+            },
+            {
+              "section": "Fixed",
+              "text": "Setup's privacy note and release-check question name releases.delorun.com and GitHub for the release check when you ran Delorun from npm, instead of describing it as a launcher built for another release channel."
+            }
+          ]
+        },
+        {
+          "area": "Studio",
+          "items": [
+            {
+              "section": "Added",
+              "text": "The setup guide's plugin cards and the downloads panel show a download's speed and, once its size is known, the time left, measured the same way as the terminal's install display. A download that stands still shows no speed."
+            },
+            {
+              "section": "Changed",
+              "text": "The docs sidebar groups pages for people using Delorun and people building on it; old page addresses redirect."
+            },
+            {
+              "section": "Changed",
+              "text": "The docs sidebar and phone drawer end in one compact row: the language picker and a theme button that names the current theme. The site is now called Delorun Docs."
+            }
+          ]
+        },
+        {
+          "area": "Chats and workspaces",
+          "items": [
+            {
+              "section": "Fixed",
+              "text": "Importing DeepSeek Harness chats no longer prints a MaxListenersExceededWarning for large chat logs."
+            }
+          ]
+        },
+        {
+          "area": "Safety and privacy",
+          "items": [
+            {
+              "section": "Changed",
+              "text": "The privacy page names the publisher, the footer reads \"Published by Delorun\", and the licence files and the SBOM name Delorun instead of \"Delo Run\"; the first-run notice no longer names a maintainer."
+            }
+          ]
+        }
+      ],
+      "fromUpstream": {
+        "ref": "dsh-v0.2.2-rc.3",
+        "items": []
+      },
+      "previews": []
+    },
     {
       "version": "0.1.0-preview.2.7",
       "date": "2026-11-21",
