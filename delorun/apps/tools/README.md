@@ -4,7 +4,7 @@ English | [中文](README.zh.md)
 
 `@delorun/tools` is Delorun's fork tooling, a private package in `delorun/apps/tools`.
 It holds the divergence-ledger checker, which keeps every difference between this tree and its pinned upstream commit recorded, and the count of that difference.
-It also holds the gates that check each change, the commit standard, and the inventory of upstream's workflows.
+It also holds the gates that check each change, the commit standard, and the list of the workflows this repository keeps and removes.
 The check runner, [`src/run-checks.ts`](src/run-checks.ts), orders and runs those gates and the other local checks described below; the stand-in stack serves the reach and sign-in tests, and the repository holds no other fork tools.
 
 ## Modules
@@ -145,46 +145,15 @@ The command is `node_modules/.bin/tsx delorun/apps/tools/src/translate-docs.ts [
 
 ## Workflows
 
-Upstream's workflows are in [`.github/workflows`](../../../.github/workflows). Each row names a workflow's triggers, what it needs from DeepSeek, and Delorun's disposition. **Keep** means the workflow runs in this repository, with any runner routing its ledger entry names. **Guard** means its jobs carry `if: github.repository == 'deepseek-ai/deepseek-harness'`, so they run only in upstream's repository; each guarded file has a `delorun-feature` entry in the ledger. Delorun's own workflow is [`gates.yml`](../../../.github/workflows/gates.yml).
+This repository keeps three workflows in [`.github/workflows`](../../../.github/workflows) and removes every other workflow upstream wrote: each needs DeepSeek's secrets, runners or accounts, builds or publishes a release, or deploys a site. [`src/opening/workflows.ts`](src/opening/workflows.ts) lists each kept and removed workflow with its reason, and a workflow in neither list fails the check until someone classifies it. `node delorun/apps/tools/src/opening/workflows.ts --repo <checkout> --apply` deletes the removed files and drops every job of `ci.yml` except `node-24`, `node-24-lint` and `all-checks-passed`. Nothing here enables a workflow: GitHub runs one only when the repository's Actions settings allow it, and that setting is the owner's.
 
-| Workflow | Triggers | Needs DeepSeek secrets or infrastructure | Disposition |
+| Workflow | Triggers | Needs DeepSeek secrets or infrastructure | What it checks |
 |---|---|---|---|
-| `build-exe-for-python-sdk.yml` | `workflow_call`, `workflow_dispatch` | Secret `DEEPSEEK_API_KEY_EXTERNAL` for installed-wheel real-API tests | Guard |
-| `build-exe-for-ssh-helper.yml` | `workflow_call`, `workflow_dispatch` | None; GitHub-hosted runners | Keep |
-| `build-preview-cloudflare.yml` | `pull_request` | Cloudflare Pages and Access secrets (`CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`, `CF_ACCESS_CLIENT_ID`, `CF_ACCESS_CLIENT_SECRET`) | Guard |
-| `ci-master.yml` | `push` to `master`, `workflow_dispatch` | Secret `DEEPSEEK_API_KEY_EXTERNAL`; self-hosted runners `dsh-win-ci` and `vm-backup` | Guard |
-| `ci-python.yml` | `pull_request` | Secret `DEEPSEEK_API_KEY_EXTERNAL` for the installed-wheel test | Guard |
-| `ci-windows.yml` | `pull_request` | None needed. Upstream's runner labels apply only in upstream's repository (see the note below) | Keep, routed |
-| `ci.yml` | `pull_request` | None needed. Upstream's runner labels apply only in upstream's repository (see the note below) | Keep, routed |
-| `cua-helper-package.yml` | `workflow_dispatch`, `workflow_call` | Self-hosted runner `dsh-mac-package-trial` with the signing configuration | Guard |
-| `desktop-publish.yml` | `workflow_dispatch` | Self-hosted runner routing through `DESKTOP_PUBLISH_RUNNERS`; environments `desktop-test` and `desktop-production` | Guard |
-| `docs-pages.yml` | `workflow_dispatch` | GitHub Pages environment `github-pages` and a Blacksmith runner | Guard |
-| `e2e.yml` | `workflow_dispatch`, `push` to `main` and `master`, `pull_request`, nightly `schedule` | Secret `DEEPSEEK_API_KEY_EXTERNAL` for the real DeepSeek API | Guard |
-| `expected-filenames.yml` | `pull_request` | None; GitHub-hosted runner | Keep |
-| `issue-lifecycle.yml` | `issues`, `pull_request`, `pull_request_review` | GitHub App secret `DSH_ISSUE_APP_PRIVATE_KEY` and variable `DSH_ISSUE_APP_CLIENT_ID`; upstream's issue types and fields | Guard |
-| `issue-policy.yml` | `pull_request`, `pull_request_review` | The same GitHub App secret and variable | Guard |
-| `macos-intel-package.yml` | `workflow_dispatch` | Self-hosted runner `dsh-mac-package-trial`; signing and update channels | Guard |
-| `macos-package.yml` | `workflow_dispatch` | Self-hosted runner `dsh-mac-package-trial`; signing and update channels | Guard |
-| `node-addon-system-release.yml` | `workflow_dispatch` | Secret `NPM_TOKEN` and environment `npm-publish` for the `@deepseek-ai` scope | Guard |
-| `node-addon-system.yml` | `pull_request` and `push` to `master`, by path; `workflow_dispatch` | None; GitHub-hosted runners | Keep |
-| `pi-ai-provider-e2e.yml` | `workflow_dispatch` | Secrets `ANTHROPIC_API_KEY_EXTERNAL` and `AZURE_OPENAI_API_KEY_EXTERNAL` for paid provider calls | Guard |
-| `pr-check-after-approve.yml` | `pull_request_target`, `pull_request_review` | GitHub App secret `DSH_APPROVAL_APP_PRIVATE_KEY`; upstream's `Policy` checks | Guard |
-| `pr-check-on-base-branch.yml` | `push` to `master`, `workflow_dispatch` | Secret `DSH_RECHECK_LABEL_TOKEN`; upstream's `deepseek-harness-check` action | Guard |
-| `pr-check-on-head-branch.yml` | `pull_request_target` | Upstream's `deepseek-harness-check` action; a Blacksmith runner | Guard |
-| `publish-ssh-helper.yml` | `workflow_dispatch` | Publishes GitHub Releases for upstream's `dsh-v` tags | Guard |
-| `python-release.yml` | `workflow_dispatch` | PyPI environments `pypi` and `pypi-runtime`; variables `PYPI_PUBLISHER_REPOSITORY` and `PUBLIC_PYPI_RELEASE_ENABLED` | Guard |
-| `release-publish.yml` | `workflow_dispatch` | Secret `NPM_TOKEN` and environment `npm-publish` for the `dsh` release sequence | Guard |
-| `release-vendor-publish.yml` | `workflow_dispatch` | Secret `NPM_TOKEN` and environment `npm-publish` for the vendor sequence | Guard |
-| `release-vendor.yml` | `pull_request`, `push` to `master`, `workflow_dispatch` | None; the pack needs no credential. The self-hosted route applies only when the failover variable is set | Keep |
-| `release.yml` | `pull_request`, `push` to `master`, `workflow_dispatch` | None; the pack needs no credential. The self-hosted route applies only when the failover variable is set | Keep |
-| `sandbox.yml` | `push` to `master` | None; GitHub-hosted images. The trigger names `master`, which Delorun does not use | Keep |
-| `weighted-approval-review-event.yml` | `pull_request_review` | None; records the review event that `weighted-approval` reads | Keep |
-| `weighted-approval.yml` | `pull_request_target`, `issue_comment`, `workflow_run` | GitHub App secret `DSH_APPROVAL_APP_PRIVATE_KEY`; variables `DSH_APPROVAL_APP_CLIENT_ID` and `DSH_APPROVAL_APP_SLUG` | Guard |
-| `windows-package.yml` | `workflow_dispatch` | Self-hosted runner `dsh-win-package-trial` with the signing configuration | Guard |
+| [`gates.yml`](../../../.github/workflows/gates.yml) | `pull_request`, `push` to `main` | None; GitHub-hosted runner | Delorun's gates, as [the gates](#the-gates) describe |
+| [`expected-filenames.yml`](../../../.github/workflows/expected-filenames.yml) | `pull_request`, by path | None; GitHub-hosted runner | No tracked file name contains "golden" |
+| [`ci.yml`](../../../.github/workflows/ci.yml) | `pull_request` | None needed. Upstream's runner labels apply only in upstream's repository (see the note below) | `node-24` runs upstream's static gates, `node-24-lint` its lint and duplication checks, and `all-checks-passed` is the one verdict that waits for both |
 
-`ci.yml` and `ci-windows.yml` need no secret, so they are kept. Each job keeps upstream's runner expression as the branch that applies in upstream's repository, where DeepSeek's runner labels such as `dsh-ubuntu-24-04-16core` and `dsh-windows-2025-16core` stay in use. Every other repository runs the job on `ubuntu-latest` or `windows-latest`, so this repository never waits for a DeepSeek runner. Each file has a `delorun-feature` ledger entry for this routing.
-
-The self-hosted route in `release.yml` and `release-vendor.yml` is guarded by `github.repository == 'deepseek-harness/deepseek-harness'`, which names a different organisation from the upstream repository in the ledger. The route applies only when the failover variable is set, so Delorun does not reach it; the guard's organisation name is left as upstream wrote it.
+`ci.yml` needs no secret, so it is kept. Each job keeps upstream's runner expression as the branch that applies in upstream's repository, where DeepSeek's runner labels such as `dsh-ubuntu-24-04-16core` stay in use. Every other repository runs the job on `ubuntu-latest`, so this repository never waits for a DeepSeek runner. The ledger's `.github/**` path rule covers the file. [`scripts/ci-workflow.spec.ts`](../../../scripts/ci-workflow.spec.ts) pins the three jobs, their runner routing and their temporary-storage and pnpm settings.
 
 ## Brief issues
 

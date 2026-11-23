@@ -3,7 +3,7 @@
  *
  * Delorun's fork runs upstream's workflows in its own repository. A job that needs DeepSeek's secrets or infrastructure
  * carries `if: github.repository == 'deepseek-ai/deepseek-harness'`, combined as `<guard> && (<upstream condition>)`
- * when upstream's job had a condition, and each job of `ci.yml` and `ci-windows.yml` selects its runner with
+ * when upstream's job had a condition, and each job of `ci.yml` selects its runner with
  * `${{ <guard> && (<upstream selector>) || '<hosted label>' }}` (delorun/apps/tools/README.md#workflows). Upstream's
  * workflow specs read a guarded field through these functions, so their assertions apply to upstream's own text, as
  * the job behaves in upstream's repository, and the read fails when Delorun's guard is missing or malformed.

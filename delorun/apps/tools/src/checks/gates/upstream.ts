@@ -124,7 +124,6 @@ const UPSTREAM: readonly UpstreamGate[] = [
   { id: 'no-top-level-await', title: 'No module-scope await in package sources', run: { script: 'verify-no-top-level-await' } },
   { id: 'cordis-config', title: 'Cordis Loader entry metadata and package resolution in every shipped configuration', run: { script: 'verify-cordis-config' } },
   { id: 'runtime-closure', title: 'The deploy manifest supplies every plugin a shipped preset references and every required workspace peer', run: { script: 'verify-runtime-closure' } },
-  { id: 'approval-policy', title: 'Upstream\'s weighted review-approval policy specs', run: { script: 'test:approval-policy' } },
   { id: 'issue-management', title: 'Upstream\'s issue-management policy specs', run: { script: 'test:issue-management' } },
   { id: 'client-domain-graph', title: 'Client domain directories import `contract/` and never each other', run: { script: 'verify-client-domain-graph' } },
   { id: 'module-graph', title: 'Upstream\'s generated module graph is current', run: { script: 'verify-module-graph' } },

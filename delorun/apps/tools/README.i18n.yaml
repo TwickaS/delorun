@@ -3,7 +3,7 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delorun/apps/tools/README.md
 /delorun-tools:
-  en: 63297a751cbacbbd
+  en: 9440b1d8dd202469
   zh: 88dfb36335ea365e
 /delorun-tools/modules:
   en: 5fd762216e3c443d
@@ -24,8 +24,8 @@
   en: a709068cbdec1558
   zh: 13a8bce4f65b8bde
 /delorun-tools/workflows:
-  en: 726f858b4bdec264
-  zh: f39a18643ec8989f
+  en: d19825fbea9b63b3
+  zh: f7de6f8fcbbe35a4
 /delorun-tools/brief-issues:
   en: 76fb2b22a2284bbb
   zh: 4c373ab9ebc0e789

@@ -149,46 +149,15 @@ node_modules/.bin/tsx delorun/apps/tools/src/rehearse-upstream.ts --ref <ref>
 
 ## 工作流
 
-上游的工作流位于 [`.github/workflows`](../../../.github/workflows)。每一行给出工作流的触发条件、它需要 DeepSeek 的什么，以及 Delorun 的处置。**保留**（Keep）表示该工作流在本仓库中运行，并带有其台账条目所指名的运行器路由。**守卫**（Guard）表示它的作业带有 `if: github.repository == 'deepseek-ai/deepseek-harness'`，因此只在上游的仓库中运行；每个被守卫的文件在台账中都有一个 `delorun-feature` 条目。Delorun 自己的工作流是 [`gates.yml`](../../../.github/workflows/gates.yml)。
+This repository keeps three workflows in [`.github/workflows`](../../../.github/workflows) and removes every other workflow upstream wrote: each needs DeepSeek's secrets, runners or accounts, builds or publishes a release, or deploys a site. [`src/opening/workflows.ts`](src/opening/workflows.ts) lists each kept and removed workflow with its reason, and a workflow in neither list fails the check until someone classifies it. `node delorun/apps/tools/src/opening/workflows.ts --repo <checkout> --apply` deletes the removed files and drops every job of `ci.yml` except `node-24`, `node-24-lint` and `all-checks-passed`. Nothing here enables a workflow: GitHub runs one only when the repository's Actions settings allow it, and that setting is the owner's.
 
-| 工作流 | 触发条件 | 需要 DeepSeek 的密钥或基础设施 | 处置 |
+| Workflow | Triggers | Needs DeepSeek secrets or infrastructure | What it checks |
 |---|---|---|---|
-| `build-exe-for-python-sdk.yml` | `workflow_call`、`workflow_dispatch` | 用于已安装 wheel 真实 API 测试的密钥 `DEEPSEEK_API_KEY_EXTERNAL` | 守卫 |
-| `build-exe-for-ssh-helper.yml` | `workflow_call`、`workflow_dispatch` | 无；GitHub 托管运行器 | 保留 |
-| `build-preview-cloudflare.yml` | `pull_request` | Cloudflare Pages 与 Access 密钥（`CLOUDFLARE_API_TOKEN`、`CLOUDFLARE_ACCOUNT_ID`、`CF_ACCESS_CLIENT_ID`、`CF_ACCESS_CLIENT_SECRET`） | 守卫 |
-| `ci-master.yml` | 对 `master` 的 `push`、`workflow_dispatch` | 密钥 `DEEPSEEK_API_KEY_EXTERNAL`；自托管运行器 `dsh-win-ci` 与 `vm-backup` | 守卫 |
-| `ci-python.yml` | `pull_request` | 用于已安装 wheel 测试的密钥 `DEEPSEEK_API_KEY_EXTERNAL` | 守卫 |
-| `ci-windows.yml` | `pull_request` | 无需任何东西。上游的运行器标签只在上游的仓库中适用（见下面的说明） | 保留，已路由 |
-| `ci.yml` | `pull_request` | 无需任何东西。上游的运行器标签只在上游的仓库中适用（见下面的说明） | 保留，已路由 |
-| `cua-helper-package.yml` | `workflow_dispatch`、`workflow_call` | 带签名配置的自托管运行器 `dsh-mac-package-trial` | 守卫 |
-| `desktop-publish.yml` | `workflow_dispatch` | 经由 `DESKTOP_PUBLISH_RUNNERS` 路由的自托管运行器；环境 `desktop-test` 与 `desktop-production` | 守卫 |
-| `docs-pages.yml` | `workflow_dispatch` | GitHub Pages 环境 `github-pages` 与一个 Blacksmith 运行器 | 守卫 |
-| `e2e.yml` | `workflow_dispatch`、对 `main` 和 `master` 的 `push`、`pull_request`、每夜 `schedule` | 用于真实 DeepSeek API 的密钥 `DEEPSEEK_API_KEY_EXTERNAL` | 守卫 |
-| `expected-filenames.yml` | `pull_request` | 无；GitHub 托管运行器 | 保留 |
-| `issue-lifecycle.yml` | `issues`、`pull_request`、`pull_request_review` | GitHub App 密钥 `DSH_ISSUE_APP_PRIVATE_KEY` 与变量 `DSH_ISSUE_APP_CLIENT_ID`；上游的 Issue 类型与字段 | 守卫 |
-| `issue-policy.yml` | `pull_request`、`pull_request_review` | 同一个 GitHub App 密钥与变量 | 守卫 |
-| `macos-intel-package.yml` | `workflow_dispatch` | 自托管运行器 `dsh-mac-package-trial`；签名与更新渠道 | 守卫 |
-| `macos-package.yml` | `workflow_dispatch` | 自托管运行器 `dsh-mac-package-trial`；签名与更新渠道 | 守卫 |
-| `node-addon-system-release.yml` | `workflow_dispatch` | 用于 `@deepseek-ai` 作用域的密钥 `NPM_TOKEN` 与环境 `npm-publish` | 守卫 |
-| `node-addon-system.yml` | 按路径的 `pull_request` 与对 `master` 的 `push`；`workflow_dispatch` | 无；GitHub 托管运行器 | 保留 |
-| `pi-ai-provider-e2e.yml` | `workflow_dispatch` | 用于付费提供方调用的密钥 `ANTHROPIC_API_KEY_EXTERNAL` 与 `AZURE_OPENAI_API_KEY_EXTERNAL` | 守卫 |
-| `pr-check-after-approve.yml` | `pull_request_target`、`pull_request_review` | GitHub App 密钥 `DSH_APPROVAL_APP_PRIVATE_KEY`；上游的 `Policy` 检查 | 守卫 |
-| `pr-check-on-base-branch.yml` | 对 `master` 的 `push`、`workflow_dispatch` | 密钥 `DSH_RECHECK_LABEL_TOKEN`；上游的 `deepseek-harness-check` action | 守卫 |
-| `pr-check-on-head-branch.yml` | `pull_request_target` | 上游的 `deepseek-harness-check` action；一个 Blacksmith 运行器 | 守卫 |
-| `publish-ssh-helper.yml` | `workflow_dispatch` | 为上游的 `dsh-v` 标签发布 GitHub Release | 守卫 |
-| `python-release.yml` | `workflow_dispatch` | PyPI 环境 `pypi` 与 `pypi-runtime`；变量 `PYPI_PUBLISHER_REPOSITORY` 与 `PUBLIC_PYPI_RELEASE_ENABLED` | 守卫 |
-| `release-publish.yml` | `workflow_dispatch` | 用于 `dsh` 发布序列的密钥 `NPM_TOKEN` 与环境 `npm-publish` | 守卫 |
-| `release-vendor-publish.yml` | `workflow_dispatch` | 用于 vendor 序列的密钥 `NPM_TOKEN` 与环境 `npm-publish` | 守卫 |
-| `release-vendor.yml` | `pull_request`、对 `master` 的 `push`、`workflow_dispatch` | 无；打包不需要凭据。仅当设置了故障转移变量时，才适用自托管路由 | 保留 |
-| `release.yml` | `pull_request`、对 `master` 的 `push`、`workflow_dispatch` | 无；打包不需要凭据。仅当设置了故障转移变量时，才适用自托管路由 | 保留 |
-| `sandbox.yml` | 对 `master` 的 `push` | 无；GitHub 托管镜像。触发条件指名 `master`，Delorun 不使用它 | 保留 |
-| `weighted-approval-review-event.yml` | `pull_request_review` | 无；记录 `weighted-approval` 所读取的评审事件 | 保留 |
-| `weighted-approval.yml` | `pull_request_target`、`issue_comment`、`workflow_run` | GitHub App 密钥 `DSH_APPROVAL_APP_PRIVATE_KEY`；变量 `DSH_APPROVAL_APP_CLIENT_ID` 与 `DSH_APPROVAL_APP_SLUG` | 守卫 |
-| `windows-package.yml` | `workflow_dispatch` | 带签名配置的自托管运行器 `dsh-win-package-trial` | 守卫 |
+| [`gates.yml`](../../../.github/workflows/gates.yml) | `pull_request`, `push` to `main` | None; GitHub-hosted runner | Delorun's gates, as [the gates](#the-gates) describe |
+| [`expected-filenames.yml`](../../../.github/workflows/expected-filenames.yml) | `pull_request`, by path | None; GitHub-hosted runner | No tracked file name contains "golden" |
+| [`ci.yml`](../../../.github/workflows/ci.yml) | `pull_request` | None needed. Upstream's runner labels apply only in upstream's repository (see the note below) | `node-24` runs upstream's static gates, `node-24-lint` its lint and duplication checks, and `all-checks-passed` is the one verdict that waits for both |
 
-`ci.yml` 与 `ci-windows.yml` 不需要任何密钥，所以保留。每个作业都保留上游的运行器表达式，作为在上游仓库中适用的分支，在那里 DeepSeek 的运行器标签（例如 `dsh-ubuntu-24-04-16core` 与 `dsh-windows-2025-16core`）继续使用。其他每个仓库都在 `ubuntu-latest` 或 `windows-latest` 上运行该作业，所以本仓库从不等待 DeepSeek 的运行器。每个文件都有一个针对这一路由的 `delorun-feature` 台账条目。
-
-`release.yml` 与 `release-vendor.yml` 中的自托管路由由 `github.repository == 'deepseek-harness/deepseek-harness'` 守卫，它所指名的组织与台账中的上游仓库不同。该路由仅在设置了故障转移变量时适用，所以 Delorun 到达不了它；守卫中的组织名保持上游所写的样子。
+`ci.yml` needs no secret, so it is kept. Each job keeps upstream's runner expression as the branch that applies in upstream's repository, where DeepSeek's runner labels such as `dsh-ubuntu-24-04-16core` stay in use. Every other repository runs the job on `ubuntu-latest`, so this repository never waits for a DeepSeek runner. The ledger's `.github/**` path rule covers the file. [`scripts/ci-workflow.spec.ts`](../../../scripts/ci-workflow.spec.ts) pins the three jobs, their runner routing and their temporary-storage and pnpm settings.
 
 ## Brief Issue
 
