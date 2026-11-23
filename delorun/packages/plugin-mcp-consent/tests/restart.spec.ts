@@ -61,6 +61,7 @@ vi.mock('@modelcontextprotocol/client/stdio', () => ({ StdioClientTransport: vi.
 
 import * as McpClient from '@deepseek-ai/dsh-mcp-client/src/index.ts'
 import { McpConsentRefusedError } from '@deepseek-ai/dsh-mcp-client/src/consent.ts'
+import McpServerManager from '@deepseek-ai/dsh-mcp-manager/src/index.ts'
 import * as McpConsentPlugin from '../src/index.ts'
 
 let root: string
@@ -115,6 +116,23 @@ describe('an accepted server', () => {
     expect(ctx.tools.get('mcp__files__remote')).toBeUndefined()
     expect(reviews?.pending().map(review => [review.change, review.state])).toEqual([['new', 'revoked']])
   })
+  it('starts again when the MCP manager holds it stopped, so its tools reach the next model request without a restart', async () => {
+    await ctx.loader.create({ name: 'cordis:consent', config: { enabled: true } })
+    await ctx.loader.await()
+    await ctx.plugin(McpServerManager, { servers: { files: { transport: 'stdio', command: join(root, 'bin', 'server'), args: ['--stdio'], cwd: root } } })
+    const manager = ctx.get('mcpManager')
+    await vi.waitFor(() => { expect(manager?.list().find(server => server.name === 'files')?.status).toMatchObject({ state: 'failed', reason: 'load' }) })
+    expect(mockConnect).not.toHaveBeenCalled()
+    const reviews = ctx.get('mcpReviews')
+    const [pending] = reviews?.pending() ?? []
+    expect(pending?.serverName).toBe('files')
+    await expect(reviews?.acceptReview('files', pending?.reviewId ?? '', true)).resolves.toEqual({ started: 1 })
+    await vi.waitFor(() => { expect(manager?.list().find(server => server.name === 'files')?.status.state).toBe('connected') })
+    expect(mockConnect).toHaveBeenCalledTimes(1)
+    // The agent loop reads the tool list at each model step, so a running chat's next request offers the tool.
+    expect(ctx.tools.get('mcp__files__remote')).toBeDefined()
+  })
+
 })
 
 describe('a server whose script changed while it ran', () => {

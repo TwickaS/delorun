@@ -36,6 +36,8 @@ import type { McpConsentDecision, McpServerCommand, StdioConfig } from '@deepsee
 import schema from '@deepseek-ai/schemastery'
 // Type-only: the ctx.workspaceRegistry merge, read for the places a chat can write.
 import type {} from '@deepseek-ai/dsh-workspace'
+// Declares `ctx.mcpManager`, whose servers a refusal stopped start again on acceptance.
+import type {} from '@deepseek-ai/dsh-mcp-manager'
 import { resolveDelorunHome } from '@delorun/home'
 import {
   acceptanceIdOf,
@@ -440,6 +442,26 @@ export class DelorunMcpConsent extends McpAddConsent implements McpReviews {
   }
 
   /**
+   * Start again the server of the same name that the MCP manager (Settings, or a plugin's registration) holds stopped
+   * because its activation failed, now that its start is accepted. The manager mounts it again with its current entry,
+   * so its next review judges the start as it is now and its tools register for every chat's next model request.
+   * @param serverName - the accepted server.
+   * @returns 1 when the manager started the server again, 0 otherwise.
+   */
+  private async startRefusedManaged(serverName: string): Promise<number> {
+    const manager = this.ctx.get('mcpManager')
+    const status = manager?.list().find(server => server.name === serverName && server.configured)?.status
+    if (manager === undefined || status?.state !== 'failed' || status.reason !== 'load') return 0
+    try {
+      await manager.restart(serverName)
+      return 1
+    } catch (error) {
+      this.ctx.logger.warn(`mcp-consent: the server ${serverName} was accepted, and the MCP manager did not start it again: ${reasonOf(error)}`)
+      return 0
+    }
+  }
+
+  /**
    * Start again every server row of the Loader that stopped because this consent refused the server's start, now that
    * the start is accepted: a row that failed with the refusal at its boot, and an active row of the server, whose
    * reconnect the refusal stopped. A row restarts with the configuration it has, so its next review judges its start as
@@ -464,7 +486,7 @@ export class DelorunMcpConsent extends McpAddConsent implements McpReviews {
         this.ctx.logger.warn(`mcp-consent: the server ${serverName} was accepted, and its row ${entry.id} did not start again: ${reasonOf(error)}`)
       }
     }
-    return started
+    return started + await this.startRefusedManaged(serverName)
   }
 
   /**

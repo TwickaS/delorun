@@ -3753,6 +3753,9 @@ importers:
       '@deepseek-ai/dsh-mcp-client':
         specifier: workspace:*
         version: link:../../../packages/mcp/mcp-client
+      '@deepseek-ai/dsh-mcp-manager':
+        specifier: workspace:*
+        version: link:../../../packages/mcp/mcp-manager
       '@deepseek-ai/dsh-system-prompt':
         specifier: workspace:*
         version: link:../../../packages/core/system-prompt
