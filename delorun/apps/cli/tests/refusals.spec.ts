@@ -91,6 +91,7 @@ const OUTSIDE_DELORUN: Readonly<Record<string, string>> = {
   UpstreamUpdateError: TOOLS,
   NetworkGuardRefusal: TOOLS,
   SigningRefusal: RELEASE_PIPELINE,
+  LogSubmitError: 'raised by the release pipeline\'s log client when the release log answers an entry submission with a status other than success; delorun does not import it',
   PublishRefusal: 'the release channel\'s publish command under delorun/apps/release-channel, which delorun does not import',
   VersionsError: 'raised by the studio\'s version-history routes, which answer the browser over HTTP',
   RunError: 'raised by the studio\'s How Delorun runs routes, which answer the browser over HTTP',
