@@ -29,16 +29,16 @@ const flush = async () => { await act(async () => { for (let tick = 0; tick < 12
 const panelRow = (key: string) => currentDownloadsSource().snapshot().find(item => item.key === key)
 const entries = () => within(screen.getByRole('list', { name: en['step.plugins'] })).getAllByRole('listitem')
 const entry = (title: string) => {
-  const found = entries().find(each => within(each).queryByRole('heading', { level: 4, name: title }) !== null)
+  const found = entries().find(each => within(each).queryByRole('heading', { level: 3, name: title }) !== null)
   if (found === undefined) throw new Error(`no entry titled ${title}`)
   return found
 }
 
 /** A real installer over a scripted plugin manager that lists two catalog plugins with install targets. */
-function installer() {
+function installer(alphaDescription = 'Counts the words of a reply.') {
   const ctx = new Context()
   const listed = [
-    { name: '@scope/alpha', availability: 'missing', installed: false, enabled: false, installTarget: { spec: '@scope/alpha@1.0.0', version: '1.0.0' }, meta: { title: 'Alpha', description: 'Counts the words of a reply.' } },
+    { name: '@scope/alpha', availability: 'missing', installed: false, enabled: false, installTarget: { spec: '@scope/alpha@1.0.0', version: '1.0.0' }, meta: { title: 'Alpha', description: alphaDescription } },
     { name: '@scope/beta', availability: 'installation', enabled: false, meta: { title: 'Beta', description: 'Reads a reply aloud.' } },
   ]
   let answer: (value: { ok: true, value: { application: 'applied' } }) => void = () => undefined
@@ -53,6 +53,7 @@ function installer() {
 }
 
 const guide = () => createGuide(hostFake({ recommend: undefined }).host)
+const LONG = `${'Counts the words of a reply and shows the total beside it. '.repeat(3)}Nothing leaves the studio.`
 
 describe('the recommended plugins step drawn as the plugin market', () => {
   it('draws each offered plugin as a market entry: its letter tile in the frame, title, description and Add', async () => {
@@ -91,11 +92,31 @@ describe('the recommended plugins step drawn as the plugin market', () => {
     expect(within(entry('Alpha')).queryByRole('button', { name: 'Add Alpha' })).toBeNull()
   })
 
+  it('holds each row\'s place with a market placeholder, names what a plugin fits in the quiet line, and opens a long description with More', async () => {
+    const { bundles } = installer(LONG)
+    const fitting = createGuide(hostFake({ recommend: { plugins: [{ name: '@scope/alpha', connections: ['provider:deepseek-official'], source: 'installed' }], registry: 'not-asked' } }).host)
+    render(<PluginsStep services={stepServices({ bundles, plugins: ['@scope/alpha', '@scope/beta'] })} guide={fitting} />)
+    const list = screen.getByRole('list', { name: en['step.plugins'] })
+    // Before the plugin manager answers, each offered plugin is one hidden placeholder row with the market's icon frame.
+    expect(list.querySelectorAll('li[aria-hidden="true"]')).toHaveLength(2)
+    expect(within(list).queryAllByRole('heading')).toHaveLength(0)
+    await flush()
+    const alpha = entry('Alpha')
+    expect(within(alpha).getByText(en['plugins.fits'].replace('{names}', 'DeepSeek'))).toBeTruthy()
+    expect(within(entry('Beta')).queryByText(/^Fits /u)).toBeNull()
+    const more = within(alpha).getByRole('button', { name: en['more'] })
+    const summary = alpha.ownerDocument.getElementById(more.getAttribute('aria-controls') ?? '')
+    expect(summary?.textContent).toBe(LONG)
+    expect(more.getAttribute('aria-expanded')).toBe('false')
+    await act(async () => { fireEvent.click(more) })
+    expect(within(alpha).getByRole('button', { name: en['less'] }).getAttribute('aria-expanded')).toBe('true')
+  })
+
   it('leaves the Browser pack out of the list while the Browser step offers it', async () => {
     const { bundles } = installer()
     render(<PluginsStep services={stepServices({ bundles, plugins: [BROWSER_BUNDLE, '@scope/alpha'] })} guide={guide()} />)
     await flush()
-    expect(entries().map(each => within(each).getByRole('heading', { level: 4 }).textContent)).toEqual(['Alpha'])
+    expect(entries().map(each => within(each).getByRole('heading', { level: 3 }).textContent)).toEqual(['Alpha'])
   })
 
   it.each<readonly [string, readonly string[]]>([
