@@ -340,7 +340,7 @@ it.each([undefined, 'local', 'bundled', 'wsl', 'remote'])('leaves a page script 
   const api = exposed('delorunDesktop') as Record<string, unknown>
   const before = { ...api }
   expect(() => { (api as { homeKind?: string }).homeKind = 'remote' }).toThrow(TypeError)
-  expect(() => { Object.defineProperty(api, 'homeKind', { value: 'bundled' }) }).toThrow(TypeError)
+  expect(() => { Object.defineProperty(api, 'homeKind', { value: 'planted' }) }).toThrow(TypeError)
   expect(() => { (api as { extra?: string }).extra = 'x' }).toThrow(TypeError)
   if ('homeKind' in api) expect(() => { delete (api as { homeKind?: string }).homeKind }).toThrow(TypeError)
   expect({ ...api }).toEqual(before)
