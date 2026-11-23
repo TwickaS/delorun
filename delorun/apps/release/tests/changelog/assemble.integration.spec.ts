@@ -83,6 +83,21 @@ describe('the assembly of a preview sub-version', () => {
     expect(read(repo, 'delorun/changelog/changelog.json')).not.toContain('Trash keeps')
   })
 
+  it('keeps publicFrom and the private-preview line through every assembly, and lists only the public versions', (test) => {
+    const repo = releaseRepo(test)
+    expect(assemble(repo, '--version', '0.1.0-preview.1', '--date', '2026-11-10').code).toBe(0)
+    const data = parseData(read(repo, 'delorun/changelog/changelog.json'))
+    repo.commit({ 'delorun/changelog/changelog.json': `${JSON.stringify({ ...data, publicFrom: '0.1.0-preview.2' }, undefined, 2)}\n` }, `chore(release): mark the first public version\n\n${SIGNED}`)
+    repo.commit({ [`${UNRELEASED}later.md`]: fragmentText('Commands', 'Fixed', ['A later fix.']) }, `fix(release): later\n\n${SIGNED}`)
+    expect(assemble(repo, '--version', '0.1.0-preview.2', '--date', '2026-11-11').code).toBe(0)
+    const changelog = read(repo, 'CHANGELOG.md')
+    expect(changelog.startsWith('# Changelog\n\nVersions before 0.1.0-preview.2 were private previews and are not listed.\n\n## Delorun compared with')).toBe(true)
+    expect(changelog).toContain('## 0.1.0-preview.2 (2026-11-11)')
+    expect(changelog).not.toContain('## 0.1.0-preview.1 ')
+    expect(parseData(read(repo, 'delorun/changelog/changelog.json')).publicFrom).toBe('0.1.0-preview.2')
+    expect(changelog).toBe(renderChangelog(parseData(read(repo, 'delorun/changelog/changelog.json'))))
+  })
+
   it('writes a CHANGELOG.md that is exactly the Markdown rendered from the data file', (test) => {
     const repo = releaseRepo(test)
     expect(assemble(repo, '--version', '0.1.0-preview.1', '--date', '2026-11-10').code).toBe(0)

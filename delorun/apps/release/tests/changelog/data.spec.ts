@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addVersion, buildCompared, buildEntry, CHANGELOG_SCHEMA, foldedPreviews, parseData, publicVersions, renderChangelog, renderEntry, renderHighlights, renderNotes, replacesErrors, type ChangelogData } from '../../src/changelog/data.ts'
+import { addVersion, buildCompared, buildEntry, CHANGELOG_SCHEMA, foldedPreviews, parseData, privatePreviewNote, publicVersions, renderChangelog, renderEntry, renderHighlights, renderNotes, replacesErrors, type ChangelogData } from '../../src/changelog/data.ts'
 import type { Area, Fragment, Section } from '../../src/changelog/fragment.ts'
 
 const UPSTREAM = { ref: 'dsh-v0.2.2-rc.1', commit: 'a'.repeat(40) }
@@ -217,6 +217,14 @@ describe('the public view of the data file', () => {
 
   it('shows every version when publicFrom is absent', () => {
     expect(publicVersions(two).map(entry => entry.version)).toEqual(['0.1.0-preview.2', '0.1.0-preview.1'])
+  })
+
+  it('says under the title that earlier versions were private previews, naming publicFrom, and only when it is set', () => {
+    const note = 'Versions before 0.1.0-preview.2 were private previews and are not listed.'
+    expect(privatePreviewNote(data)).toBe(note)
+    expect(renderChangelog(data).startsWith(`# Changelog\n\n${note}\n\n## Delorun compared with DeepSeek Harness`)).toBe(true)
+    expect(privatePreviewNote(two)).toBeUndefined()
+    expect(renderChangelog(two)).not.toContain('private previews')
   })
 
   it('leaves out the folded previews before publicFrom', () => {
