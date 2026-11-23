@@ -36,8 +36,8 @@ function rateOf(meter: TransferRate, total: number | undefined, now: number): Do
 }
 
 /**
- * Follow one download's speed and time left while it downloads. The count is read when it changes and again every
- * {@link RATE_READ_MS}, so a stall clears the speed instead of leaving the last one standing. Every surface showing the
+ * Follow one download's speed and time left while it downloads. The count is read when it changes and again on each
+ * whole {@link RATE_READ_MS} of the clock, so a stall clears the speed instead of leaving the last one standing. Every surface showing the
  * same download reads one shared meter (`acquireMeter`), so a card and the panel beside it say the same speed.
  * @param item - the download, or undefined when the queue does not list it.
  * @param now - the clock; `Date.now` by default.
@@ -71,8 +71,14 @@ export function useDownloadRate(item: DownloadItem | undefined, now: () => numbe
       setRate(rateOf(measured, total, at))
     }
     read()
-    const timer = setInterval(read, RATE_READ_MS)
-    return () => { clearInterval(timer) }
+    // The timed reads fall on the clock's whole seconds, so every surface showing this download reads the shared meter
+    // at the same moment and says the same speed.
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const next = (): void => {
+      timer = setTimeout(() => { read(); next() }, RATE_READ_MS - (now() % RATE_READ_MS))
+    }
+    next()
+    return () => { clearTimeout(timer) }
   }, [meter, key, downloading, received, total, now])
   return rate
 }

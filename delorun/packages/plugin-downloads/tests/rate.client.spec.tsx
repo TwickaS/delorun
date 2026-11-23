@@ -25,7 +25,8 @@ const downloading = (patch: Partial<DownloadItem> = {}): DownloadItem => ({ key:
 const status = (): string => document.querySelector('[class*="status"]')?.textContent ?? ''
 const later = (ms: number): void => { act(() => { vi.advanceTimersByTime(ms) }) }
 
-beforeEach(() => { vi.useFakeTimers() })
+// The timed reads fall on the clock's whole seconds, so each spec starts on one.
+beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(Date.UTC(2026, 10, 22, 12)) })
 afterEach(() => { cleanup(); vi.useRealTimers() })
 
 describe('the speed of a download in the panel', () => {
