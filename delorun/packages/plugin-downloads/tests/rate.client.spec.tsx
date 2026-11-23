@@ -28,6 +28,22 @@ beforeEach(() => { vi.useFakeTimers() })
 afterEach(() => { cleanup(); vi.useRealTimers() })
 
 describe('the speed of a download in the panel', () => {
+  it('reads the same in every surface that shows the download, however late one opens', () => {
+    const source = createFakeDownloadsSource([downloading({ receivedBytes: 1 * MB })])
+    render(<List source={source} />)
+    later(500)
+    act(() => { source.update('pi', { receivedBytes: 3 * MB }) })
+    later(500)
+    act(() => { source.update('pi', { receivedBytes: 5 * MB }) })
+    // A second surface (the sheet beside a setup card) opens after the first readings, and reads the same meter.
+    render(<List source={source} />)
+    const statuses = (): string[] => [...document.querySelectorAll('[class*="status"]')].map(each => each.textContent ?? '')
+    expect(statuses()).toEqual(['25% · 4.0 MB/s · ~3.8s left', '25% · 4.0 MB/s · ~3.8s left'])
+    later(1000)
+    act(() => { source.update('pi', { receivedBytes: 9 * MB }) })
+    expect(new Set(statuses()).size).toBe(1)
+  })
+
   it('appears once two readings a second apart show bytes arriving, with the time left for a known size', () => {
     const source = createFakeDownloadsSource([downloading({ receivedBytes: 1 * MB })])
     render(<List source={source} />)

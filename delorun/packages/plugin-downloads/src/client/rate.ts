@@ -2,10 +2,10 @@
  * A download's speed and time left, measured in the page from the received bytes the install queue reports, with the
  * same window and formats as the terminal's install display (`@delorun/install/transfer`).
  */
-import { formatRemaining, formatSpeed, STALL_SHOWN_MS, TransferRate } from '@delorun/plugin-packs/transfer'
-import { useEffect, useRef, useState } from 'react'
+import { formatRemaining, formatSpeed, STALL_SHOWN_MS, type TransferRate } from '@delorun/plugin-packs/transfer'
+import { useEffect, useState } from 'react'
 import type { Translate } from './locales.ts'
-import type { DownloadItem } from './source.ts'
+import { acquireMeter, releaseMeter, type DownloadItem } from './source.ts'
 
 /** How often a running download's count is read again, so the speed follows a download that slows or stops. */
 export const RATE_READ_MS = 1000
@@ -37,13 +37,14 @@ function rateOf(meter: TransferRate, total: number | undefined, now: number): Do
 
 /**
  * Follow one download's speed and time left while it downloads. The count is read when it changes and again every
- * {@link RATE_READ_MS}, so a stall clears the speed instead of leaving the last one standing.
+ * {@link RATE_READ_MS}, so a stall clears the speed instead of leaving the last one standing. Every surface showing the
+ * same download reads one shared meter (`acquireMeter`), so a card and the panel beside it say the same speed.
  * @param item - the download, or undefined when the queue does not list it.
  * @param now - the clock; `Date.now` by default.
  * @returns the rate; empty unless the item is downloading.
  */
 export function useDownloadRate(item: DownloadItem | undefined, now: () => number = Date.now): DownloadRate {
-  const meter = useRef<{ readonly key: string, readonly rate: TransferRate } | undefined>(undefined)
+  const [meter, setMeter] = useState<{ readonly key: string, readonly rate: TransferRate } | undefined>(undefined)
   const [rate, setRate] = useState<DownloadRate>(NO_RATE)
   const key = item?.key
   const downloading = item?.state === 'downloading'
@@ -51,12 +52,19 @@ export function useDownloadRate(item: DownloadItem | undefined, now: () => numbe
   const total = item?.totalBytes
   useEffect(() => {
     if (key === undefined || !downloading) {
-      meter.current = undefined
+      setMeter(undefined)
+      return undefined
+    }
+    setMeter({ key, rate: acquireMeter(key) })
+    return () => { releaseMeter(key) }
+  }, [key, downloading])
+  useEffect(() => {
+    // A meter acquired for another key is the one this render's change is about to replace.
+    if (meter === undefined || meter.key !== key || !downloading) {
       setRate(NO_RATE)
       return undefined
     }
-    if (meter.current?.key !== key) meter.current = { key, rate: new TransferRate() }
-    const measured = meter.current.rate
+    const measured = meter.rate
     const read = (): void => {
       const at = now()
       measured.add(at, received)
@@ -65,7 +73,7 @@ export function useDownloadRate(item: DownloadItem | undefined, now: () => numbe
     read()
     const timer = setInterval(read, RATE_READ_MS)
     return () => { clearInterval(timer) }
-  }, [key, downloading, received, total, now])
+  }, [meter, key, downloading, received, total, now])
   return rate
 }
 
