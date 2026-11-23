@@ -290,10 +290,10 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     exitCodes: 'Exit codes: 0 no check failed, 1 a check failed, 2 wrong command line.',
   },
   plugin: {
-    usage: ['delorun plugin check <directory>', 'delorun plugin new <name>', 'delorun plugin dev <folder>', 'delorun plugin mirror on|off [--profile <name>]', 'delorun plugin <pnpm arguments> [--profile <name>]'],
+    usage: ['delorun plugin check <directory> [--json]', 'delorun plugin new <name>', 'delorun plugin dev <folder>', 'delorun plugin mirror on|off [--profile <name>]', 'delorun plugin <pnpm arguments> [--profile <name>]'],
     about: ['Manages a profile\'s plugins. Other arguments go to pnpm in the profile\'s folder, as dsh plugin does.'],
     actions: [
-      { name: 'check <directory>', text: 'Show which Delorun versions a plugin\'s version ranges admit.' },
+      { name: 'check <directory>', text: 'Show which Delorun versions a plugin\'s version ranges admit; engines.delorun decides alone when it is declared. With --json, print the decision as JSON.' },
       { name: 'new <name>', text: 'Start a plugin in a new folder.' },
       { name: 'dev <folder>', text: 'Link a plugin folder, rebuild it when it changes and reload it.' },
       { name: 'mirror on|off', text: 'Install plugins from the npm mirror, or not.' },
