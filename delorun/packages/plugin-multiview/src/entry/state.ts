@@ -309,7 +309,6 @@ export class MultiviewStore implements MultiviewService {
   setMainShare(share: number): void {
     const mainShare = Math.round(clampShare(share))
     if (mainShare === this.#settings().mainShare) return
-    this.#settings()
     this.#pending = { ...this.#pending, mainShare }
     this.#bump()
     if (this.#shareTimer !== undefined) clearTimeout(this.#shareTimer)

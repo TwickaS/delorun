@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { Config, DEFAULT_MULTIVIEW_SETTINGS, KEPT_CHATS_RANGE, MAX_PANES_RANGE, MIN_PANE_SIZE_RANGE } from '../../src/config.ts'
-import { DEFAULT_MAX_PANES, DEFAULT_MIN_PANE_HEIGHT, DEFAULT_MIN_PANE_WIDTH } from '../../src/layout/index.ts'
+import { AUTO_COLUMNS_RANGE, Config, DEFAULT_MULTIVIEW_SETTINGS, KEPT_CHATS_RANGE, MAX_PANES_RANGE, MIN_PANE_SIZE_RANGE } from '../../src/config.ts'
+import { buildPreset, DEFAULT_MAX_PANES, DEFAULT_MIN_PANE_HEIGHT, DEFAULT_MIN_PANE_WIDTH, MAIN_SHARE_RANGE, shapeOf, type PaneId } from '../../src/layout/index.ts'
 import { limitsOf } from '../../src/entry/state.ts'
 
 /** The values of a validated configuration: each field is volatile, so it is read through `get()`. */
@@ -52,5 +52,38 @@ describe('Config', () => {
 
   it('gives the layout its limits from the settings', () => {
     expect(limitsOf({ ...DEFAULT_MULTIVIEW_SETTINGS, maxPanes: 4, minPaneWidth: 400, minPaneHeight: 300 })).toEqual({ maxPanes: 4, minPaneWidth: 400, minPaneHeight: 300 })
+  })
+
+  it('the layout fields take a layout of the picker or yours, a side, a stack style and the motion, and nothing else', () => {
+    expect(plain({ defaultLayout: 'spiral', mainSide: 'right', stackStyle: 'grid', mosaicMotion: 'reduced' })).toMatchObject({
+      defaultLayout: 'spiral', mainSide: 'right', stackStyle: 'grid', mosaicMotion: 'reduced',
+    })
+    expect(plain({ defaultLayout: 'yours' }).defaultLayout).toBe('yours')
+    for (const bad of [{ defaultLayout: 'main-column' }, { defaultLayout: 'cascade' }, { mainSide: 'top' }, { stackStyle: 'dwindle' }, { mosaicMotion: 'off' }]) {
+      expect(() => plain(bad)).toThrow()
+    }
+  })
+
+  it('the main share and Auto’s columns take whole numbers inside their ranges', () => {
+    expect(plain({ mainShare: MAIN_SHARE_RANGE.min }).mainShare).toBe(25)
+    expect(plain({ mainShare: MAIN_SHARE_RANGE.max }).mainShare).toBe(75)
+    for (const bad of [24, 76, 50.5, '56']) expect(() => plain({ mainShare: bad })).toThrow()
+    expect(plain({ autoColumns: AUTO_COLUMNS_RANGE.min }).autoColumns).toBe(1)
+    expect(plain({ autoColumns: AUTO_COLUMNS_RANGE.max }).autoColumns).toBe(6)
+    for (const bad of [0, 7, 2.5]) expect(() => plain({ autoColumns: bad })).toThrow()
+  })
+
+  it('the arrangement fields take a scope and a trigger, a saved shape and per-workspace defaults', () => {
+    expect(plain({ rememberScope: 'workspace', saveOn: 'move' })).toMatchObject({ rememberScope: 'workspace', saveOn: 'move' })
+    expect(() => plain({ rememberScope: 'browser' })).toThrow()
+    expect(() => plain({ saveOn: 'resize' })).toThrow()
+    const main = 'main' as PaneId
+    const shape = shapeOf(buildPreset('main-stack', main, ['a' as PaneId]), [main, 'a' as PaneId])
+    expect(plain({ yours: shape }).yours).toEqual(shape)
+    expect(plain({ yours: null }).yours).toBeNull()
+    expect(() => plain({ yours: { version: 1, root: { kind: 'tile' } } })).toThrow()
+    const workspaceLayouts = { 'ws-1': { defaultLayout: 'yours', yours: shape, mainSide: 'right' } }
+    expect(plain({ workspaceLayouts }).workspaceLayouts).toEqual(workspaceLayouts)
+    expect(() => plain({ workspaceLayouts: { 'ws-1': { stackStyle: 'cascade' } } })).toThrow()
   })
 })
