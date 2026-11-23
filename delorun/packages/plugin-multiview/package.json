@@ -29,6 +29,7 @@
       "inject": [
         "@deepseek-ai/dsh-api-session-controller",
         "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-shortcuts",
         "@deepseek-ai/dsh-client-ui-layout",
         "@deepseek-ai/dsh-client-ui-renderer",
         "@deepseek-ai/dsh-client-ui-settings",
@@ -42,6 +43,7 @@
     "typecheck": "tsc -b tsconfig.json && tsc --noEmit -p tsconfig.tests.client.json"
   },
   "dependencies": {
+    "@delorun/settings-controls": "workspace:*",
     "react-resizable-panels": "4.24.1",
     "zod": "4.6.6"
   },

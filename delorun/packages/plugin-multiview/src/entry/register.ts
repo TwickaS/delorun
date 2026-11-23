@@ -20,6 +20,7 @@ import type {} from '@deepseek-ai/dsh-client-ui-subagent/client'
 import type {} from '@deepseek-ai/dsh-client-shortcuts/client'
 import { DEFAULT_MULTIVIEW_SETTINGS, MULTIVIEW_ROW_ID, type MultiviewSettings } from '../config.ts'
 import { MULTIVIEW_LAYER_ID, MULTIVIEW_NS, type MultiviewPersistence } from '../client/contract.ts'
+import { LAYOUTS_NS } from '../layout/locales.ts'
 import { Footer, MultiviewToggle, PinButton, type EntryInjected } from './Entry.tsx'
 import { focusKeysOf, registerFocusCommand } from './focus.ts'
 import type { HintPreference } from './hint.ts'
@@ -77,7 +78,8 @@ export function registerEntry(ctx: Context, options: RegisterOptions): Multiview
   ctx.effect(() => ctx.provide('multiview', store), 'delorun-multiview: service')
 
   const focusKeys = keysRelay()
-  const injected = (): EntryInjected => ({ multiview: store, focusKeys, ...options.hint === undefined ? {} : { hint: options.hint } })
+  const layoutsT = ctx.locale.bind(LAYOUTS_NS)
+  const injected = (): EntryInjected => ({ multiview: store, layoutsT, focusKeys, ...options.hint === undefined ? {} : { hint: options.hint } })
   // The entry points exist only while Multiview's layer is registered in the main content: without it "Open Multiview" would do nothing.
   ctx.effect(() => whileLayerRegistered(ctx, layerRegistered, () => mountEntries(ctx, store, injected)), 'delorun-multiview: entry points')
   // The focus command needs the studio's keyboard settings, which a studio may lack; it follows the layer as the entry points do.

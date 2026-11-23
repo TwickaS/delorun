@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { hasPane, paneCount, panesOf } from '../../src/layout/index.ts'
+import { buildPreset, hasPane, paneCount, panesOf } from '../../src/layout/index.ts'
 import { A, B, C, CHAT, makeStore } from './fixtures.ts'
 
 describe('MultiviewStore pins', () => {
@@ -62,14 +62,14 @@ describe('MultiviewStore pins', () => {
     expect(state.layout !== null && panesOf(state.layout)).toEqual([CHAT, B])
   })
 
-  it('adds a new pin to an existing layout and leaves an unset layout unset', () => {
+  it('adds a new pin to the layout the chat follows and leaves an unset layout unset', () => {
     const { store } = makeStore()
     store.pin(CHAT, A)
     expect(store.of(CHAT).getSnapshot().layout).toBeNull()
     store.applyPreset(CHAT, 'side-by-side')
     store.pin(CHAT, B)
-    const layout = store.of(CHAT).getSnapshot().layout
-    expect(layout !== null && paneCount(layout)).toBe(3)
+    expect(paneCount(store.layoutFor(CHAT))).toBe(3)
+    expect(store.arrangementOf(CHAT)).toBe('side-by-side')
   })
 
   it('keeps each chat apart', () => {
@@ -88,16 +88,16 @@ describe('MultiviewStore open, layout and persistence', () => {
     expect(store.of(CHAT).getSnapshot().open).toBe(false)
   })
 
-  it('rearranges in a preset and resets to the default without closing a pane', () => {
+  it('rearranges in a preset, which becomes the default, and resets a hand arrangement to it without closing a pane', () => {
     const { store } = makeStore()
     store.pinAll(CHAT, [A, B])
     store.applyPreset(CHAT, 'main-top')
     const top = store.of(CHAT).getSnapshot().layout
     expect(top !== null && panesOf(top)).toEqual([CHAT, A, B])
+    store.setLayout(CHAT, buildPreset('rows', CHAT, [B, A]))
     store.resetLayout(CHAT)
-    const reset = store.of(CHAT).getSnapshot().layout
-    expect(reset !== null && panesOf(reset)).toEqual([CHAT, A, B])
-    expect(reset).not.toEqual(top)
+    expect(store.arrangementOf(CHAT)).toBe('main-top')
+    expect(panesOf(store.layoutFor(CHAT))).toEqual([CHAT, A, B])
   })
 
   it('replaces the layout when the panel reports a change', () => {

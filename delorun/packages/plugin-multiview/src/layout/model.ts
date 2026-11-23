@@ -52,6 +52,34 @@ export interface LayoutModel {
   readonly root: LayoutNode
 }
 
+/** A leaf of a shape (a layout with slot numbers in place of chat ids, so it applies to any chat's agents; slot 0 is the main slot): the slots that share one rectangle, in tab order. */
+export interface ShapeLeaf {
+  readonly kind: 'leaf'
+  readonly slots: readonly number[]
+  /** The slot shown; one of {@link ShapeLeaf.slots}. */
+  readonly active: number
+  /** Share of the parent split, in percent. */
+  readonly size: number
+}
+
+/** A split of a shape. */
+export interface ShapeSplit {
+  readonly kind: 'split'
+  readonly orientation: SplitOrientation
+  readonly children: readonly ShapeNode[]
+  /** Share of the parent split, in percent. */
+  readonly size: number
+}
+
+/** A node of a shape. */
+export type ShapeNode = ShapeLeaf | ShapeSplit
+
+/** A saved arrangement independent of chats. */
+export interface LayoutShape {
+  readonly version: 1
+  readonly root: ShapeNode
+}
+
 /** A side of a pane, or `center` to join its tab strip. */
 export type DropRegion = 'left' | 'right' | 'top' | 'bottom' | 'center'
 

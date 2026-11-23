@@ -1,5 +1,5 @@
 /**
- * Keeps each chat's Multiview state (pins, layout, open flag) in the browser's `localStorage`, one key per chat, as a client
+ * Keeps each chat's Multiview state (pins, layout, open flag, and the arrangement it follows) in the browser's `localStorage`, one key per chat, as a client
  * preference: nothing here reaches a model request. A value that does not parse, fails validation or exceeds the size limits
  * is discarded and removed with a warning, and the chat starts with nothing pinned. An index of the chats saved, most recent
  * first, bounds the storage: saving a chat beyond the limit removes the least recent chats' keys.
@@ -9,7 +9,7 @@ import { qualifiedPersistKey } from '@deepseek-ai/dsh-client-store'
 import { SessionId } from '@deepseek-ai/dsh-session/types'
 import { z } from 'zod'
 import { KEPT_CHATS_RANGE, MAX_PANES_RANGE } from '../config.ts'
-import { layoutProblem, panesOf, type LayoutNode } from '../layout/index.ts'
+import { LAYOUT_CHOICE_IDS, layoutProblem, panesOf, shapeProblem, type ChatArrangement, type LayoutNode, type LayoutShape, type ShapeNode } from '../layout/index.ts'
 import type { ChatMultiview, MultiviewPersistence } from '../client/contract.ts'
 
 /** The storage key's name; the chat's id and the connection's host id qualify it. The version is part of the name: another version is another key. */
@@ -64,12 +64,37 @@ function nodeWithin(depth: number): z.ZodType<LayoutNode> {
   ])
 }
 
+const slot = z.number().int().min(0).max(MAX_SAVED_PANES * 4)
+const shapeLeaf = z.object({ kind: z.literal('leaf'), slots: z.array(slot).min(1).max(MAX_SAVED_PANES), active: slot, size })
+
+/** A shape node of at most `depth` nested splits, built level by level like {@link nodeWithin}. */
+function shapeWithin(depth: number): z.ZodType<ShapeNode> {
+  if (depth <= 0) return shapeLeaf
+  return z.union([
+    shapeLeaf,
+    z.object({
+      kind: z.literal('split'),
+      orientation: z.enum(['horizontal', 'vertical']),
+      children: z.array(z.lazy(() => shapeWithin(depth - 1))).min(2).max(MAX_SAVED_PANES),
+      size,
+    }),
+  ])
+}
+
+const shapeSchema: z.ZodType<LayoutShape> = z.object({ version: z.literal(1), root: shapeWithin(MAX_SAVED_PANES - 1) })
+
+const ARRANGEMENTS: readonly [ChatArrangement, ...ChatArrangement[]] = ['custom', ...LAYOUT_CHOICE_IDS]
+
 const saved = z.object({
   v: z.literal(1),
   pins: z.array(sessionId).max(MAX_SAVED_PANES),
   // Every split has two children or more, so a layout of at most this many panes nests at most this many splits.
   layout: z.object({ version: z.literal(1), root: nodeWithin(MAX_SAVED_PANES - 1) }).nullable(),
   open: z.boolean(),
+  // Added with the layout picker; a value saved before has none of them and loads as it did.
+  arrangement: z.enum(ARRANGEMENTS).optional(),
+  slots: z.array(sessionId).max(MAX_SAVED_PANES).optional(),
+  shape: shapeSchema.optional(),
 })
 
 const index = z.array(sessionId).max(KEPT_CHATS_RANGE.max)
@@ -77,6 +102,11 @@ const index = z.array(sessionId).max(KEPT_CHATS_RANGE.max)
 /** What a saved value's problem is, or undefined when it is a valid, bounded state. */
 function problemOf(value: z.output<typeof saved>): string | undefined {
   if (new Set(value.pins).size !== value.pins.length) return 'a pin appears twice'
+  if (value.slots !== undefined && new Set(value.slots).size !== value.slots.length) return 'a slot appears twice'
+  if (value.shape !== undefined) {
+    const problem = shapeProblem(value.shape)
+    if (problem !== undefined) return problem
+  }
   if (value.layout === null) return undefined
   if (panesOf(value.layout).length > MAX_SAVED_PANES) return 'the layout holds too many panes'
   return layoutProblem(value.layout)
@@ -147,8 +177,13 @@ export function localPersistence(storage: () => MultiviewStorage | undefined, wa
       if (!parsed.success) return discard(target, chat, parsed.error.issues[0]?.message ?? 'wrong format')
       const problem = problemOf(parsed.data)
       if (problem !== undefined) return discard(target, chat, problem)
-      const { pins, layout, open } = parsed.data
-      return { pins, layout, open }
+      const { pins, layout, open, arrangement, slots, shape } = parsed.data
+      return {
+        pins, layout, open,
+        ...(arrangement === undefined ? {} : { arrangement }),
+        ...(slots === undefined ? {} : { slots }),
+        ...(shape === undefined ? {} : { shape }),
+      }
     },
     save(chat, value: ChatMultiview, keepChats) {
       const target = storage()
@@ -156,7 +191,10 @@ export function localPersistence(storage: () => MultiviewStorage | undefined, wa
       const kept = [chat, ...readIndex(target).filter(other => other !== chat)]
       const evicted = kept.slice(Math.max(1, keepChats))
       try {
-        target.setItem(key(chat), JSON.stringify({ v: 1, pins: value.pins, layout: value.layout, open: value.open }))
+        target.setItem(key(chat), JSON.stringify({
+          v: 1, pins: value.pins, layout: value.layout, open: value.open,
+          arrangement: value.arrangement, slots: value.slots, shape: value.shape,
+        }))
         target.setItem(indexKey, JSON.stringify(kept.slice(0, Math.max(1, keepChats))))
       } catch (error) {
         warn(`multiview: the state of chat ${chat} could not be saved (${String(error)})`)

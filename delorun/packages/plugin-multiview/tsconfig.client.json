@@ -27,10 +27,10 @@
       "path": "../../../packages/client/locale/tsconfig.client.json"
     },
     {
-      "path": "../../../packages/client/store"
+      "path": "../../../packages/client/shortcuts/tsconfig.client.json"
     },
     {
-      "path": "../../../packages/client/shortcuts/tsconfig.client.json"
+      "path": "../../../packages/client/store"
     },
     {
       "path": "../../../packages/client/ui-conversation/tsconfig.client.json"

@@ -304,6 +304,7 @@ export const REACH_EVERYDAY_SETTINGS = {
   'delorun-chat-states': 'snooze and settle options',
   'delorun-cost-meter': 'the cost meter',
   'delorun-thinking-rsvp': 'the Thinking tab',
+  'delorun-multiview': 'the Multiview layouts and panes',
 } as const satisfies Readonly<Record<string, string>>
 
 /**

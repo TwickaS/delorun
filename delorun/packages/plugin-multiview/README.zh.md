@@ -15,6 +15,9 @@ Multiview 把固定的智能体（队友、子智能体、Claude Code 和 Codex�
 
 - [使用方式](#using-it)
 - [窗格](#panes)
+- [Layouts](#layouts)
+- [Settings](#settings)
+- [Keyboard](#keyboard)
 - [配置](#configuration)
 - [契约](#contract)
 - [限制](#limits)
@@ -39,6 +42,34 @@ Multiview 是 `conversation.main.body` Slot 中的一个层，该 Slot 包裹主
 - **引用。**只要窗格还在布局中，每个窗格就用 `multiviewPane` 引用来源保留它的对话；引用由层持有，而不是由布局持有，因此拖动窗格、因空间不足而隐藏它，或在手机上翻过它，都不会关闭它的对话。关闭 Multiview 会释放所有引用。窗口小到放不下所有固定项时，会绘制放得下的前几个窗格，并说明有多少个被隐藏；它们仍保持固定。
 - **在手机上。**宽度低于 768 px 时，该层绘制来自 `src/phone` 的分页器，而不是布局：主对话是第一页，每个固定项按固定顺序依次排在后面。一页显示智能体的头部、对话、“Open full chat”和“Stop”按钮，以及回复框上方表示位置的圆点；这些圆点是对 `conversation.input.dock` 的贡献。
 
+## Layouts
+
+Every layout only places the panes the pins name; none opens or closes one. The engine is [`src/layout/presets.ts`](src/layout/presets.ts) (the layouts), [`fit.ts`](src/layout/fit.ts) (the least pane size), [`arrange.ts`](src/layout/arrange.ts) (what a chat shows) and [`shape.ts`](src/layout/shape.ts) (Yours). The picker ([`LayoutPicker.tsx`](src/layout/LayoutPicker.tsx)) is a radio group with a thumbnail and an English and Chinese name per layout, in a `row` variant for the agents list's footer and a `grid` variant for a dialog.
+
+| Layout | Panes |
+| --- | --- |
+| Auto (the default) | Up to `autoColumns` panes (3) side by side. From four: stacked rows when the area is taller than wide (tabs when a row would be lower than `minPaneHeight`), Centred main when the area's aspect is at least 2.1 or it is at least 2560 px wide, and Main and stack with a grid stack otherwise. |
+| Main and stack | The main chat on the `mainSide` beside the others, stacked as rows, columns, a grid or a spiral (`stackStyle`), at the `mainShare` (56 %, 25 to 75). Dragging the divider changes the share. A layout saved as `main-column` reads as Main and stack on the left with rows. |
+| Side by side, Stacked rows, Grid, Main on top | Columns, rows, a grid that fills by rows, the main chat over a row of the others. |
+| Spiral | Each pane halves the space left, turning right, down, left and up. Dwindle is left out because its thumbnail reads like Spiral. |
+| Centred main | The main chat in the middle at about 50 %, the others alternately right and left. |
+| Activity mosaic | Working and waiting panes in a grid over the top 72 %, finished ones in a strip below. It changes 700 ms after the activity settles and never while the person is busy. |
+| Tabs | Every pane as a tab of one leaf; unrelated to the header's focus key. |
+| Yours | The person's own arrangement, kept as a shape of slots (slot 0 the main chat, then pin order, unless a swap changed it) rather than chat ids, so it applies to any chat's agents. |
+
+- **The least pane size.** A pane that would be narrower than `minPaneWidth` or lower than `minPaneHeight`, after the `paneGap` space around it, joins its nearest neighbour as a tab, the smallest first; no pane is hidden.
+- **When Auto rearranges.** On a pin or unpin at once, and on a resize of the area 200 ms after it settles. Not while the pointer is down in the layout or within 1.5 s of a key typed in a pane's text field ([`src/panel/busy.ts`](src/panel/busy.ts)); the layout keys are not typing.
+- **Motion.** A layout change glides each pane from its old to its new place by a transform only, for 240 ms, interruptible ([`flip.ts`](src/layout/flip.ts)). Reduced motion turns it off, and `mosaicMotion` `reduced` turns it off for the mosaic.
+- **Yours.** Moving a pane (and resizing, unless `saveOn` is `move`) saves the arrangement as Yours for the `rememberScope` and makes it the default. A toast says "Saved as your default layout · Undo", naming the workspace or the chat for those scopes; Undo restores the previous default and the chat's previous arrangement. When the Host refuses the write (an approved device writes these settings without an unlock, but a computer-only switch or a failed request still refuses), the chat keeps the arrangement, the default stays as it was and the toast says so, without Undo. Reset to Auto clears Yours and the default at the studio and in the chat's workspace. Choosing a layout in the picker also makes it the default for new Multiviews; a chat already arranged keeps its own until the person chooses for it.
+
+## Settings
+
+Settings has a Multiview page (`settings.section` `delorun-multiview`, order 18, after Browser) with four groups, each option with one sentence and the default layout with thumbnails: **Layout** (`defaultLayout`, `mainSide`, `stackStyle`, `mainShare`, `autoColumns`, `mosaicMotion`), **Your arrangement** (`rememberScope`, `saveOn`, and Reset to Auto), **Panes** (`maxPanes`, `minPaneWidth`, `minPaneHeight`, `paneGap` as a slider with its number, `compactComposer`) and **Behaviour** (`autoOpen`, `reopenOnReturn`, `keepChats`). The page writes through `configForms`, and the Plugins page's row form edits the same fields. The studio and workspace defaults are Host settings, so every device of the studio shares them; which workspace a chat belongs to comes from `ctx.workspaces`. The narrowest scope that has a value wins: the chat's own arrangement, then its workspace's, then the studio's.
+
+## Keyboard
+
+The commands register in `ctx.shortcuts` with no keys, so the person binds them in Settings, Keyboard: `multiview.layout.next` and `.previous`, `multiview.focus.left`, `.right`, `.up` and `.down`, `multiview.pane.swapMain` and `multiview.main.grow` and `.shrink` ([`src/panel/keys.ts`](src/panel/keys.ts)). They act on the most recently opened Multiview and pass when none is open. They ship unbound because every conventional chord for these moves types a character with AltGr on many keyboards or switches desktops in common window systems. Focus moves to the nearest pane in that direction; grow and shrink change the main share by 5 points, or the main chat's own size in Yours.
+
 ## 配置
 
 Host 行 `delorun-multiview` 有七个易变字段（[`src/config.ts`](src/config.ts)），在配置加载时验证，工作室运行期间可以更改。
@@ -49,9 +80,20 @@ Host 行 `delorun-multiview` 有七个易变字段（[`src/config.ts`](src/confi
 | `maxPanes` | `6` | 最多的窗格数，包含主对话（2 到 12）。 |
 | `minPaneWidth` | `340` | 窗格的最小宽度，单位为 CSS 像素（240 到 1200）；较窄的窗口容纳的窗格更少。 |
 | `minPaneHeight` | `240` | 窗格的最小高度，单位为 CSS 像素（160 到 1200）。 |
+| `paneGap` | `0` | The space between panes and around the layout's edge in CSS pixels (0 to 32), changed live; the least pane size and the divider hit areas (at least 12 px, 24 px under a finger) still hold. |
 | `compactComposer` | `true` | 窗格是否显示单行的回复框。为 `false` 时每个窗格都显示完整的输入框。该层读取它。 |
 | `reopenOnReturn` | `true` | 打开过 Multiview 的对话在返回时是否重新打开它。 |
 | `keepChats` | `50` | 此浏览器中保留多少个对话的已固定智能体和布局（1 到 500）；多保存一个，就会忘掉保存时间最久的那个对话。 |
+| `defaultLayout` | `auto` | The layout a new Multiview takes: one of the layouts above, or `yours`. |
+| `mainSide` | `left` | Main and stack's side for the main chat (`left` or `right`). |
+| `stackStyle` | `rows` | How Main and stack places the others: `rows`, `columns`, `grid` or `spiral`. |
+| `mainShare` | `56` | The main chat's share in percent (25 to 75); dragging the divider sets it. |
+| `autoColumns` | `3` | How many panes Auto puts side by side before it changes layout (1 to 6). |
+| `mosaicMotion` | `on` | `reduced` turns off the mosaic's glide. |
+| `rememberScope` | `studio` | Where Yours is saved: `studio`, `workspace` or `chat`. |
+| `saveOn` | `move-or-resize` | With `move`, resizing a pane keeps the change with that chat. |
+| `yours` | `null` | Hidden: the studio's Yours shape. |
+| `workspaceLayouts` | `{}` | Hidden: per workspace id, its `defaultLayout`, `yours`, `mainSide` and `stackStyle`. |
 
 ## 契约
 
@@ -63,7 +105,7 @@ Host 行 `delorun-multiview` 有七个易变字段（[`src/config.ts`](src/confi
 - **交接观察器**订阅会话列表。主对话是保留为 `mainView` 的会话；它的智能体目录是它的 `subagentCatalog` 投影。对话成为主视图时，或它的投影第一次被读取时，目录中已有的智能体就是基线。之后的每个条目都是一次交接。另一个对话成为主视图会开始新的基线。
 - **上限**把主对话计入：`maxPanes` 为 6 时，已固定的少于 5 个就还可以再固定一个智能体。窗口最多容纳 `floor(width / minPaneWidth) × floor(height / minPaneHeight)` 个窗格；在布局报告它自己的区域之前，使用窗口的大小。
 - **持久化**（[`src/store/persist.ts`](src/store/persist.ts)）是已保存的每个对话状态的唯一所有者，这是 `localStorage` 中的客户端偏好：每个对话一个键（`dsh.multiview.v1.<host>.<chat>`），值为 `{ v: 1, pins, layout, open }`，读取时用 zod 验证。不是 JSON、未通过验证、窗格数多于最大的 `maxPanes`（12）、嵌套深度超过这样的布局所能达到的深度，或布局不一致的值，会被丢弃、移除并以警告报告，该对话从没有任何固定项开始。布局中可以有固定项未列出的窗格；存储会把两者对齐。第二个键（`dsh.multiview-index.v1.<host>`）按最近优先列出已保存的对话；保存超出 `keepChats` 的对话会移除最久未用的那些对话的键。阻止 `localStorage` 的浏览器的表现就像没有保存任何东西。没有任何内容到达模型请求，因此不写入会话事件。
-- **文案**有英文和中文（[`src/entry/locales.ts`](src/entry/locales.ts) 和 [`src/panes/locales.ts`](src/panes/locales.ts)）；插件页面从 [`locale/`](locale/en.json) 为该行命名。
+- **文案**有英文和中文（[`src/entry/locales.ts`](src/entry/locales.ts)、[`src/panes/locales.ts`](src/panes/locales.ts) 和 [`src/layout/locales.ts`](src/layout/locales.ts)）；插件页面从 [`locale/`](locale/en.json) 为该行命名。
 
 ## 限制
 
@@ -74,6 +116,8 @@ Host 行 `delorun-multiview` 有七个易变字段（[`src/config.ts`](src/confi
 ## 测试
 
 `tests/entry/` 用 `node_modules/.bin/vitest run --config delorun/vitest.config.ts delorun/packages/plugin-multiview/tests/entry` 运行。它覆盖交接监视器、存储（固定项、上限、没有空间、布局、持久化调用）、`Config` 的默认值和范围、注册（新目录条目上自动固定而已有条目不固定、每次自动打开、自动打开关闭、上限、返回时重新打开、来自外部的关闭）以及各组件（固定状态、禁用原因、页脚、数量和琥珀色圆点、布局菜单）。
+
+`tests/layout/tiling.spec.ts` runs every layout at one to eight panes in 1440×900, 3440×1440 and 900×1400 and covers the least pane size, Auto's switch points, Main and stack, the shapes, the keyboard moves and cycling. `tests/store/defaults.client.spec.ts` covers scope resolution, Yours across chats, Undo, Reset to Auto and the moving-only rule. `tests/layout/browser/tiling-shots.mts` takes pictures of every layout at 1440 px with 2, 3, 5 and 7 panes, the picker and the Settings page in light and dark: `node --import tsx/esm delorun/packages/plugin-multiview/tests/layout/browser/tiling-shots.mts <directory>`.
 
 `tests/store/` 覆盖持久化：往返、每一种丢弃情形、大小限制、裁剪到 `keepChats`，以及被阻止或已满的存储。`tests/entry/browser/shots.mts` 在标准颜色令牌之上构建一个带有真实固定按钮、页脚和头部按钮的页面，并在无头 Chromium 中以 1440 和 390 px 拍摄浅色主题的图片：`node --import tsx/esm delorun/packages/plugin-multiview/tests/entry/browser/shots.mts <directory>`。该页面的头部和智能体行代替上游的目录组件。
 

@@ -7,6 +7,7 @@ import type { MultiviewSettings } from '../../src/config.ts'
 import { Footer, MultiviewToggle, PinButton, type EntryInjected, type FooterProps, type PinButtonProps, type ToggleProps } from '../../src/entry/Entry.tsx'
 import { localHint, MULTIVIEW_HINT_NAME, type HintPreference } from '../../src/entry/hint.ts'
 import { en } from '../../src/entry/locales.ts'
+import { layoutsEn } from '../../src/layout/index.ts'
 import { A, B, C, CHAT, makeStore, sid } from './fixtures.ts'
 import { listOf, slotProps, type ListSpec } from './harness.tsx'
 
@@ -29,7 +30,7 @@ function setup(options: SetupOptions = {}) {
   const close = store.close.bind(store)
   store.close = (chat) => { opened.push(false); close(chat) }
   const keys = createSnapshotStore<readonly string[]>(options.keys ?? [])
-  const injected: EntryInjected = { multiview: store, focusKeys: keys }
+  const injected: EntryInjected = { multiview: store, layoutsT: makeTranslate(layoutsEn), focusKeys: keys }
   const useSessions = <S,>(selector: (state: ReturnType<typeof list.getSnapshot>) => S): S => selector(list.getSnapshot())
   const useSessionStatus = <S,>(selector: (state: ReturnType<typeof statuses.getSnapshot>) => S): S => selector(statuses.getSnapshot())
   const useSession = <S,>(selector: (state: { subagent: null | object }) => S): S => selector({ subagent: options.child === true ? {} : null })
@@ -108,7 +109,7 @@ describe('the pin button of a row', () => {
     const h = makeStore({ window: { width: 500, height: 300 } })
     const list = createSnapshotStore(listOf({ main: CHAT, catalogs: { [CHAT]: [A, B] } }))
     h.store.pin(CHAT, A)
-    render(<PinButton {...slotProps<PinButtonProps>({ ...row(B, 'Second'), useSessions: <S,>(select: (state: ReturnType<typeof list.getSnapshot>) => S) => select(list.getSnapshot()), t, multiview: h.store, activePanel: createSnapshotStore<string | null>(null) })} />)
+    render(<PinButton {...slotProps<PinButtonProps>({ ...row(B, 'Second'), useSessions: <S,>(select: (state: ReturnType<typeof list.getSnapshot>) => S) => select(list.getSnapshot()), t, multiview: h.store, layoutsT: makeTranslate(layoutsEn), activePanel: createSnapshotStore<string | null>(null) })} />)
     expect(screen.getByRole('button', { name: 'Pin Second to Multiview' }).getAttribute('aria-description')).toBe(en['pin.refused.no-room'])
   })
 
@@ -272,29 +273,21 @@ describe('the layout picker in the agents list', () => {
     const h = setup()
     h.store.pinAll(CHAT, [A, B])
     renderFooter(h)
-    const row = screen.getByRole('group', { name: 'Layout' })
-    expect(within(row).getAllByRole('button').map(button => button.getAttribute('aria-label') ?? button.textContent))
-      .toEqual(['Main and column', 'Side by side', 'Grid', 'Main on top', 'Reset to default'])
+    const row = screen.getByRole('radiogroup', { name: layoutsEn['picker.label'] })
+    expect(within(row).getAllByRole('radio').map(choice => choice.textContent)).toContain(layoutsEn['choice.auto'])
     expect(row.compareDocumentPosition(screen.getByRole('button', { name: 'Pin running' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
-  it('applies the chosen layout and resets to the default, keeping every pane and Multiview open', () => {
+  it('applies the chosen layout and resets to Auto, keeping every pane and Multiview open', () => {
     const h = setup({ open: true })
     h.store.pinAll(CHAT, [A, B])
-    const applied: string[] = []
-    const applyPreset = h.store.applyPreset.bind(h.store)
-    h.store.applyPreset = (chat, preset) => { applied.push(preset); applyPreset(chat, preset) }
     renderFooter(h)
-    fireEvent.click(screen.getByRole('button', { name: 'Side by side' }))
-    const sideBySide = h.store.of(CHAT).getSnapshot().layout
-    fireEvent.click(screen.getByRole('button', { name: 'Grid' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Main on top' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Main and column' }))
-    expect(applied).toEqual(['side-by-side', 'grid', 'main-top', 'main-column'])
-    expect(sideBySide).not.toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: 'Reset to default' }))
+    fireEvent.click(screen.getByRole('radio', { name: layoutsEn['choice.grid'] }))
+    expect(h.store.arrangementOf(CHAT)).toBe('grid')
+    expect(screen.getByRole('radio', { name: layoutsEn['choice.grid'] }).getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(screen.getByRole('button', { name: layoutsEn['picker.reset'] }))
+    expect(h.store.arrangementOf(CHAT)).toBe('auto')
     expect(h.store.of(CHAT).getSnapshot()).toMatchObject({ pins: [A, B], open: true })
-    expect(h.store.of(CHAT).getSnapshot().layout).not.toEqual(sideBySide)
   })
 })
 
@@ -318,7 +311,7 @@ describe('the layouts popover on the toggle', () => {
     h.store.pinAll(CHAT, [A, B])
     renderToggle(h)
     fireEvent.contextMenu(screen.getByRole('button', { name: 'Multiview' }))
-    fireEvent.click(within(screen.getByRole('dialog', { name: 'Layout' })).getByRole('button', { name: 'Grid' }))
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Layout' })).getByRole('radio', { name: layoutsEn['choice.grid'] }))
     expect(screen.queryByRole('dialog', { name: 'Layout' })).toBeNull()
     expect(h.store.of(CHAT).getSnapshot()).toMatchObject({ pins: [A, B], open: true })
   })

@@ -1,0 +1,70 @@
+/* What the shared settings controls do not cover in the Multiview section: the layout tiles' columns, the number field and the
+   status line of "Yours". Colours and type read the Settings tokens, so the section follows the theme. */
+
+/* The layout tiles: as many columns as fit, each at least 104 px wide; the thumbnail is centred above the name. */
+.layoutTiles { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); }
+.thumb { display: grid; place-items: center; padding-block: 8px; color: var(--dsw-alias-label-secondary); }
+
+/* A number with its unit after it. */
+.number { display: inline-flex; align-items: center; gap: 8px; }
+.field {
+  box-sizing: border-box; width: 84px; min-height: 32px; padding: 0 8px; border: 0.5px solid var(--dsw-alias-border-l4); border-radius: var(--dsw-radius-md);
+  background: var(--dsw-alias-bg-layer-1); color: var(--dsw-alias-label-primary); font: inherit; font-variant-numeric: tabular-nums; text-align: end;
+}
+.field:focus-visible { outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary)); outline-offset: 1px; }
+.field:disabled { opacity: 0.5; }
+.field[aria-invalid='true'] { border-color: var(--dsw-alias-state-error-primary); }
+.unit { min-width: 2ch; color: var(--dsw-alias-label-secondary); }
+
+/* A switch is 20 px tall; its hit area grows to 32 px (44 px for a coarse pointer) without moving it. */
+.switch::after { content: ''; position: absolute; inset: -6px -4px; }
+
+/* Whether "Yours" is saved, and the button that clears it. */
+.status { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--dsw-alias-label-secondary); }
+.status::before { content: ''; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--dsw-alias-border-l4); }
+.status[data-saved]::before { background: var(--dsw-alias-state-success-primary, var(--dsw-alias-brand-primary)); }
+.actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 12px; }
+
+@media (pointer: coarse) {
+  .field { min-height: 44px; }
+  .switch::after { inset: -12px -4px; }
+}
+@media (max-width: 560px) {
+  .layoutTiles { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+/* The pane gap's slider: a neutral track filled with the accent up to the thumb, as the other sections' sliders draw it. */
+.slider { display: inline-flex; align-items: center; gap: 12px; width: min(100%, 320px); min-width: 0; }
+.range {
+  --range-fill: 0%;
+  --range-track: color-mix(in srgb, var(--dsw-alias-label-tertiary) 45%, transparent);
+  --range-accent: var(--dsw-alias-brand-primary);
+  --range-bar: 4px;
+  --range-thumb: 16px;
+  flex: 1;
+  min-width: 96px;
+  min-height: 32px;
+  margin: 0;
+  appearance: none;
+  background: transparent;
+}
+.range::-webkit-slider-runnable-track {
+  height: var(--range-bar);
+  border-radius: var(--range-bar);
+  background: linear-gradient(to right, var(--range-accent) var(--range-fill), var(--range-track) var(--range-fill));
+}
+.range::-webkit-slider-thumb {
+  appearance: none;
+  width: var(--range-thumb);
+  height: var(--range-thumb);
+  margin-top: calc((var(--range-bar) - var(--range-thumb)) / 2);
+  border: 0;
+  border-radius: 50%;
+  background: var(--range-accent);
+}
+.range::-moz-range-track { height: var(--range-bar); border-radius: var(--range-bar); background: var(--range-track); }
+.range::-moz-range-progress { height: var(--range-bar); border-radius: var(--range-bar); background: var(--range-accent); }
+.range::-moz-range-thumb { width: var(--range-thumb); height: var(--range-thumb); border: 0; border-radius: 50%; background: var(--range-accent); }
+.range:focus-visible { outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-brand-primary)); outline-offset: 2px; border-radius: 4px; }
+.range:disabled { opacity: 0.5; }
+@media (pointer: coarse) { .range { min-height: 44px; } }

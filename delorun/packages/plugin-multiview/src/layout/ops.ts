@@ -1,6 +1,6 @@
 /**
  * Pure operations on a layout. Each takes a layout and returns a new one, or the reason it refused; none touches the DOM, so
- * the same operations serve the drag-and-drop engine, the Layout menu, the "Move to…" menu and the pin button.
+ * the same operations serve the drag-and-drop engine, the layout picker, the "Move to…" menu and the pin button.
  * @module @delorun/plugin-multiview/layout/ops
  */
 
@@ -165,7 +165,7 @@ export function swapPanes(model: LayoutModel, first: PaneId, second: PaneId): La
 
 /**
  * Close a pane. The layout closes around it: the space goes to its neighbours. The main chat cannot be closed here; leaving
- * Multiview is the header button's job.
+ * Multiview is the header toggle's job.
  * @param model - the layout.
  * @param context - the main pane.
  * @param pane - the pane to close.
