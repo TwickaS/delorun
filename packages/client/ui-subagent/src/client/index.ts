@@ -124,6 +124,7 @@ export function apply(ctx: ClientContext): void {
       }),
       children: {
         'conversation.session.header.actions.subagent.footer': { kind: 'list', scope: 'session' },
+        'conversation.session.header.actions.subagent.end': { kind: 'list', scope: 'session', inline: true },
         ...rowChildren,
       },
     }, SubagentCatalogAction),

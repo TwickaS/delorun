@@ -42,6 +42,15 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
       kind: 'list'
       scope: 'session'
     }
+    /**
+     * Controls at the end of the root Session's subagent action, after its trigger and inside the same control (for example
+     * a view toggle). Shown and hidden with the action; absent contributions render nothing.
+     */
+    'conversation.session.header.actions.subagent.end': {
+      kind: 'list'
+      scope: 'session'
+      inline: true
+    }
     /** Leading mark of a catalog row, before its state dot (for example a monogram). Absent contributions render nothing. */
     'conversation.session.header.actions.subagent.row.lead': {
       kind: 'list'

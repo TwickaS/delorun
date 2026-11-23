@@ -546,6 +546,8 @@ interface CatalogDropdownSharedProps extends InjectFace<SubagentCatalogInjected>
   /** Retain an empty catalog's entry for shared tasks or a task-board error. */
   hasBoardContent?: boolean
   renderFooter?: () => ReactNode
+  /** Controls after the trigger, inside the same control; only the root Session's count action has them. */
+  renderEnd?: () => ReactNode
   /** Plugin-contributed row and trigger positions. */
   rowSlots?: SubagentRowSlots
 }
@@ -861,6 +863,7 @@ function CatalogDropdown(props: CatalogDropdownProps) {
           {variant === 'switcher' && <SubagentSwitcherIcon />}
         </button>
       </Tooltip>
+      {props.renderEnd !== undefined && <span className={css.end} data-subagent-end>{props.renderEnd()}</span>}
       {variant === 'count' && runningCount > 0 && (
         <span id={activityId} hidden>{t(runningCountKey, { count: runningCount })}</span>
       )}
@@ -918,7 +921,9 @@ function CatalogDropdown(props: CatalogDropdownProps) {
 /** Full props for the root-session catalog entry in the header actions band. */
 export type SubagentCatalogActionProps =
   PropsRuntime<'conversation.session.header.actions'> & InjectFace<SubagentCatalogActionInjected> & PropsLocale<typeof NS>
-  & Omit<PropsRenderSlots<'conversation.session.header.actions.subagent.footer' | RowSlotKey>, 'SessionProvider'>
+  & Omit<PropsRenderSlots<
+    'conversation.session.header.actions.subagent.footer' | 'conversation.session.header.actions.subagent.end' | RowSlotKey
+  >, 'SessionProvider'>
 
 /**
  * Session-header catalog action for root sessions: the descendant count and
@@ -953,6 +958,7 @@ function RootCatalogAction({
       hasSharedTasks={footerAvailable && hasSharedTasks}
       hasBoardContent={footerAvailable && (hasSharedTasks || hasTaskFailure)}
       renderFooter={() => renderSlot('conversation.session.header.actions.subagent.footer', {})}
+      renderEnd={() => renderSlot('conversation.session.header.actions.subagent.end', {})}
       {...rowSlots === undefined ? {} : { rowSlots }}
       useSessions={useSessions}
       useSessionStatus={useSessionStatus}
