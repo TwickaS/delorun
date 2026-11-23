@@ -72,6 +72,14 @@ export interface ConnectionStateSource {
   subscribe(listener: () => void): () => void
 }
 
+/** Observable time of the owned Connection loop's next automatic attempt. */
+export interface ConnectionRetrySource {
+  /** `Date.now()` milliseconds of the next automatic attempt while the loop waits out a backoff delay; otherwise undefined. */
+  getSnapshot(): number | undefined
+  /** Subscribe to a delay starting and ending. */
+  subscribe(listener: () => void): () => void
+}
+
 /** Required services (none — this is the wire root). */
 export const inject: string[] = []
 
@@ -171,6 +179,11 @@ export interface ConnectionHandle {
   readonly generation: ConnectionGenerationState
   /** Current recovery lifecycle for connection-specific consumers. */
   readonly state: ConnectionStateSource
+  /**
+   * When the next automatic attempt starts, while the loop waits between attempts, for a countdown. `installConnection`
+   * always provides it; it is optional so that a stand-in handle built without an owned loop need not.
+   */
+  readonly retry?: ConnectionRetrySource
   /** Generic logical RPC channels over the same Connection transport. */
   readonly rpc: ClientConnectionRpc
   /**
@@ -289,8 +302,10 @@ export function installConnection(ctx: Context, options: ConnectionInstallOption
   let generationId = 0
   let generation: ConnectionGeneration | undefined
   let state: ConnectionState | undefined
+  let retryAt: number | undefined
   const generationListeners = new Set<() => void>()
   const stateListeners = new Set<() => void>()
+  const retryListeners = new Set<() => void>()
   const publishGeneration = (next: ConnectionGeneration | undefined): void => {
     if (Object.is(generation, next)) return
     generation = next
@@ -313,6 +328,17 @@ export function installConnection(ctx: Context, options: ConnectionInstallOption
       }
     }
   }
+  const publishRetry = (next: number | undefined): void => {
+    if (retryAt === next) return
+    retryAt = next
+    for (const listener of [...retryListeners]) {
+      try {
+        listener()
+      } catch (error) {
+        console.error('[connection] retry listener threw:', error)
+      }
+    }
+  }
   const releaseOwner = (current: ConnectionOwner): void => {
     if (owner !== current) return
     owner = undefined
@@ -320,6 +346,7 @@ export function installConnection(ctx: Context, options: ConnectionInstallOption
     current.controller.stop()
     publishGeneration(undefined)
     publishState(undefined)
+    publishRetry(undefined)
   }
   const handle: ConnectionHandle = {
     interactions,
@@ -340,6 +367,13 @@ export function installConnection(ctx: Context, options: ConnectionInstallOption
       subscribe: (listener) => {
         stateListeners.add(listener)
         return () => { stateListeners.delete(listener) }
+      },
+    },
+    retry: {
+      getSnapshot: () => retryAt,
+      subscribe: (listener) => {
+        retryListeners.add(listener)
+        return () => { retryListeners.delete(listener) }
       },
     },
     rpc,
@@ -383,6 +417,11 @@ export function installConnection(ctx: Context, options: ConnectionInstallOption
           if (!ownsGeneration()) return
           publishState(state)
           sinks.onStateChange?.(state)
+        },
+        onRetryScheduled: (at) => {
+          if (!ownsGeneration()) return
+          publishRetry(at)
+          sinks.onRetryScheduled?.(at)
         },
       }, { ...recovery, ...config })
       const current = { token, source, controller, stopNetworkWatch: watchBrowserNetwork(controller, handle.isLoopback) }

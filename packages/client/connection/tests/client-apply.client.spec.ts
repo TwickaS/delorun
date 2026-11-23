@@ -645,3 +645,42 @@ describe('connection client apply', () => {
   })
 
 })
+
+describe('connection retry source', () => {
+  it('publishes the next automatic attempt to subscribers and the owner, and clears it when the loop stops', async () => {
+    vi.useFakeTimers()
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0)
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const handle = await mount()
+    handle.registerGenerationSource(() => Promise.reject(new Error('offline')))
+    const retry = handle.retry
+    if (retry === undefined) throw new Error('no retry source')
+    const seen: Array<number | undefined> = []
+    const unsubscribe = retry.subscribe(() => { seen.push(retry.getSnapshot()) })
+    const unsubscribeThrowing = retry.subscribe(() => { throw new Error('listener') })
+    const owner: Array<number | undefined> = []
+    const timing = { backoffBaseMs: 100, backoffFactor: 2, backoffMaxMs: 1_000, generationReadyTimeoutMs: 500 }
+    const loop = handle.start({ onRetryScheduled: at => owner.push(at) }, timing)
+    try {
+      const started = Date.now()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(retry.getSnapshot()).toBe(started + 50)
+      expect(owner).toEqual([started + 50])
+      expect(errorSpy).toHaveBeenCalledWith('[connection] retry listener threw:', expect.any(Error))
+      loop.stop()
+      expect(retry.getSnapshot()).toBeUndefined()
+      await vi.advanceTimersByTimeAsync(0)
+      // The stopped loop's own end of the wait reaches neither the source nor the former owner.
+      expect(seen).toEqual([started + 50, undefined])
+      expect(owner).toEqual([started + 50])
+    } finally {
+      unsubscribe()
+      unsubscribeThrowing()
+      loop.stop()
+      randomSpy.mockRestore()
+      warnSpy.mockRestore()
+      errorSpy.mockRestore()
+    }
+  })
+})
