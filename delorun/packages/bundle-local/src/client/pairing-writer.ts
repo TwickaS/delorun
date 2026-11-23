@@ -23,26 +23,19 @@ export class PairingWriter {
   }
 
   /**
-   * Write one field of the `pairing` section, keeping the others. A write while another crosses the wire is dropped, and
-   * so is one before the row was first read, which could not tell a missing section from one not yet read.
+   * Write one field of the `pairing` section by its path, keeping the others; the Host creates the section when the row
+   * has none. The write never restates the section, so a stale or unread snapshot cannot replace the other fields. A write
+   * while another crosses the wire is dropped.
    * @param field - the field.
    * @param value - the value the person chose.
    * @returns whether the Host accepted the write.
    */
   async set<K extends keyof PairingConfig>(field: K, value: NonNullable<PairingConfig[K]>): Promise<boolean> {
     if (this.state.getSnapshot().busy) return false
-    const read = this.form.getSnapshot().value
-    if (read === undefined) {
-      this.state.update((state) => { state.failed = true })
-      return false
-    }
     this.state.update((state) => { state.busy = true; state.failed = false })
     let accepted = false
     try {
-      const section = read.pairing
-      accepted = await this.form.mutate(section === undefined
-        ? [{ op: 'set', path: ['pairing'], value: { [field]: value } }]
-        : [{ op: 'set', path: ['pairing', field], value }])
+      accepted = await this.form.mutate([{ op: 'set', path: ['pairing', field], value }])
     } catch (_error) {
       // A transport failure is reported as failed; the form keeps the accepted value.
     }

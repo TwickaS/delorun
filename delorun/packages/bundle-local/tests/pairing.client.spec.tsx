@@ -233,13 +233,55 @@ describe('the notice and the code box', () => {
     expect((screen.getByRole('button', { name: en['pairing.box.submit'] }) as HTMLButtonElement).disabled).toBe(false)
   })
 
+  it.each([['1234 567', 7], ['1234 5678 9', 9], ['no digits', 0]])('refuses a paste of %j, which holds %d digits, whole, and spends no try', async (pasted, count) => {
+    const host = fakeHost({ [PENDING]: answer([ASKING], DIALOG) })
+    renderNotice(host)
+    await settle()
+    const field = screen.getByLabelText(en['pairing.box.code']) as HTMLInputElement
+    fireEvent.change(field, { target: { value: '12' } })
+    fireEvent.paste(field, { clipboardData: { getData: () => pasted } })
+    expect(field.value).toBe('12')
+    expect(screen.getByRole('alert').textContent).toBe(`That paste has ${String(count)} digits, and the code has 8. Copy the whole code from the device.`)
+    expect((screen.getByRole('button', { name: en['pairing.box.submit'] }) as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.change(field, { target: { value: '123' } })
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(host.count(APPROVE)).toBe(0)
+  })
+
+  it.each([
+    ['"Not you"', () => { fireEvent.click(screen.getByRole('button', { name: en['pairing.box.notYou'] })) }],
+    ['Close', () => { fireEvent.click(screen.getByRole('button', { name: en['pairing.box.close'] })) }],
+  ] as const)('opens no pop-up again for a requester turned away with %s: asking again brings only the notice', async (_name, turnAway) => {
+    const again = { ...ASKING, requestId: 'ask-2', createdAt: NOW + 1_000 }
+    const other = { ...ASKING, requestId: 'ask-3', label: 'Laptop', identity: { login: 'friend@example.com', name: 'Friend' } }
+    const host = fakeHost({ [PENDING]: answer([ASKING], DIALOG), [CANCEL]: { status: 200, body: { cancelled: 'ask-1' } } })
+    renderNotice(host)
+    await settle()
+    expect(screen.getByRole('dialog')).toBeTruthy()
+    host.script[PENDING] = answer([], DIALOG)
+    turnAway()
+    await settle()
+    // The same Tailscale user at the same address asks again, and again: each new request is a quiet notice, never the pop-up.
+    for (const requestId of ['ask-2', 'ask-4']) {
+      host.script[PENDING] = answer([{ ...again, requestId }], DIALOG)
+      await settle(PENDING_POLL_MS)
+      expect(screen.queryByRole('dialog')).toBeNull()
+      expect(screen.getByRole('button', { name: en['pairing.notice.enter'] })).toBeTruthy()
+      expect(document.activeElement).toBe(document.body)
+    }
+    // Another requester still gets the pop-up.
+    host.script[PENDING] = answer([other], DIALOG)
+    await settle(PENDING_POLL_MS)
+    expect(within(screen.getByRole('region', { name: en['pairing.box.details'] })).getByText('Laptop')).toBeTruthy()
+  })
+
   it('takes typed digits with a space or hyphen between the groups', async () => {
     renderNotice(fakeHost({ [PENDING]: answer([ASKING], DIALOG) }))
     await settle()
     const field = screen.getByLabelText(en['pairing.box.code']) as HTMLInputElement
     fireEvent.change(field, { target: { value: '1234-56' } })
     expect(field.value).toBe('123456')
-    expect(pastedDigits('1234 5678 9')).toBe('12345678')
+    expect(pastedDigits('1234 5678 9')).toBe('123456789')
   })
 
   it('shows the tries left after a wrong code and keeps the pop-up for another try', async () => {
@@ -368,7 +410,7 @@ describe('the notice and the code box', () => {
   })
 
   it('shows several requests one at a time, oldest first, with "1 of 2", and opens the next once one is answered', async () => {
-    const second = { ...ASKING, requestId: 'ask-2', label: 'iPad', createdAt: NOW - 1_000 }
+    const second = { ...ASKING, requestId: 'ask-2', label: 'iPad', createdAt: NOW - 1_000, identity: { login: 'friend@example.com', name: 'Friend' } }
     const host = fakeHost({ [PENDING]: answer([ASKING, second], DIALOG), [CANCEL]: { status: 200, body: { cancelled: 'ask-1' } } })
     renderNotice(host)
     await settle()
@@ -551,13 +593,6 @@ describe('the writer', () => {
     expect(await writerOver({ pairing: {} }, async () => false).writer.set('showRequest', 'notice')).toBe(false)
   })
 
-  it('writes nothing before the row was first read, which could replace the whole section', async () => {
-    const { writer, mutate } = writerOver(undefined, async () => true)
-    expect(await writer.set('showRequest', 'notice')).toBe(false)
-    expect(mutate).not.toHaveBeenCalled()
-    expect(writer.state.getSnapshot()).toEqual({ busy: false, failed: true })
-  })
-
   it('switches the display to the notice only, never to none, for "Don\'t show this pop-up again"', async () => {
     const { writer, mutate } = writerOver({ pairing: { showRequest: 'dialog', windowMinutes: 7 } }, async () => true)
     expect(await writer.showAsNotice()).toBe(true)
@@ -565,10 +600,10 @@ describe('the writer', () => {
     expect(mutate).toHaveBeenCalledWith([{ op: 'set', path: ['pairing', 'showRequest'], value: 'notice' }])
   })
 
-  it('creates the section when the row has none', async () => {
-    const { writer, mutate } = writerOver({}, async () => true)
-    await writer.set('mayAskWithoutWindow', 'tailnet')
-    expect(mutate).toHaveBeenCalledWith([{ op: 'set', path: ['pairing'], value: { mayAskWithoutWindow: 'tailnet' } }])
+  it.each([['not yet read', undefined], ['without a pairing section', {}], ['with one', { pairing: { windowMinutes: 7 } }]])('writes only the one field by its path when the row is %s, never the whole section', async (_name, value) => {
+    const { writer, mutate } = writerOver(value, async () => true)
+    expect(await writer.set('mayAskWithoutWindow', 'tailnet')).toBe(true)
+    expect(mutate).toHaveBeenCalledWith([{ op: 'set', path: ['pairing', 'mayAskWithoutWindow'], value: 'tailnet' }])
   })
 
   it.each([['refused', async () => false], ['unreachable', async () => { throw new TypeError('offline') }]])('reports a %s write as failed', async (_name, mutate) => {

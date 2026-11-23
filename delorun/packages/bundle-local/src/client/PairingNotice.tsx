@@ -78,12 +78,22 @@ export function userOf(t: Translate, request: PendingDevice): string {
 }
 
 /**
- * The digits in a pasted or typed code, without the spaces, hyphens or other marks between its groups.
- * @param text - what was pasted or typed.
- * @returns at most the code's 8 digits.
+ * The digits in a pasted code, without the spaces, hyphens or other marks between its groups.
+ * @param text - what was pasted.
+ * @returns every digit in it; the pop-up takes the paste only when there are exactly 8.
  */
 export function pastedDigits(text: string): string {
-  return text.replace(/\D/gu, '').slice(0, CODE_LENGTH)
+  return text.replace(/\D/gu, '')
+}
+
+/**
+ * Who asked, as the pop-up remembers a requester it was told to stop opening for: the Tailscale login and the address
+ * the request came through.
+ * @param request - the request.
+ * @returns the key.
+ */
+export function requesterOf(request: PendingDevice): string {
+  return JSON.stringify([request.identity?.login ?? null, request.address])
 }
 
 /**
@@ -107,6 +117,11 @@ export function PairingNotice({ usePairing, start, openCode, closeCode, quiet, d
   const [hideFuture, setHideFuture] = useState(false)
   /** Requests the pop-up opened for by itself, or that the person closed; it does not open for them again. */
   const autoOpened = useRef(new Set<string>())
+  /**
+   * Requesters (see {@link requesterOf}) the person declined with "Not you" or closed the pop-up on. Their later requests
+   * show only as the quiet notice for the rest of this studio session, so asking again cannot bring the pop-up back.
+   */
+  const turnedAway = useRef(new Set<string>())
   /** Whether the person asked for no more pop-ups here; holds until the home's choice reads `notice`. */
   const hidden = useRef(false)
   /** The request this studio is answering or closing, whose leaving the list needs no sentence. */
@@ -118,7 +133,7 @@ export function PairingNotice({ usePairing, start, openCode, closeCode, quiet, d
   if (chosen !== 'dialog') hidden.current = false
   const mode = hidden.current ? 'notice' : chosen
   const waiting = pairing.place === 'computer' && mode !== 'none' ? pairing.requests : []
-  const next = waiting.find(request => !autoOpened.current.has(request.requestId))
+  const next = waiting.find(request => !autoOpened.current.has(request.requestId) && !turnedAway.current.has(requesterOf(request)))
   useEffect(() => {
     if (mode !== 'dialog' || pairing.open !== undefined || next === undefined || isTypingIn(globalThis.document.activeElement)) return
     autoOpened.current.add(next.requestId)
@@ -151,12 +166,14 @@ export function PairingNotice({ usePairing, start, openCode, closeCode, quiet, d
     settling.current = pairing.open
     for (const request of waiting) {
       autoOpened.current.add(request.requestId)
+      turnedAway.current.add(requesterOf(request))
       quiet(request.requestId)
     }
     closePopUp()
   }
   const declineRequest = async (request: PendingDevice): Promise<void> => {
     settling.current = request.requestId
+    turnedAway.current.add(requesterOf(request))
     if (open !== undefined) closePopUp()
     const outcome = await decline(request.requestId)
     if (outcome.kind === 'done') report(t('pairing.declined', { label: request.label }), false)
@@ -245,6 +262,8 @@ export function PairingDialog({ t, request, place, total, hide, onClose, onDecli
   const [typed, setTyped] = useState('')
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<string | undefined>()
+  /** The digit count of a paste that was not taken because it did not hold exactly 8. */
+  const [refusedPaste, setRefusedPaste] = useState<number | undefined>()
   const now = useNow()
   const left = request.expiresAt - now
   const expired = left <= 0
@@ -260,9 +279,14 @@ export function PairingDialog({ t, request, place, total, hide, onClose, onDecli
   }
   const paste = (event: ClipboardEvent<HTMLDivElement>): void => {
     // The field holds 8 characters, so a browser would cut a grouped code such as `1234 5678` short before reading it.
-    const digits = pastedDigits(event.clipboardData.getData('text'))
-    if (digits === '') return
     event.preventDefault()
+    const digits = pastedDigits(event.clipboardData.getData('text'))
+    // A paste of any other length is refused whole, so a code cut short or run long never spends one of the 3 tries.
+    if (digits.length !== CODE_LENGTH) {
+      setRefusedPaste(digits.length)
+      return
+    }
+    setRefusedPaste(undefined)
     setTyped(digits)
   }
   const triesLeft = PAIRING_WRONG_CODES - request.wrongCodes
@@ -301,12 +325,13 @@ export function PairingDialog({ t, request, place, total, hide, onClose, onDecli
         </section>
         <p className={css.explain}>{t('pairing.box.explain', { label: request.label })}</p>
         <div onPasteCapture={paste}>
-          <CodeCells label={t('pairing.box.code')} showLabel length={CODE_LENGTH} value={typed} onChange={setTyped} autoComplete="one-time-code"
+          <CodeCells label={t('pairing.box.code')} showLabel length={CODE_LENGTH} value={typed} onChange={(next) => { setRefusedPaste(undefined); setTyped(next) }} autoComplete="one-time-code"
             disabled={busy || expired} error={wrong !== undefined && typed === ''} shakeKey={request.wrongCodes}
             inputProps={{ 'data-modal-autofocus': true }} />
         </div>
         {busy ? <p className={css.line} role="status">{t('pairing.box.checking')}</p> : null}
         {expired ? <p className={css.failed} role="alert">{t('pairing.box.expired')}</p>
+          : refusedPaste !== undefined ? <p className={css.failed} role="alert">{t('pairing.box.pasteLength', { count: String(refusedPaste) })}</p>
           : wrong !== undefined ? <p className={css.failed} role="alert">{wrong}</p>
             : failure === undefined ? null : <p className={css.failed} role="alert">{failure}</p>}
       </div>
