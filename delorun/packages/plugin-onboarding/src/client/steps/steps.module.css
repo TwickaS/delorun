@@ -53,6 +53,11 @@
   color: var(--dsw-alias-label-secondary);
 }
 
+/* The count of plugins added sits in the step's stack, whose gap alone spaces it from the lead and the list. */
+.count {
+  margin: 0;
+}
+
 .status[data-tone='done'] {
   color: var(--dsw-alias-state-success-primary);
 }

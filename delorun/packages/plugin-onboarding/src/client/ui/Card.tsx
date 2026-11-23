@@ -34,11 +34,11 @@ export interface CardProps {
 
 /**
  * The tinted letter tile for something that has no logo here; brand's {@link CardIcon} draws it.
- * @param props - the name the tint comes from and, optionally, the letter to show.
+ * @param props - the name the tint comes from and, optionally, the letter to show and the side in pixels (32 by default).
  * @returns the tile, hidden from assistive technology because the title says the same.
  */
-export function Monogram({ name, letters }: { readonly name: string; readonly letters?: string | undefined }): ReactNode {
-  return <CardIcon name={name} letter={letters} />
+export function Monogram({ name, letters, size }: { readonly name: string; readonly letters?: string | undefined; readonly size?: number | undefined }): ReactNode {
+  return <CardIcon name={name} letter={letters} size={size} />
 }
 
 /**

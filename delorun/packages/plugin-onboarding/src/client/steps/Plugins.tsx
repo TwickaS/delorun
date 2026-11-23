@@ -98,7 +98,7 @@ export function PluginsStep({ services, guide }: StepProps): ReactNode {
         <Notice tone="warning">{t('plugins.slow')}</Notice>
       )}
       <p className={css.lead}>{t('plugins.lead')}</p>
-      {count > 0 && <p className={css.status} data-tone="done" aria-live="polite">{t('ready.plugins.count', { count: String(count) })}</p>}
+      {count > 0 && <p className={`${css.status} ${css.count}`} data-tone="done" aria-live="polite">{t('ready.plugins.count', { count: String(count) })}</p>}
       <PluginEntryList label={t('step.plugins')}>
         {shown.map(({ name, matches }) => {
           const view = views[name]

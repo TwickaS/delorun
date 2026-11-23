@@ -51,6 +51,16 @@ describe('PluginEntryCard', () => {
     expect(container.querySelector('img')).toBeNull()
     expect(container.querySelector('span[aria-hidden="true"] > svg')).not.toBeNull()
   })
+
+  it('shows the list\'s own fallback instead of the default artwork when the plugin has none, and real artwork over both', () => {
+    const { container, rerender } = render(<ul><PluginEntryCard title="Alpha" iconFallback={<b data-tile="">A</b>} /></ul>)
+    expect(container.querySelector('[data-tile]')?.textContent).toBe('A')
+    expect(container.querySelector('svg')).toBeNull()
+    rerender(<ul><PluginEntryCard title="Alpha" icon="https://example.invalid/alpha.png" iconFallback={<b data-tile="">A</b>} /></ul>)
+    expect(container.querySelector('[data-tile]')).toBeNull()
+    fireEvent.error(container.querySelector('img') as HTMLImageElement)
+    expect(container.querySelector('[data-tile]')?.textContent).toBe('A')
+  })
 })
 
 describe('PluginEntrySkeleton', () => {

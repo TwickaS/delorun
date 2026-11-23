@@ -9,7 +9,7 @@ import { useCallback, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
 import type { BundleState } from '../bundles.ts'
 import type { StepServices } from '../types.ts'
-import { Card } from '../ui/Card.tsx'
+import { Card, Monogram } from '../ui/Card.tsx'
 import { StateLine } from '../ui/StateLine.tsx'
 import { Summary } from '../ui/Summary.tsx'
 import { readableName, useBundle } from './shared.ts'
@@ -110,6 +110,9 @@ export function DownloadBlock({ label, download }: { readonly label: string; rea
   )
 }
 
+/** The side of the guide's letter tile in a market entry's icon frame, the size the market gives its artwork. */
+const ENTRY_TILE = 36
+
 /** How an addable card is drawn: the guide's own card, or the plugin market's entry row. */
 export type AddableLook = 'card' | 'entry'
 
@@ -189,7 +192,7 @@ export function AddableCard({ look = 'card', meta, services, state, reason, pack
   }
   if (look === 'entry') {
     return (
-      <PluginEntryCard title={title} heading={4} icon={icon} clamp={false} meta={meta} action={action}
+      <PluginEntryCard title={title} heading={4} icon={icon} iconFallback={<Monogram name={title} size={ENTRY_TILE} />} clamp={false} meta={meta} action={action}
         description={description === undefined ? undefined : <Summary text={description} labels={{ more: t('more'), less: t('less') }} inherit />}>
         {children}
         {progress}
