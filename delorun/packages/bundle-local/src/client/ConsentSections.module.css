@@ -332,3 +332,36 @@
 .levelOption input:disabled {
   opacity: 0.5;
 }
+
+/* Which MCP servers ask first: three radio options, each with its sentence, above the servers' lists. */
+.askChoice {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 0;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.askChoice > .label {
+  margin: 0;
+}
+
+.askChoice > .failed {
+  margin: 0;
+}
+
+.askOption {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  cursor: pointer;
+}
+
+.askOption > input {
+  flex: none;
+  margin: 2px 0 0;
+}
+
+.askOption .details > * {
+  display: block;
+}

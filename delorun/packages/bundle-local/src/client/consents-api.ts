@@ -7,8 +7,8 @@
  * @module @delorun/bundle-local/client/consents-api
  */
 import {
-  MCP_CONSENT_ROUTES, SERVER_CHANGES, SERVER_STATES, type AcceptedServer, type EnvVariable, type AcceptServerAnswer, type PendingServer, type PendingServersAnswer,
-  type RevokeServerAnswer, type ServerChange, type WaitingServer, type WaitingServersAnswer,
+  MCP_ASK_MODES, MCP_CONSENT_ROUTES, SERVER_CHANGES, SERVER_STATES, type AcceptedServer, type EnvVariable, type AcceptServerAnswer, type McpAskMode, type PendingServer,
+  type PendingServersAnswer, type RevokeServerAnswer, type ServerChange, type ServerOrigin, type WaitingServer, type WaitingServersAnswer,
 } from '@delorun/plugin-mcp-consent/wire'
 import {
   PERMISSION_ROUTES, type EverywhereAnswer, type SetFullAccessAnswer, type WorkspaceAccess, type WorkspacesAnswer,
@@ -18,7 +18,16 @@ import {
 } from '@delorun/plugin-delegation-consent/wire'
 import { call, fields, hostFailureOf, isString, isTime, listOf, optional, orNull, type Check, type HostFetch } from './host-api.ts'
 
-export type { LevelsAnswer, EverywhereAnswer, AcceptedServer, EnvVariable, GrantView, GrantsAnswer, PendingServer, PendingServersAnswer, ServerChange, WaitingServer, WorkspaceAccess, WorkspacesAnswer }
+export type { LevelsAnswer, EverywhereAnswer, AcceptedServer, EnvVariable, GrantView, GrantsAnswer, McpAskMode, PendingServer, PendingServersAnswer, ServerChange, ServerOrigin, WaitingServer, WorkspaceAccess, WorkspacesAnswer }
+export { MCP_ASK_MODES }
+
+/** The profile row of the MCP add-time consent, whose `ask` field Settings → Permissions writes (A631). */
+export const MCP_CONSENT_ROW = 'delorun-mcp-consent'
+
+/** The part of the MCP consent row Settings reads: which servers ask first. */
+export interface McpConsentSettings {
+  readonly ask?: McpAskMode
+}
 
 /** The preset whose switch needs the workspace's consent. */
 export const FULL_ACCESS_PRESET = 'danger-full-access'
@@ -39,11 +48,20 @@ const isReview: Check = fields({ access: isWorkspaceAccess })
 const isChange: Check = fields({ access: isWorkspaceAccess, chats: isTime })
 const isServerChange: Check = value => SERVER_CHANGES.some(change => change === value)
 const isServerState: Check = value => SERVER_STATES.some(state => state === value)
+const isOrigin: Check = value => {
+  if (typeof value !== 'object' || value === null || !('kind' in value)) return false
+  switch (value.kind) {
+    case 'profile': case 'settings': case 'chat': case 'unknown': return true
+    case 'plugin': return 'plugin' in value && isString(value.plugin)
+    case 'pack': return 'pack' in value && isString(value.pack) && 'plugin' in value && isString(value.plugin)
+    default: return false
+  }
+}
 const isEnv: Check = listOf(fields({ name: isString, value: optional(isString) }))
 const isFiles: Check = listOf(fields({ argument: optional(value => Number.isSafeInteger(value) && Number(value) >= 0), path: isString, sha256: isString }))
 const isPendingServers: Check = fields({
   servers: listOf(fields({
-    serverName: isString, reviewId: isString, command: isString, args: listOf(isString), cwd: isString,
+    serverName: isString, reviewId: isString, origin: isOrigin, command: isString, args: listOf(isString), cwd: isString,
     resolvedCommand: isString, resolvedCwd: isString, resolvedShell: optional(isString), env: isEnv, files: isFiles, writableByChats: listOf(isString), reason: isString, change: isServerChange, changedVariables: listOf(isString), state: isServerState, reviewedAt: isTime,
   })),
   accepted: listOf(fields({

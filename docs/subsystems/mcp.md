@@ -149,10 +149,14 @@ Abstract add-time consent service. Subclass, implement review, and load the subc
  * person answers and when the provider's own plugin unloads.
  *
  * @param command - the server start under review.
+ * @param client - the context of the mcp-client plugin that starts the
+ *   server. Its fiber's ancestors are the plugins that mounted the server,
+ *   so a provider can judge a start by where its definition lives; the
+ *   server's configuration cannot change them.
  * @returns `allow: true` to start the server, or `allow: false` with the
  *   reason that leaves the server stopped.
  */
-abstract review(command: McpServerCommand): Promise<McpConsentDecision>
+abstract review(command: McpServerCommand, client: Context): Promise<McpConsentDecision>
 ```
 
 Source: [`packages/mcp/mcp-client/src/consent.ts`](../../packages/mcp/mcp-client/src/consent.ts)
@@ -180,6 +184,15 @@ list(): McpManagedServerView[]
  * @throws when the name is taken, the entry is invalid, or the manager is disposed.
  */
 register(name: string, entry: McpServerRegistration): () => void
+
+/**
+ * Whether a server comes from a plugin's {@link register} call rather than
+ * the configured `servers` list, so a consumer such as an add-time consent
+ * can tell a server the person configured from one a plugin contributed.
+ * @param name - the server key.
+ * @returns true while a registration of that name is live.
+ */
+registered(name: string): boolean
 
 /**
  * Stream server views for a management surface: the current list on

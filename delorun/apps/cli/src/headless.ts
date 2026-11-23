@@ -28,7 +28,8 @@ import { FULL_ACCESS_PRESET, fullAccessGranted, permissionStorePath, readPermiss
 import { workspaceKey } from '@delorun/plugin-permission-defaults/workspace'
 import { dangerousModeHolds } from './setup/dangerous.ts'
 import type { CommandOutput, CommandResult } from './command.ts'
-import { assertDelorunInvariants, composeDelorunProfile, type ComposeDependencies } from './compose.ts'
+import { assertDelorunInvariants, composeDelorunProfile, packLayersOf, type ComposeDependencies } from './compose.ts'
+import { providePackLayers } from './pack-layers-service.ts'
 import { CliError, EXIT } from './exit.ts'
 import { isRecord, rowPatches, type PatchLayer } from './patch-layers.ts'
 import { runPreStartSteps, type PreStartStep } from './pre-start.ts'
@@ -219,6 +220,8 @@ export async function runHeadless(request: HeadlessRequest, dependencies: Headle
       resolvedProfile: composed.resolvedProfile,
       patchFiles: composed.patchFiles,
       args: request.args,
+      // The MCP consent reads the composition's judgement of the bundle layers at each review.
+      prepare: (root) => { providePackLayers(root, packLayersOf(composed.request, composed.resolvedProfile.profile.dir, composed.releasePacks)) },
     })
   } catch (error) {
     unregister()

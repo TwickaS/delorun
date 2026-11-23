@@ -274,6 +274,7 @@
     "tests/delorun-create-plugin.e2e.ts",
     "tests/delorun-setup-versions.e2e.ts",
     "tests/delorun-multiview-restore.e2e.ts",
+    "tests/delorun-mcp-start-card.e2e.ts",
     "tests/multiview-panes.perf.ts"
   ],
   "references": [

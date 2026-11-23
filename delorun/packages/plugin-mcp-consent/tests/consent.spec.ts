@@ -75,7 +75,7 @@ const SHIM: McpServerCommand = {
  * @returns the reason.
  */
 function otherVersionReason(version: number, path: string): string {
-  return `the acceptance store could not be read, so nothing counts as accepted (the store's version is ${String(version)}, not 6; fix or remove ${JSON.stringify(path)}, then accept each MCP server again)${HINT}`
+  return `the acceptance store could not be read, so nothing counts as accepted (the store's version is ${String(version)}, not 7; fix or remove ${JSON.stringify(path)}, then accept each MCP server again)${HINT}`
 }
 
 /**
@@ -123,7 +123,7 @@ describe('the acceptance store format', () => {
     }
     const text = serializeAcceptanceStore(store)
     expect(text).toBe(`${JSON.stringify({
-      v: 6,
+      v: 7,
       acceptances: { alpha: acceptance(['-a'], 1), zed: acceptance(['-y', 'z'], 2) },
       setAside: { beta: { state: 'declined', start: startDigest({ ...COMMAND, files: [] }) } },
     }, null, 2)}\n`)
@@ -158,22 +158,22 @@ describe('the acceptance store format', () => {
   })
 
   it('refuses a store of every other version, whatever it holds', () => {
-    for (const version of [1, 2, 3, 4, 5, 7, '6', null]) {
+    for (const version of [1, 2, 3, 4, 5, 8, '6', '7', null]) {
       const text = JSON.stringify({ v: version, acceptances: {}, setAside: {} })
       expect(() => parseAcceptanceStore(text)).toThrow(AcceptanceStoreError)
-      expect(() => parseAcceptanceStore(text)).toThrow(`the store's version is ${JSON.stringify(version)}, not 6`)
+      expect(() => parseAcceptanceStore(text)).toThrow(`the store's version is ${JSON.stringify(version)}, not 7`)
     }
   })
 
   it('refuses a document that is not this version\'s format', () => {
     const valid = acceptance(['-y'], 1)
-    const store = (acceptances: object, more: object = {}) => JSON.stringify({ v: 6, acceptances, setAside: {}, ...more })
+    const store = (acceptances: object, more: object = {}) => JSON.stringify({ v: 7, acceptances, setAside: {}, ...more })
     for (const [text, problem] of [
       ['{', 'no JSON document'],
       ['[]', 'not a JSON object'],
-      [JSON.stringify({ v: 7, acceptances: {} }), 'the store\'s version is 7, not 6'],
+      [JSON.stringify({ v: 8, acceptances: {} }), 'the store\'s version is 8, not 7'],
       [store({}, { extra: true }), 'the store sets extra'],
-      [JSON.stringify({ v: 6, acceptances: {} }), 'the store does not hold a setAside object'],
+      [JSON.stringify({ v: 7, acceptances: {} }), 'the store does not hold a setAside object'],
       [store({}, { commandKeyed: {} }), 'the store sets commandKeyed'],
       [store({ srv: { ...valid, files: [] } }), 'the acceptance of the server "srv" does not hold a list of pinned files'],
       [store({ srv: { ...valid, files: 'tool' } }), 'does not hold a list of pinned files'],
@@ -363,7 +363,7 @@ describe('the mcpAddConsent provider', () => {
 
   it('does not honour a store of another version, even for the exact start it accepted, and names what to do', async () => {
     const accepted = acceptanceOfStart(await pinned(COMMAND), 1)
-    for (const version of [1, 5, 7]) {
+    for (const version of [1, 5, 8]) {
       const path = writeStore(JSON.stringify({ v: version, acceptances: { srv: accepted }, setAside: {} }))
       await expect(consent.review(COMMAND)).resolves.toEqual({ allow: false, reason: otherVersionReason(version, path) })
       expect(consent.pending()[0]?.change).toBe('unreadable')
@@ -373,7 +373,7 @@ describe('the mcpAddConsent provider', () => {
   it('records nothing into a store of another version, and asks the person to fix or remove it', async () => {
     const text = JSON.stringify({ v: 5, acceptances: {}, setAside: {} })
     const path = writeStore(text)
-    await expect(consent.accept(COMMAND)).rejects.toThrow(`the acceptance store is refused, so nothing is recorded: the store's version is 5, not 6; fix or remove ${JSON.stringify(path)}, then accept each MCP server again`)
+    await expect(consent.accept(COMMAND)).rejects.toThrow(`the acceptance store is refused, so nothing is recorded: the store's version is 5, not 7; fix or remove ${JSON.stringify(path)}, then accept each MCP server again`)
     expect(readFileSync(path, 'utf8')).toBe(text)
   })
 
@@ -396,9 +396,9 @@ describe('the mcpAddConsent provider', () => {
     for (const text of [
       '{ not json',
       '[]',
-      JSON.stringify({ v: 6, acceptances: { srv: acceptanceOfStart(await pinned(COMMAND), 1) } }),
-      JSON.stringify({ v: 6, acceptances: { srv: { ...acceptanceOfStart(await pinned(COMMAND), 1), note: 'x' } }, setAside: {} }),
-      JSON.stringify({ v: 6, acceptances: { srv: { ...acceptanceOfStart(await pinned(COMMAND), 1), resolvedCommand: 'npx' } }, setAside: {} }),
+      JSON.stringify({ v: 7, acceptances: { srv: acceptanceOfStart(await pinned(COMMAND), 1) } }),
+      JSON.stringify({ v: 7, acceptances: { srv: { ...acceptanceOfStart(await pinned(COMMAND), 1), note: 'x' } }, setAside: {} }),
+      JSON.stringify({ v: 7, acceptances: { srv: { ...acceptanceOfStart(await pinned(COMMAND), 1), resolvedCommand: 'npx' } }, setAside: {} }),
     ]) {
       writeStore(text)
       await expect(consent.review(COMMAND)).resolves.toSatisfy((decision: { allow: boolean, reason: string }) =>
@@ -433,7 +433,7 @@ describe('the mcpAddConsent provider', () => {
     expect(statSync(path).mode & 0o777).toBe(0o600)
     expect(statSync(join(path, '..'), ).mode & 0o777).toBe(0o700)
     // The time itself is the recording's, so the parse is what the check reads.
-    expect(parseAcceptanceStore(readFileSync(path, 'utf8')).acceptances.get('srv')).toEqual({ ...acceptanceOfStart(await pinned(COMMAND), 0), acceptedAt: expect.any(Number) })
+    expect(parseAcceptanceStore(readFileSync(path, 'utf8')).acceptances.get('srv')).toEqual({ ...acceptanceOfStart(await pinned(COMMAND), 0, 'unknown'), acceptedAt: expect.any(Number) })
     expect(readFileSync(path, 'utf8')).not.toContain(SECRET)
     await expect(consent.review(COMMAND)).resolves.toMatchObject({ allow: true })
   })
@@ -576,11 +576,11 @@ describe('the mcp_add_consent switch', () => {
   })
 
   it('defaults to off, the parity value', () => {
-    expect(Config()).toEqual({ enabled: false })
+    expect(Config()).toEqual({ enabled: false, ask: 'outside' })
   })
 
   it('registers nothing while off', () => {
-    apply(ctx, { enabled: false })
+    apply(ctx, { enabled: false, ask: 'outside' })
     expect(ctx.get('mcpAddConsent')).toBeUndefined()
   })
 
@@ -590,7 +590,7 @@ describe('the mcp_add_consent switch', () => {
 
   it('mounts the consent service while on', async () => {
     // The mount is a plugin fiber, so apply settles only once the service is registered.
-    await apply(ctx, { enabled: true })
+    await apply(ctx, { enabled: true, ask: 'outside' })
     expect(ctx.get('mcpAddConsent')).toBeInstanceOf(DelorunMcpConsent)
   })
 })

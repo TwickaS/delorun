@@ -14,7 +14,7 @@ import { sortedEnvEntries } from '@deepseek-ai/dsh-mcp-client/consent'
 import { isRunAffectingEnv } from '@deepseek-ai/dsh-mcp-client/templates'
 import type { PinnedStart } from './pins.ts'
 import { envDigests } from './store.ts'
-import type { AcceptedServer, EnvVariable, McpConsentRefusalCode, PendingServer, ServerChange, ServerState } from './wire.ts'
+import type { AcceptedServer, EnvVariable, McpConsentRefusalCode, PendingServer, ServerChange, ServerOrigin, ServerState } from './wire.ts'
 
 /**
  * Whether a surface shows an environment variable's value: only for a variable that changes which program, library or
@@ -91,15 +91,17 @@ export interface RefusedStart {
  * @param refused - what the consent found.
  * @param reviewedAt - when, in milliseconds since the epoch.
  * @param writableByChats - the working directory and pinned files that lie where chats can write.
+ * @param origin - where the server's definition lives, which an acceptance of the review records.
  * @returns the review, whose shown fields name the resolved executable path, working directory and command shell, the
  *   environment's variables and only the values a surface may show, the pinned files, and the paths chats can write.
  */
-export function pendingReviewOf(start: PinnedStart, refused: RefusedStart, reviewedAt: number, writableByChats: readonly string[]): PendingReview {
+export function pendingReviewOf(start: PinnedStart, refused: RefusedStart, reviewedAt: number, writableByChats: readonly string[], origin: ServerOrigin): PendingReview {
   return {
     start,
     shown: {
       serverName: start.serverName,
       reviewId: mcpReviewId(start),
+      origin,
       command: start.command,
       args: [...start.args],
       cwd: start.cwd,

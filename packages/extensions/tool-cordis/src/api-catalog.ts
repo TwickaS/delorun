@@ -2252,9 +2252,9 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     description: 'Abstract add-time consent service. Subclass, implement review, and load the subclass as a plugin — it registers as `ctx.mcpAddConsent` (one implementation per context; loading a second throws, cordis\' standard duplicate-service behavior). The plugin module that mounts it exports MCP_ADD_CONSENT_PROVIDER_EXPORT as `true`.',
     methods: [
       {
-        signature: 'abstract review(command: McpServerCommand): Promise<McpConsentDecision>',
+        signature: 'abstract review(command: McpServerCommand, client: Context): Promise<McpConsentDecision>',
         description: 'Review one configured server start before the mcp-client plugin starts that server. The review runs at every boot of the server row, before any child process starts, and again before every reconnect spawns the server after its connection dropped, where a refusal ends the reconnect loop and leaves the server stopped until its row starts again. The provider can therefore compare what the start names, such as the contents of its executable, with what it accepted each time, and let an accepted start through at once and ask again when the command, arguments, working directory, environment, resolved executable path, resolved command shell or resolved working directory it is shown differ from the ones it accepted before.\n\nThe returned promise gates the server\'s start: the mcp-client plugin\'s activation does not finish, and the server does not start, until it settles, so an implementation that asks a person must settle it when the person answers and when the provider\'s own plugin unloads.',
-        parameters: [{ name: 'command', description: 'the server start under review.' }],
+        parameters: [{ name: 'command', description: 'the server start under review.' }, { name: 'client', description: 'the context of the mcp-client plugin that starts the server. Its fiber\'s ancestors are the plugins that mounted the server, so a provider can judge a start by where its definition lives; the server\'s configuration cannot change them.' }],
         returns: '`allow: true` to start the server, or `allow: false` with the reason that leaves the server stopped.',
       },
     ],
@@ -2276,6 +2276,12 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
         parameters: [{ name: 'name', description: 'server key and tool namespace, unique across configured and registered servers.' }, { name: 'entry', description: 'transport, endpoint, and budgets, validated like a configured entry.' }],
         returns: 'an idempotent disposer that removes the registration.',
         throws: ['when the name is taken, the entry is invalid, or the manager is disposed.'],
+      },
+      {
+        signature: 'registered(name: string): boolean',
+        description: 'Whether a server comes from a plugin\'s register call rather than the configured `servers` list, so a consumer such as an add-time consent can tell a server the person configured from one a plugin contributed.',
+        parameters: [{ name: 'name', description: 'the server key.' }],
+        returns: 'true while a registration of that name is live.',
       },
       {
         signature: '@Remote({ mode: \'stream\' }) async* watch(signal: AbortSignal): AsyncIterable<McpManagedServerView[]>',

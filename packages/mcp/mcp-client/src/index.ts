@@ -245,15 +245,16 @@ export const Config = z.union([
  * decision names for it, in the reviewed directory. A file that runs directly
  * sees the configured `command` as its `argv[0]`; a Windows batch shim keeps
  * the command shell's own.
+ * @param ctx - the mcp-client plugin's context, shown to the consent.
  * @param consent - the mounted consent.
  * @param config - the server's stdio configuration.
  * @returns the configuration to spawn.
  * @throws {McpServerStartUnresolvedError} when the start cannot be resolved.
  * @throws {McpConsentRefusedError} when the consent refuses the start.
  */
-async function reviewedStart(consent: McpAddConsent, config: StdioConfig): Promise<ReviewedStart> {
+async function reviewedStart(ctx: Context, consent: McpAddConsent, config: StdioConfig): Promise<ReviewedStart> {
   const start = await resolveServerStart(config)
-  const decision = await consent.review(start)
+  const decision = await consent.review(start, ctx)
   if (!decision.allow) throw new McpConsentRefusedError(start, decision.reason)
   return {
     config: {
@@ -291,7 +292,7 @@ function reviewEachReconnect(ctx: Context, config: StdioConfig, first: ReviewedS
       if (consent === undefined) {
         throw new Error(`mcp-client(${config.serverName}): the add-time consent that allowed this server is no longer mounted, so the server stays stopped`)
       }
-      latest = await reviewedStart(consent, config)
+      latest = await reviewedStart(ctx, consent, config)
       return latest.config
     },
     beforeSpawn: async () => {
@@ -354,7 +355,7 @@ export async function apply(ctx: Context, configured: Config): Promise<void> {
   if (config.transport === 'stdio') {
     const consent = await findMcpAddConsent(ctx, config.serverName)
     if (consent !== undefined) {
-      const first = await reviewedStart(consent, config)
+      const first = await reviewedStart(ctx, consent, config)
       spawned = first.config
       connectionOptions = reviewEachReconnect(ctx, config, first)
     }

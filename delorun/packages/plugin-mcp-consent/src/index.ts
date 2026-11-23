@@ -36,9 +36,12 @@ import type { McpConsentDecision, McpServerCommand, StdioConfig } from '@deepsee
 import schema from '@deepseek-ai/schemastery'
 // Type-only: the ctx.workspaceRegistry merge, read for the places a chat can write.
 import type {} from '@deepseek-ai/dsh-workspace'
+// Declares `ctx.mcpManager`, whose servers a refusal stopped start again on acceptance.
+import type {} from '@deepseek-ai/dsh-mcp-manager'
 import { resolveDelorunHome } from '@delorun/home'
 import {
   acceptanceIdOf,
+  acceptanceCovers,
   acceptanceOfStart,
   acceptanceStorePath,
   acceptedStartDigest,
@@ -55,9 +58,13 @@ import type { AcceptanceStore, AcceptanceStoreRead, SetAsideState } from './stor
 import { acceptHint, McpReviewError, pendingReviewOf, showsEnvValue, type McpReviews, type PendingReview, type RefusedStart } from './review.ts'
 import { changedPin, pinsOf, spawnArgsOf, type PinnedStart } from './pins.ts'
 import { chatWritableRoots, writableByChats } from './writable.ts'
-import type { AcceptedServer, EnvVariable, PendingServer, PinnedFile } from './wire.ts'
+import { asksFor, MCP_ASK_MODES, originKey, type AcceptedServer, type EnvVariable, type McpAskMode, type PendingServer, type PinnedFile, type ServerOrigin } from './wire.ts'
+import { readRowSources } from './layers.ts'
+import { originOf } from './origin.ts'
+import type { ComputerOnlySwitch } from '@delorun/home-auth'
 import { registerMcpConsentRoutes } from './routes.ts'
 
+export { readRowSources, rowsOfPatches, type DelorunPackLayers, type LayerKind, type LayerSource, type RowLayer, type RowSources } from './layers.ts'
 export {
   acceptHint, mcpReviewId, MCP_REVIEW_ID_LENGTH, MCP_REVIEW_ID_PATTERN, McpReviewError, pendingReviewOf, shownEnv, showsEnvValue,
   type McpReviews, type PendingReview, type RefusedStart,
@@ -89,12 +96,25 @@ export interface Config {
    * starts it. Delorun's composition turns it on.
    */
   readonly enabled: boolean
+  /**
+   * Which stdio servers wait for the person before they start (A631): `outside`, the default, only servers from outside
+   * the person's own configuration and Delorun's packs; `always` every server; `never` none. A setting only the home's
+   * own computer changes.
+   */
+  readonly ask: McpAskMode
 }
 
 /** Validated configuration. */
 export const Config: schema<Config> = schema.object({
   enabled: schema.boolean().description('C16 switch mcp_add_consent: review the command of every stdio MCP server before it starts.').default(false),
+  ask: schema.union(MCP_ASK_MODES).description('Which MCP servers ask first: outside (servers from other plugins, an editor or an unknown place), always, or never.').default('outside'),
 })
+
+/** The consent row's settings as switches only the home's own computer changes: turning the consent off, and the ask mode. */
+export const MCP_CONSENT_SWITCHES: readonly ComputerOnlySwitch[] = [
+  Object.freeze({ ns: 'delorun-mcp-consent', field: 'enabled', label: 'the MCP server consent' }),
+  Object.freeze({ ns: 'delorun-mcp-consent', field: 'ask', label: 'which MCP servers ask first' }),
+]
 
 /** A Loader row configured as a stdio server, with its server name and configured environment. */
 interface ServerRow {
@@ -121,12 +141,16 @@ export class DelorunMcpConsent extends McpAddConsent implements McpReviews {
   private queue: Promise<unknown> = Promise.resolve()
   /** The latest refused review of each server name, until the person accepts it or a review allows the server. */
   private readonly reviews = new Map<string, PendingReview>()
+  /** Which servers ask first, from the row's `ask`. */
+  private readonly config: Pick<Config, 'ask'>
 
   /**
    * @param ctx - the plugin context.
+   * @param config - the row's ask mode; `outside` when a test mounts the class without one.
    */
-  constructor(ctx: Context) {
+  constructor(ctx: Context, config: Pick<Config, 'ask'> = { ask: 'outside' }) {
     super(ctx)
+    this.config = config
     // The pending reviews under a name of their own, for the home process's `mcp.*` operations and the studio's routes.
     ctx.provide('mcpReviews', this)
   }
@@ -154,14 +178,20 @@ export class DelorunMcpConsent extends McpAddConsent implements McpReviews {
    *   format, which asks the person again. No reason names an
    *   environment value.
    */
-  async review(command: McpServerCommand): Promise<McpConsentDecision> {
-    const { start, verdict } = await this.judge(command)
+  async review(command: McpServerCommand, client?: Context): Promise<McpConsentDecision> {
+    // The row sources are read for each review, so a hot reload that changed the profile's layers counts at once.
+    const origin = client === undefined ? UNKNOWN_ORIGIN : originOf(client, command.serverName, this.ctx.get('mcpManager'), await readRowSources(this.ctx))
+    if (!asksFor(origin, this.config.ask)) {
+      this.reviews.delete(command.serverName)
+      return { allow: true }
+    }
+    const { start, verdict } = await this.judge(command, origin)
     if (verdict.allow) {
       this.reviews.delete(command.serverName)
       return { allow: true, spawnCommand: verdict.spawnCommand, spawnArgs: await spawnArgsOf(start), verify: () => changedPin(start.files) }
     }
     if (verdict.staleSetAside) await this.clearSetAside(command.serverName, verdict.staleSetAside)
-    this.reviews.set(command.serverName, pendingReviewOf(start, verdict.refused, Date.now(), await this.chatWritablePaths(start)))
+    this.reviews.set(command.serverName, pendingReviewOf(start, verdict.refused, Date.now(), await this.chatWritablePaths(start), origin))
     return { allow: false, reason: `${verdict.refused.reason}${acceptHint(command.serverName)}` }
   }
 
@@ -286,7 +316,7 @@ export class DelorunMcpConsent extends McpAddConsent implements McpReviews {
     }
     await this.refuseMoved(review.start)
     try {
-      await this.accept(review.start, review.start.files)
+      await this.accept(review.start, review.start.files, review.shown.origin)
     } catch (error) {
       throw new McpReviewError('STORE_REFUSED', reasonOf(error), { cause: error })
     }
@@ -325,18 +355,20 @@ export class DelorunMcpConsent extends McpAddConsent implements McpReviews {
    *   arguments in order, its working directory, its configured environment, of which the store keeps each variable's
    *   name and value digest, and the absolute executable path, command shell and working directory they resolved to.
    * @param files - the files the review pinned; omitted, the files the start runs are pinned now.
+   * @param origin - where the accepted server's definition lives ({@link originKey}); the acceptance covers the server
+   *   name from that origin only. Omitted, the origin is `unknown`.
    * @returns when the store holds the acceptance.
    * @throws when the command is empty or a resolved path is not absolute, which no review is shown, when a file the
    *   start runs cannot be pinned, or when the store cannot be read as this version's format or written.
    */
-  accept(start: McpServerCommand, files?: readonly PinnedFile[]): Promise<void> {
+  accept(start: McpServerCommand, files?: readonly PinnedFile[], origin: ServerOrigin = UNKNOWN_ORIGIN): Promise<void> {
     return this.serial(async () => {
       assertAcceptable(start)
       const pinned: PinnedStart = { ...start, files: files ?? await pinsOf(start) }
       const path = await this.path()
       await withAcceptanceStoreLock(path, async () => {
         const store = await this.writableStore(path)
-        const acceptances = new Map(store.acceptances).set(start.serverName, acceptanceOfStart(pinned, Date.now()))
+        const acceptances = new Map(store.acceptances).set(start.serverName, acceptanceOfStart(pinned, Date.now(), originKey(origin)))
         const setAside = new Map(store.setAside)
         setAside.delete(start.serverName)
         await writeAcceptanceStore(path, { acceptances, setAside })
@@ -440,6 +472,50 @@ export class DelorunMcpConsent extends McpAddConsent implements McpReviews {
   }
 
   /**
+   * Review again every server this consent's predecessor left stopped, once the consent starts: a Loader row that failed
+   * with a consent refusal and an MCP manager server whose start failed. A change of the ask mode restarts the consent,
+   * so a server the new mode no longer asks for starts without a restart of the studio; one it still asks for is
+   * refused again and listed. Failures are logged; each row keeps its own error.
+   * @returns how many stopped servers started again.
+   */
+  async startRefused(): Promise<number> {
+    const names = new Set<string>()
+    for (const entry of this.ctx.get('loader')?.entries() ?? []) {
+      const fiber = entry.fiber
+      if (fiber === undefined || typeof Reflect.get(Object(fiber.config), 'serverName') !== 'string') continue
+      const failure = await fiber.await().then(() => undefined, (error: unknown) => error)
+      const refused = refusedServer(failure)
+      if (refused !== undefined) names.add(refused)
+    }
+    for (const server of this.ctx.get('mcpManager')?.list() ?? []) {
+      if (server.configured && server.status.state === 'failed' && server.status.reason === 'load') names.add(server.name)
+    }
+    let started = 0
+    for (const name of names) started += await this.startRefusedRows(name)
+    return started
+  }
+
+  /**
+   * Start again the server of the same name that the MCP manager (Settings, or a plugin's registration) holds stopped
+   * because its activation failed, now that its start is accepted. The manager mounts it again with its current entry,
+   * so its next review judges the start as it is now and its tools register for every chat's next model request.
+   * @param serverName - the accepted server.
+   * @returns 1 when the manager started the server again, 0 otherwise.
+   */
+  private async startRefusedManaged(serverName: string): Promise<number> {
+    const manager = this.ctx.get('mcpManager')
+    const status = manager?.list().find(server => server.name === serverName && server.configured)?.status
+    if (manager === undefined || status?.state !== 'failed' || status.reason !== 'load') return 0
+    try {
+      await manager.restart(serverName)
+      return 1
+    } catch (error) {
+      this.ctx.logger.warn(`mcp-consent: the server ${serverName} was accepted, and the MCP manager did not start it again: ${reasonOf(error)}`)
+      return 0
+    }
+  }
+
+  /**
    * Start again every server row of the Loader that stopped because this consent refused the server's start, now that
    * the start is accepted: a row that failed with the refusal at its boot, and an active row of the server, whose
    * reconnect the refusal stopped. A row restarts with the configuration it has, so its next review judges its start as
@@ -464,7 +540,7 @@ export class DelorunMcpConsent extends McpAddConsent implements McpReviews {
         this.ctx.logger.warn(`mcp-consent: the server ${serverName} was accepted, and its row ${entry.id} did not start again: ${reasonOf(error)}`)
       }
     }
-    return started
+    return started + await this.startRefusedManaged(serverName)
   }
 
   /**
@@ -522,7 +598,7 @@ export class DelorunMcpConsent extends McpAddConsent implements McpReviews {
    * @param command - the server start under review.
    * @returns the start with its pinned files, and the decision.
    */
-  private async judge(command: McpServerCommand): Promise<{ readonly start: PinnedStart, readonly verdict: Verdict }> {
+  private async judge(command: McpServerCommand, origin: ServerOrigin): Promise<{ readonly start: PinnedStart, readonly verdict: Verdict }> {
     let files: Awaited<ReturnType<typeof pinsOf>>
     try {
       files = await pinsOf(command)
@@ -531,16 +607,17 @@ export class DelorunMcpConsent extends McpAddConsent implements McpReviews {
       return { start: { ...command, files: [] }, verdict }
     }
     const start: PinnedStart = { ...command, files }
-    return { start, verdict: await this.decide(start, files[0].path) }
+    return { start, verdict: await this.decide(start, files[0].path, origin) }
   }
 
   /**
    * Answer one review from the store.
    * @param command - the server start under review, with the files it runs.
    * @param executable - the canonical path of its pinned executable, which an allowed start is spawned with.
+   * @param origin - where the server's definition lives; only an acceptance that covers it counts.
    * @returns the decision.
    */
-  private async decide(command: PinnedStart, executable: string): Promise<Verdict> {
+  private async decide(command: PinnedStart, executable: string, origin: ServerOrigin): Promise<Verdict> {
     let path: string
     try {
       path = await this.path()
@@ -551,7 +628,10 @@ export class DelorunMcpConsent extends McpAddConsent implements McpReviews {
     if (read.kind === 'absent') return refusedWith('new', 'no server is accepted yet (the acceptance store does not exist)')
     if (read.kind === 'refused') return refusedWith('unreadable', `the acceptance store could not be read, so nothing counts as accepted (${read.problem})`)
     const { store } = read
-    const accepted = store.acceptances.get(command.serverName)
+    const recorded = store.acceptances.get(command.serverName)
+    // An acceptance given for the same name from another origin does not count: a plugin's server cannot use the
+    // acceptance of the person's own server, or of a pack's, by naming itself after it.
+    const accepted = recorded !== undefined && acceptanceCovers(recorded, originKey(origin)) ? recorded : undefined
     const change = accepted === undefined ? undefined : changeOf(accepted, command)
     if (accepted !== undefined && change === undefined) return { allow: true, spawnCommand: executable }
     const digest = startDigest(command)
@@ -650,9 +730,33 @@ function stringEntries(env: unknown): Readonly<Record<string, string>> {
  * @param ctx - the plugin context.
  * @param config - the switch.
  */
+/** The origin of a review that names no mcp-client context. */
+const UNKNOWN_ORIGIN: ServerOrigin = Object.freeze({ kind: 'unknown' })
+
+/**
+ * Register the row's settings as computer-only switches with `@delorun/home-auth`, whose reach policy then refuses a
+ * device's settings write to them: turning the consent off or changing which servers ask lets a server start unasked.
+ * The registrations hold whatever `enabled` is, so a device cannot turn the consent off while it is off either.
+ * @param ctx - the plugin's scope, which removes the registrations when it is disposed.
+ */
+function registerSwitches(ctx: Context): void {
+  ctx.inject(['homeAuth'], (scope) => {
+    for (const target of MCP_CONSENT_SWITCHES) scope.effect(() => scope.homeAuth.registerComputerOnlySwitch(target), `mcp-consent: computer-only ${target.field}`)
+  })
+}
+
 export async function apply(ctx: Context, config: Config): Promise<void> {
-  if (!config.enabled) return
-  await ctx.plugin(DelorunMcpConsent)
+  if (!config.enabled) {
+    registerSwitches(ctx)
+    return
+  }
+  registerSwitches(ctx)
+  await ctx.plugin(DelorunMcpConsent, { ask: config.ask })
+  // A changed ask mode restarts this row; the servers the previous mode left stopped are reviewed again under the new one.
+  ctx.inject(['mcpReviews'], (child) => {
+    const consent = child.get('mcpAddConsent')
+    if (consent instanceof DelorunMcpConsent) void consent.startRefused().catch((error: unknown) => { child.logger.warn(`mcp-consent: the stopped servers were not reviewed again: ${reasonOf(error)}`) })
+  })
   // The studio's routes, in a profile that serves a studio.
   ctx.inject(['connection', 'mcpReviews'], (child) => { registerMcpConsentRoutes(child, child.mcpReviews) })
 }

@@ -475,7 +475,7 @@ describe('Session MCP Loader composition', () => {
   })
 
   it('starts the browser server in a Session its refusal left without tools only once the consent accepts it', async () => {
-    const { ctx, root } = await load({ consent: true })
+    const { ctx, root, model } = await load({ consent: true })
     const consent = ctx.get('mcpAddConsent') as RefuseBrowserConsent
     const created = await ctx.agents.create({ sessionId: SessionId('refused-then-accepted'), agentOptions: { provider: 'fixture', model: 'fixture' } })
     await warm(ctx, created.agent)
@@ -492,6 +492,10 @@ describe('Session MCP Loader composition', () => {
     consent.accepted = true
     await ctx.parallel('mcp-client/consent-accepted', 'browser-fixture')
     expect((await warm(ctx, created.agent)).tools.map(tool => tool.name)).toContain(TOOL)
+    // The same chat's next turn offers the server's tools to the model; nothing restarts.
+    created.agent.followup(createUserMessage({ content: [{ type: 'text', text: 'Use the browser now.' }], source: { kind: 'user' } }))
+    await created.agent.whenIdle()
+    expect(model.requests.at(-1)?.tools?.map(tool => tool.name)).toContain(TOOL)
     expect((await execute(ctx, created.agent, TOOL)).isError).toBe(false)
   })
 

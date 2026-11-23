@@ -3752,12 +3752,18 @@ importers:
       '@deepseek-ai/cordis-plugin-loader':
         specifier: workspace:~
         version: link:../../../vendor/loader
+      '@deepseek-ai/dsh-app-boot':
+        specifier: workspace:*
+        version: link:../../../packages/boot/app-boot
       '@deepseek-ai/dsh-client-connection':
         specifier: workspace:*
         version: link:../../../packages/client/connection
       '@deepseek-ai/dsh-mcp-client':
         specifier: workspace:*
         version: link:../../../packages/mcp/mcp-client
+      '@deepseek-ai/dsh-mcp-manager':
+        specifier: workspace:*
+        version: link:../../../packages/mcp/mcp-manager
       '@deepseek-ai/dsh-system-prompt':
         specifier: workspace:*
         version: link:../../../packages/core/system-prompt

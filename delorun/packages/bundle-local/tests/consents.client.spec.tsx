@@ -12,12 +12,12 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { ConfigForm, ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
-import { MCP_CONSENT_ROUTES } from '@delorun/plugin-mcp-consent/wire'
+import { MCP_ASK_MODES, MCP_CONSENT_ROUTES, type ServerOrigin } from '@delorun/plugin-mcp-consent/wire'
 import { PERMISSION_ROUTES } from '@delorun/plugin-permission-defaults/wire'
 import { DELEGATION_CONSENT_ROUTES, type DelegationConsentSettings, type GrantView, type LevelsAnswer } from '@delorun/plugin-delegation-consent/wire'
 import { en, zh } from '../src/client/consents-locales.ts'
 import { HostRequestError, type HostFetch } from '../src/client/host-api.ts'
-import { readServers, type WorkspaceAccess } from '../src/client/consents-api.ts'
+import { readServers, type McpConsentSettings, type WorkspaceAccess } from '../src/client/consents-api.ts'
 import {
   confirmPermissionSwitch, consentFailureText, ownsPermissionConfirmation, createFullAccessConsentSource, FullAccessConsent, FULL_ACCESS_COMMAND,
   workspaceName, type FullAccessConsentProps, type FullAccessConsentSource, type SwitchAnswer,
@@ -26,7 +26,8 @@ import { AllowForChat, ChatSwitchRefused, type AllowForChatProps } from '../src/
 import { FullAccessAction, type FullAccessActionProps } from '../src/client/FullAccessAction.tsx'
 import { agentOfferFor, ExternalAgentAction, type ExternalAgentActionProps } from '../src/client/ExternalAgentAction.tsx'
 import { createMcpReviewSource, McpServerReview, serverChangeText, type McpReviewSource, type McpServerReviewProps } from '../src/client/McpServerReview.tsx'
-import { McpWaitingNotice, type McpWaitingNoticeProps } from '../src/client/McpWaitingNotice.tsx'
+import { createMcpStartCardMemory, McpStartCard, originText, type McpStartCardProps } from '../src/client/McpStartCard.tsx'
+import { McpAskWriter } from '../src/client/mcp-ask-writer.ts'
 import { levelChipText } from '../src/client/AgentLevels.tsx'
 import { AGENTS_COMMAND, ExternalAgentsSection, type ExternalAgentsSectionProps } from '../src/client/ExternalAgentsSection.tsx'
 import { MCP_COMMAND, PermissionsSection, type PermissionsSectionProps } from '../src/client/PermissionsSection.tsx'
@@ -363,7 +364,7 @@ describe('the full-access consent', () => {
 })
 
 const SERVER = {
-  serverName: 'files', reviewId: 'd'.repeat(32), command: 'npx', args: ['-y', 'server-filesystem'], cwd: '',
+  serverName: 'files', reviewId: 'd'.repeat(32), origin: { kind: 'plugin', plugin: '@acme/tools' } as ServerOrigin, command: 'npx', args: ['-y', 'server-filesystem'], cwd: '',
   resolvedCommand: '/usr/local/bin/npx', resolvedCwd: '/home/person',
   env: [{ name: 'API_TOKEN' }, { name: 'NODE_OPTIONS', value: '--require ./hook.js' }], files: [] as { argument?: number, path: string, sha256: string }[],
   writableByChats: [] as string[], changedVariables: [] as string[], state: 'waiting' as const,
@@ -1051,56 +1052,171 @@ describe('the MCP server review', () => {
 })
 
 /**
- * Render the waiting-server notice over a fake home.
+ * Render the MCP start card over a fake home.
  * @param host - the fake home.
- * @param review - the review's question.
- * @returns the render result.
+ * @param faces - the review's question and the memory of set-aside cards.
+ * @returns the render result, the toast spy and the memory.
  */
-function renderNotice(host: ReturnType<typeof fakeHost>, review: McpReviewSource['ask'] = async () => undefined) {
-  const notify = vi.fn<McpWaitingNoticeProps['notify']>()
-  const props = { t: makeTranslate(en), fetch: host.fetch, review, notify } as McpWaitingNoticeProps
-  return { notify, ...render(<McpWaitingNotice {...props} />) }
+function renderCard(host: ReturnType<typeof fakeHost>, review: McpReviewSource['ask'] = async () => undefined, memory = createMcpStartCardMemory()) {
+  const notify = vi.fn<McpStartCardProps['notify']>()
+  const props = { t: makeTranslate(en), fetch: host.fetch, review, notify, useHidden: bindSnapshotSelector(memory.hooks.hidden), hide: memory.hide } as McpStartCardProps
+  return { notify, memory, ...render(<McpStartCard {...props} />) }
 }
 
-describe('the notice that an MCP server waits', () => {
-  it('names the waiting server and opens its review from "Review and allow this server"', async () => {
+const cardButton = (name: string): HTMLElement => screen.getByRole('button', { name })
+const acceptsOf = (host: ReturnType<typeof fakeHost>) => host.received.filter(request => request.key === `POST ${MCP_CONSENT_ROUTES.accept}`)
+
+describe('the card that says an MCP server wants to start', () => {
+  const ORIGINS: readonly (readonly [ServerOrigin, string])[] = [
+    [{ kind: 'plugin', plugin: '@acme/tools' }, 'From plugin @acme/tools'],
+    [{ kind: 'chat' }, 'From your editor'],
+    [{ kind: 'unknown' }, 'From a place Delorun could not identify'],
+    [{ kind: 'profile' }, 'From your own settings'],
+    [{ kind: 'settings' }, 'From your MCP servers in Settings'],
+    [{ kind: 'pack', pack: 'Media', plugin: '@delorun/plugin-media' }, 'From Delorun\'s Media pack'],
+  ]
+
+  it('names the server and, in one muted line, where it comes from, for every kind of origin', async () => {
+    for (const [origin, line] of ORIGINS) {
+      const { unmount } = renderCard(fakeHost({ [`GET ${MCP_CONSENT_ROUTES.pending}`]: SERVERS([{ ...SERVER, origin }]) }))
+      await settle()
+      const card = screen.getByRole('status')
+      expect(within(card).getByText('files wants to start')).toBeTruthy()
+      expect(within(card).getByText(line)).toBeTruthy()
+      expect(originText(makeTranslate(en), origin)).toBe(line)
+      // A content-width glass card, never the notice's full-width banner.
+      expect(card.className).toContain('delorun-glass')
+      expect(within(card).getByText('files wants to start').className).toContain('delorun-alert-title')
+      expect(within(card).getByText(line).className).toContain('delorun-alert-line')
+      expect(cardButton(en['mcp.card.allow']).className).toContain('delorun-alert-primary')
+      expect(cardButton(en['mcp.card.later']).className).toContain('delorun-alert-secondary')
+      unmount()
+    }
+  })
+
+  it('has the zh copy for every origin line', () => {
+    const t = makeTranslate(zh)
+    for (const [origin] of ORIGINS) expect(originText(t, origin)).not.toContain('mcp.card')
+  })
+
+  it('sends exactly one accept for the review when Allow is pressed, and says the server started', async () => {
+    const host = fakeHost({
+      [`GET ${MCP_CONSENT_ROUTES.pending}`]: SERVERS([SERVER]),
+      [`POST ${MCP_CONSENT_ROUTES.accept}`]: { status: 200, body: { started: 1 } },
+    })
+    const { notify } = renderCard(host)
+    await settle()
+    fireEvent.click(cardButton(en['mcp.card.allow']))
+    fireEvent.click(cardButton(en['mcp.card.allow']))
+    await settle()
+    expect(acceptsOf(host).map(request => request.body)).toEqual([{ serverName: 'files', reviewId: SERVER.reviewId, confirmed: true }])
+    expect(notify).toHaveBeenCalledWith('files started. Chats can use its tools from your next message.', false)
+  })
+
+  it('says the server starts the next time a chat uses it when no stopped row started', async () => {
+    const host = fakeHost({
+      [`GET ${MCP_CONSENT_ROUTES.pending}`]: SERVERS([SERVER]),
+      [`POST ${MCP_CONSENT_ROUTES.accept}`]: { status: 200, body: { started: 0 } },
+    })
+    const { notify } = renderCard(host)
+    await settle()
+    fireEvent.click(cardButton(en['mcp.card.allow']))
+    await settle()
+    expect(notify).toHaveBeenCalledWith('files is allowed. It starts the next time a chat uses it.', false)
+  })
+
+  it('shows the existing error text, as a failure, when the accept is refused', async () => {
+    const host = fakeHost({
+      [`GET ${MCP_CONSENT_ROUTES.pending}`]: SERVERS([SERVER]),
+      [`POST ${MCP_CONSENT_ROUTES.accept}`]: refusal(409, 'STALE_REVIEW'),
+    })
+    const { notify } = renderCard(host)
+    await settle()
+    fireEvent.click(cardButton(en['mcp.card.allow']))
+    await settle()
+    expect(notify).toHaveBeenCalledWith(en['failed.stale'], true)
+  })
+
+  it('hides the card for that review on Not now, sends nothing, and shows it again for a new review', async () => {
+    const host = fakeHost({ [`GET ${MCP_CONSENT_ROUTES.pending}`]: SERVERS([SERVER]) })
+    const { container, memory } = renderCard(host)
+    await settle()
+    fireEvent.click(cardButton(en['mcp.card.later']))
+    await settle()
+    expect(container.innerHTML).toBe('')
+    expect(host.received.filter(request => request.key.startsWith('POST'))).toEqual([])
+    // Another card of the same studio session, such as another chat's, stays hidden too.
+    const other = renderCard(host, undefined, memory)
+    await settle()
+    expect(other.container.innerHTML).toBe('')
+    other.unmount()
+    // A new review of the server's start has a new id, which shows the card again.
+    host.script[`GET ${MCP_CONSENT_ROUTES.pending}`] = SERVERS([{ ...SERVER, reviewId: '9'.repeat(32) }])
+    const again = renderCard(host, undefined, memory)
+    await settle()
+    expect(within(again.container).getByText('files wants to start')).toBeTruthy()
+  })
+
+  it('opens the full review from Details, says the outcome of an answer given there, and reads the list again', async () => {
     const review = vi.fn(async () => 1)
-    const { notify } = renderNotice(fakeHost({ [`GET ${MCP_CONSENT_ROUTES.pending}`]: SERVERS([SERVER]) }), review)
+    const host = fakeHost({ [`GET ${MCP_CONSENT_ROUTES.pending}`]: SERVERS([SERVER]) })
+    const { notify } = renderCard(host, review)
     await settle()
-    expect(screen.getByText('MCP tools are off until you allow files.')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: en['mcp.notice.review'] }))
+    fireEvent.click(cardButton(en['mcp.card.details']))
+    await settle()
     expect(review).toHaveBeenCalledWith(SERVER)
-    await settle()
-    // Allowing from the notice says so, as an answer in Settings does.
-    expect(notify).toHaveBeenCalledWith('files is allowed and running.', false)
+    expect(acceptsOf(host)).toEqual([])
+    expect(notify).toHaveBeenCalledWith('files started. Chats can use its tools from your next message.', false)
+    expect(host.received.filter(request => request.key === `GET ${MCP_CONSENT_ROUTES.pending}`).length).toBeGreaterThan(1)
   })
 
-  it('offers each waiting server in turn, and none that the person declined or revoked', async () => {
+  it('names the first of several waiting servers with its place, and none that the person declined or revoked', async () => {
     const other = { ...SERVER, serverName: 'git', reviewId: 'f'.repeat(32) }
-    const review = vi.fn(async () => undefined)
-    renderNotice(fakeHost({ [`GET ${MCP_CONSENT_ROUTES.pending}`]: SERVERS([SERVER, other, { ...SERVER, serverName: 'old', state: 'declined' }]) }), review)
+    renderCard(fakeHost({ [`GET ${MCP_CONSENT_ROUTES.pending}`]: SERVERS([SERVER, other, { ...SERVER, serverName: 'old', state: 'declined' }]) }))
     await settle()
-    expect(screen.getByText('MCP tools are off until you allow files, git.')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: en['mcp.notice.review'] }))
-    await settle()
-    expect(review).toHaveBeenLastCalledWith(SERVER)
-    expect(screen.getByText('MCP tools are off until you allow git.')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: en['mcp.notice.review'] }))
-    await settle()
-    expect(review).toHaveBeenLastCalledWith(other)
+    expect(screen.getByText('files wants to start')).toBeTruthy()
+    expect(screen.getByText(/1 of 2/)).toBeTruthy()
+    expect(screen.queryByText('old wants to start')).toBeNull()
   })
 
-  it('tells a phone, which reads only the names, to approve at the computer', async () => {
-    const host = fakeHost({ [`GET ${MCP_CONSENT_ROUTES.pending}`]: REMOTE, [`GET ${MCP_CONSENT_ROUTES.waiting}`]: { status: 200, body: { servers: [{ serverName: 'files', change: 'new' }] } } })
-    renderNotice(host)
+  it('shows no place count for one waiting server', async () => {
+    renderCard(fakeHost({ [`GET ${MCP_CONSENT_ROUTES.pending}`]: SERVERS([SERVER]) }))
     await settle()
-    expect(screen.getByText('MCP tools are off until you allow files. Approve this at your computer.')).toBeTruthy()
-    expect(screen.queryByRole('button', { name: en['mcp.notice.review'] })).toBeNull()
+    expect(screen.queryByText(/1 of/)).toBeNull()
+  })
+
+  it('tells a remote studio, which reads only the names, to allow at the computer, with no Allow or Details', async () => {
+    const host = fakeHost({ [`GET ${MCP_CONSENT_ROUTES.pending}`]: REMOTE, [`GET ${MCP_CONSENT_ROUTES.waiting}`]: { status: 200, body: { servers: [{ serverName: 'files', change: 'new' }] } } })
+    renderCard(host)
+    await settle()
+    expect(screen.getByText('files wants to start')).toBeTruthy()
+    expect(screen.getByText(en['mcp.card.remote'])).toBeTruthy()
+    expect(screen.queryByRole('button', { name: en['mcp.card.allow'] })).toBeNull()
+    expect(screen.queryByRole('button', { name: en['mcp.card.details'] })).toBeNull()
+    fireEvent.click(cardButton(en['mcp.card.later']))
+    await settle()
+    expect(screen.queryByText('files wants to start')).toBeNull()
+    expect(acceptsOf(host)).toEqual([])
+  })
+
+  it('never takes focus, and its buttons are reachable by keyboard', async () => {
+    const before = document.createElement('button')
+    document.body.append(before)
+    before.focus()
+    renderCard(fakeHost({ [`GET ${MCP_CONSENT_ROUTES.pending}`]: SERVERS([SERVER]) }))
+    await settle()
+    expect(document.activeElement).toBe(before)
+    for (const name of [en['mcp.card.allow'], en['mcp.card.later'], en['mcp.card.details']]) {
+      const button = cardButton(name)
+      expect(button.tabIndex).toBeGreaterThanOrEqual(0)
+      expect(button.getAttribute('tabindex')).toBeNull()
+    }
+    before.remove()
   })
 
   it('shows nothing while no server waits, and in a profile without the plugin', async () => {
     for (const host of [fakeHost({ [`GET ${MCP_CONSENT_ROUTES.pending}`]: SERVERS([]) }), fakeHost()]) {
-      const { container, unmount } = renderNotice(host)
+      const { container, unmount } = renderCard(host)
       await settle()
       expect(container.innerHTML).toBe('')
       unmount()
@@ -1128,15 +1244,98 @@ function agentSettingsForm(value?: DelegationConsentSettings) {
 }
 
 /**
+ * The MCP consent row's Host settings form, answering each mutation as the Host would.
+ * @param value - the row's fields, or undefined for a profile that does not serve the row.
+ * @param accepts - whether the Host accepts a write; a reach device is refused it.
+ * @returns the form, its mutation and the writer the section uses.
+ */
+function mcpConsentForm(value?: McpConsentSettings, accepts = true) {
+  const state = createSnapshotStore<ConfigFormSnapshot<McpConsentSettings>>({
+    status: value === undefined ? 'unavailable' : 'ready', value, base: {}, user: {}, revision: 0, writable: true,
+  })
+  const mutate = vi.fn(async (ops: readonly { op: string; path: readonly string[]; value?: unknown }[]) => {
+    const chosen = MCP_ASK_MODES.find(mode => ops.some(op => op.path[0] === 'ask' && op.value === mode))
+    if (accepts && chosen !== undefined) state.update((draft) => { if (draft.value !== undefined) draft.value = { ...draft.value, ask: chosen } })
+    return accepts
+  })
+  const form: ConfigForm<McpConsentSettings> = {
+    getSnapshot: () => state.getSnapshot(), subscribe: listener => state.subscribe(listener), set: vi.fn(), unset: vi.fn(), mutate,
+  }
+  return { form, mutate, writer: new McpAskWriter(form) }
+}
+
+/**
  * Render the Permissions section over a fake home.
  * @param host - the fake home.
- * @param faces - the consent's and the review's questions.
+ * @param faces - the consent's and the review's questions, and the MCP consent row's form.
  * @returns the render result.
  */
-function renderPermissions(host: ReturnType<typeof fakeHost>, faces: Partial<Pick<PermissionsSectionProps, 'ask' | 'review'>> = {}) {
-  const props = { t: makeTranslate(en), close: () => {}, fetch: host.fetch, ask: async () => false, review: async () => undefined, ...faces } as PermissionsSectionProps
+function renderPermissions(host: ReturnType<typeof fakeHost>, faces: Partial<Pick<PermissionsSectionProps, 'ask' | 'review'>> & { readonly mcp?: ReturnType<typeof mcpConsentForm> } = {}) {
+  const { mcp = mcpConsentForm(), ...rest } = faces
+  const props = {
+    t: makeTranslate(en), close: () => {}, fetch: host.fetch, ask: async () => false, review: async () => undefined,
+    useMcpConsent: bindSnapshotSelector(mcp.form), useMcpConsentMutation: bindSnapshotSelector(mcp.writer.state), setMcpAsk: mcp.writer.set.bind(mcp.writer),
+    ...rest,
+  } as PermissionsSectionProps
   return render(<PermissionsSection {...props} />)
 }
+
+describe('which MCP servers ask first', () => {
+  const pending = { [`GET ${MCP_CONSENT_ROUTES.pending}`]: SERVERS([]) }
+
+  it('offers three radio options in order, each with its sentence, and checks "Ask for project servers" when the row has no choice', async () => {
+    renderPermissions(fakeHost(pending), { mcp: mcpConsentForm({}) })
+    await settle()
+    const group = screen.getByRole('radiogroup', { name: en['mcp.ask.title'] })
+    const radios = within(group).getAllByRole('radio')
+    expect(radios).toHaveLength(3)
+    expect(MCP_ASK_MODES).toEqual(['outside', 'always', 'never'])
+    for (const [index, mode] of MCP_ASK_MODES.entries()) {
+      expect(radios[index]?.getAttribute('value')).toBe(mode)
+      expect(within(group).getByText(en[`mcp.ask.${mode}.title`])).toBeTruthy()
+      expect(within(group).getByText(en[`mcp.ask.${mode}.description`])).toBeTruthy()
+    }
+    expect(en['mcp.ask.outside.title']).toBe('Ask for project servers')
+    expect(radios.map(radio => (radio as HTMLInputElement).checked)).toEqual([true, false, false])
+  })
+
+  it('shows the saved choice', async () => {
+    renderPermissions(fakeHost(pending), { mcp: mcpConsentForm({ ask: 'never' }) })
+    await settle()
+    expect(screen.getAllByRole('radio').map(radio => (radio as HTMLInputElement).checked)).toEqual([false, false, true])
+  })
+
+  it('writes only the row\'s ask field with the chosen value, and shows the value the Host accepted', async () => {
+    const mcp = mcpConsentForm({})
+    renderPermissions(fakeHost(pending), { mcp })
+    await settle()
+    fireEvent.click(screen.getByRole('radio', { name: new RegExp(en['mcp.ask.always.title']) }))
+    await settle()
+    expect(mcp.mutate.mock.calls).toEqual([[[{ op: 'set', path: ['ask'], value: 'always' }]]])
+    expect((screen.getByRole('radio', { name: new RegExp(en['mcp.ask.always.title']) }) as HTMLInputElement).checked).toBe(true)
+    expect(screen.queryByText(en['mcp.ask.failed'])).toBeNull()
+  })
+
+  it('says so, and keeps the earlier choice, when the Host refuses the write', async () => {
+    const mcp = mcpConsentForm({ ask: 'outside' }, false)
+    renderPermissions(fakeHost(pending), { mcp })
+    await settle()
+    fireEvent.click(screen.getByRole('radio', { name: new RegExp(en['mcp.ask.never.title']) }))
+    await settle()
+    expect(screen.getByText(en['mcp.ask.failed']).getAttribute('role')).toBe('alert')
+    expect(screen.getAllByRole('radio').map(radio => (radio as HTMLInputElement).checked)).toEqual([true, false, false])
+  })
+
+  it('shows no choice in a profile that does not serve the row', async () => {
+    renderPermissions(fakeHost(pending))
+    await settle()
+    expect(screen.queryByRole('radiogroup')).toBeNull()
+  })
+
+  it('has the zh copy for the choice', () => {
+    for (const key of ['mcp.ask.title', 'mcp.ask.failed', 'mcp.card.title', 'mcp.card.remote'] as const) expect(zh[key]).not.toBe(en[key])
+  })
+})
 
 /**
  * Render the External agents section over a fake home.
@@ -1210,7 +1409,7 @@ describe('the Permissions section', () => {
     fireEvent.click(within(row).getByRole('button', { name: en['mcp.review'] }))
     await settle()
     expect(review).toHaveBeenCalledWith({ ...SERVER, change: 'arguments' })
-    expect(screen.getByRole('status').textContent).toBe('files is allowed and running.')
+    expect(screen.getByRole('status').textContent).toBe('files started. Chats can use its tools from your next message.')
     fireEvent.click(within(rowOf('files')).getByRole('button', { name: en['mcp.decline'] }))
     await settle()
     expect(host.received.find(request => request.key === `POST ${MCP_CONSENT_ROUTES.decline}`)?.body).toEqual({ serverName: 'files', reviewId: SERVER.reviewId })
@@ -1602,7 +1801,7 @@ describe('dangerous mode', () => {
     expect(screen.queryByText(en['permissions.remote'], { exact: false })).toBeNull()
   })
 
-  it('offers the Face ID confirmation in External agents and the MCP notice while the mode is on, and the computer line while it is off', async () => {
+  it('offers the Face ID confirmation in External agents while the mode is on, and the computer line while it is off', async () => {
     for (const mode of [true, false]) {
       const everywhere = { status: 200, body: mode ? { on: true } : { on: false } }
       const agents = renderExternalAgents(fakeHost({ [`GET ${DELEGATION_CONSENT_ROUTES.grants}`]: REMOTE, [EVERYWHERE_ROUTE]: everywhere }))
@@ -1610,10 +1809,6 @@ describe('dangerous mode', () => {
       expect(screen.queryByText(en.confirmHere) !== null, `agents, mode ${String(mode)}`).toBe(mode)
       expect(screen.queryByText(en['agents.remote'], { exact: false }) !== null, `agents, mode ${String(mode)}`).toBe(!mode)
       agents.unmount()
-      const notice = renderNotice(fakeHost({ [`GET ${MCP_CONSENT_ROUTES.pending}`]: REMOTE, [`GET ${MCP_CONSENT_ROUTES.waiting}`]: { status: 200, body: { servers: [{ serverName: 'files', change: 'new' }] } }, [EVERYWHERE_ROUTE]: everywhere }))
-      await settle()
-      expect(screen.queryByText('MCP tools are off until you allow files. You can review it here; allowing asks for Face ID or your PIN.') !== null, `notice, mode ${String(mode)}`).toBe(mode)
-      notice.unmount()
     }
   })
 

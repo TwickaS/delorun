@@ -105,7 +105,7 @@ export function apply(ctx: Context): void {
 
 ### 观察与恢复
 
-`ctx.mcpManager.list()` 返回各服务器的 `name`、`configured` 标记与实时 `status`，配置条目排在注册条目之前。已移除、但仍在清理或清理失败的条目继续列出，`configured: false`；清理失败时该行保留到宿主重启。清理状态保留首个诊断；任一实例或探测未确认关闭时，`closeConfirmed` 保持 `false`。管理器存活期间，已发布状态的变化会发出 `mcp-manager/status`，包括条目移除后的清理失败。生命周期操作不等待监听器完成；监听器同步抛错或返回的 Promise 拒绝都会被记录，其他监听器仍会收到通知。
+`ctx.mcpManager.list()` 返回各服务器的 `name`、`configured` 标记与实时 `status`，配置条目排在注册条目之前。`registered(name)` reports whether a plugin's `register` call, not the configured list, holds the server of that name, so a consumer such as an add-time consent can tell a server the person configured from one a plugin brought。已移除、但仍在清理或清理失败的条目继续列出，`configured: false`；清理失败时该行保留到宿主重启。清理状态保留首个诊断；任一实例或探测未确认关闭时，`closeConfirmed` 保持 `false`。管理器存活期间，已发布状态的变化会发出 `mcp-manager/status`，包括条目移除后的清理失败。生命周期操作不等待监听器完成；监听器同步抛错或返回的 Promise 拒绝都会被记录，其他监听器仍会收到通知。
 
 重连留在 mcp-client 内。`restart(name)` 替换实例并重置重连预算，预算耗尽后同样适用。传输关闭未确认或本地清理出错时，会阻止该服务器的替换与后续探测；需要重启宿主恢复。`probe(name, options)` 解析模板、连接、读取服务器身份与工具名，再关闭，不注册工具或预留 namespace。已停用条目也可探测。探测有独立的截止时间与取消信号，并分别报告连接/列表查询成功与关闭、清理结果。
 
