@@ -14,7 +14,8 @@ import { readAgentLevels, readEverywhereStrict, readWaitingServers, readWorkspac
 import { readDevices } from './devices-api.ts'
 import type { HostFetch } from './host-api.ts'
 import { readPinState } from './pin-api.ts'
-import { readProtection, readRunState } from './run-settings-api.ts'
+import { STATE_PATH } from '@delorun/plugin-changes/wire'
+import { readRunState } from './run-settings-api.ts'
 import type { OverviewFacts } from './security-overview.ts'
 
 /** How often the open overview reads its facts again, in milliseconds. */
@@ -25,7 +26,7 @@ export type OverviewHostFacts = Omit<OverviewFacts, 'bill' | 'checks' | 'now'>
 
 /** The facts before the first read: nothing known. */
 export const NO_HOST_FACTS: OverviewHostFacts = {
-  run: null, everywhere: null, workspaces: null, protection: null, devices: null, pin: null, mcpWaiting: null, agentLevels: null, update: null,
+  run: null, everywhere: null, workspaces: null, undo: null, devices: null, pin: null, mcpWaiting: null, agentLevels: null, update: null,
 }
 
 /** The fields of the update notice the overview reads. */
@@ -47,6 +48,31 @@ async function fact<T>(read: () => Promise<T | undefined>): Promise<T | null> {
   }
 }
 
+/** The fields of Changes' state the Undo row reads. */
+const ChangesStateSchema = z.object({
+  protection: z.enum(['on', 'off']).optional(),
+  problems: z.array(z.string()),
+  recent: z.array(z.object({ kind: z.string(), state: z.string(), decidedFrom: z.string().optional(), undoable: z.boolean() })),
+})
+
+/** The kinds of an agent's change that Changes records with a saved version when it loads without review. */
+const AGENT_CHANGE_KINDS: ReadonlySet<string> = new Set(['plugin-setting-change', 'plugin-install', 'plugin-update', 'plugin-remove'])
+
+/**
+ * Read whether undo of changes to Delorun and its plugins works, from Changes' state.
+ * @param fetch - the page's fetch.
+ * @returns review's setting, the records Changes cannot read, and the applied agent changes recorded without a saved version.
+ * @throws {Error} when the state does not read, which leaves the fact unknown.
+ */
+async function readUndo(fetch: HostFetch): Promise<OverviewFacts['undo']> {
+  const response = await fetch(STATE_PATH.slice(1), { headers: { accept: 'application/json' } })
+  if (!response.ok) throw new Error(`Changes answered ${String(response.status)}`)
+  const state = ChangesStateSchema.parse(await response.json())
+  const unversioned = state.recent.filter(entry => entry.state === 'applied' && !entry.undoable && AGENT_CHANGE_KINDS.has(entry.kind)
+    && (entry.kind === 'plugin-setting-change' || entry.decidedFrom === 'unreviewed')).length
+  return { protection: state.protection ?? 'off', unreadable: state.problems.length, unversioned }
+}
+
 /**
  * Read the newer release the Host knows of.
  * @param fetch - the page's fetch.
@@ -66,14 +92,14 @@ async function readUpdate(fetch: HostFetch): Promise<OverviewFacts['update']> {
  * @returns the facts, each `null` when its route could not be read.
  */
 export async function readOverviewFacts(fetch: HostFetch): Promise<OverviewHostFacts> {
-  const [run, everywhere, workspaces, protection, devices, pin, waiting, levels, update] = await Promise.all([
+  const [run, everywhere, workspaces, undo, devices, pin, waiting, levels, update] = await Promise.all([
     fact(() => readRunState(fetch)),
     fact(async () => {
       const answer = await readEverywhereStrict(fetch)
       return answer.problem === undefined ? answer : undefined
     }),
     fact(() => readWorkspaces(fetch)),
-    fact(() => readProtection(fetch)),
+    fact(() => readUndo(fetch)),
     fact(() => readDevices(fetch)),
     fact(() => readPinState(fetch)),
     fact(() => readWaitingServers(fetch)),
@@ -84,7 +110,7 @@ export async function readOverviewFacts(fetch: HostFetch): Promise<OverviewHostF
     run,
     everywhere: everywhere === null ? null : { on: everywhere.on, ...everywhere.grantedAt === undefined ? {} : { grantedAt: everywhere.grantedAt } },
     workspaces: workspaces?.workspaces ?? null,
-    protection,
+    undo,
     devices: devices?.devices ?? null,
     pin: pin === null ? null : { on: pin.kind === 'on' },
     mcpWaiting: waiting?.length ?? null,

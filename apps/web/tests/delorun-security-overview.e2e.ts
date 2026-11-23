@@ -2,7 +2,7 @@
  * Delorun's security overview, in a profile that mounts `@delorun/bundle-local`: the trust badge opens the overview,
  * which reads "Protected as Delorun intends" with the rows folded when every row is green, shows this copy of Delorun
  * as "Signature verified · checking files" while the background full check waits, and opens a red row with its reason
- * and fix when change protection is off. The trust bill and change protection's state are scripted in the page, because
+ * and fix when Changes cannot read one of its records. The trust bill and Changes' records are scripted in the page, because
  * the bill needs the launcher that starts a real install; the other facts come from the Host's own routes. Zero model
  * calls.
  */
@@ -96,12 +96,12 @@ it.skipIf(webSnapshotMode() === 'record')('shows the calm line, the release whil
   onTestFailed(() => saveFailureShot(page, 'web-e2e-delorun-security-overview'))
 
   let answer = { bill: bill('verify'), checks: checks('done') }
-  let protection: 'on' | 'off' = 'on'
+  let problems: readonly string[] = []
   await page.route('**/api/delorunTrust.bill', route => route.fulfill({ json: answer }))
   await page.route('**/delorun/changes/state', async (route) => {
     const response = await route.fetch()
     const body: unknown = response.ok() ? await response.json() : {}
-    await route.fulfill({ json: { ...(typeof body === 'object' && body !== null ? body : {}), protection } })
+    await route.fulfill({ json: { ...(typeof body === 'object' && body !== null ? body : {}), problems } })
   })
   const shot = async (name: string): Promise<void> => {
     if (SCREENSHOTS === undefined) return
@@ -143,10 +143,10 @@ it.skipIf(webSnapshotMode() === 'record')('shows the calm line, the release whil
   await shot('checking')
 
   answer = { bill: bill('verify'), checks: checks('done') }
-  protection = 'off'
+  problems = ['A record of a change cannot be read.']
   const red = await open()
-  const row = red.locator('li[data-status="red"]', { hasText: 'Change protection is off' })
+  const row = red.locator('li[data-status="red"]', { hasText: 'Undo cannot work for some changes' })
   await row.waitFor({ timeout: 20_000 })
-  await row.getByRole('button', { name: 'Turn change protection on' }).waitFor()
+  await row.getByRole('button', { name: 'Open Changes' }).waitFor()
   await shot('red-undo')
 }, 300_000)

@@ -36,7 +36,7 @@ const PROTECTED: OverviewHostFacts = {
   run: { prompts: 'safer', dangerous: 'off', reach: { on: false } },
   everywhere: { on: false },
   workspaces: [],
-  protection: 'on',
+  undo: { protection: 'on', unreadable: 0, unversioned: 0 },
   devices: [],
   pin: { on: false },
   mcpWaiting: 0,
@@ -607,24 +607,17 @@ describe('the overview', () => {
 
   it('opens a row that is not green with what it means, why, whether it was chosen, and its fix', async () => {
     const act$ = vi.fn(async (_action: OverviewAction) => true)
-    renderBadge(storeWith(verifiedBill(), checksWith({ state: 'done' })).store, { facts: { ...PROTECTED, protection: 'off' }, act: act$ })
+    renderBadge(storeWith(verifiedBill(), checksWith({ state: 'done' })).store, { facts: { ...PROTECTED, undo: { protection: 'off', unreadable: 1, unversioned: 0 } }, act: act$ })
     const dialog = openPanel()
     expect(within(dialog).getByText(en['overview.headline.red'])).toBeTruthy()
     const row = within(dialog).getByText(en['overview.row.undo']).closest('li')
     expect(row?.getAttribute('data-status')).toBe('red')
     expect(row?.textContent).toContain(en['overview.status.red'])
-    expect(row?.textContent).toContain(en['overview.undo.off.meaning'])
-    expect(row?.textContent).toContain(en['overview.kind.choice'])
-    await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: en['overview.undo.off.action'] })) })
-    expect(act$).toHaveBeenCalledWith({ kind: 'protection-on' })
+    expect(row?.textContent).toContain(en['overview.undo.broken.meaning'])
+    expect(row?.textContent).toContain(en['overview.kind.fault'])
+    await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: en['overview.undo.broken.action'] })) })
+    expect(act$).toHaveBeenCalledWith(expect.objectContaining({ kind: 'open-section' }))
     expect(within(dialog).getByText(en['overview.row.agent'])).toBeTruthy()
-  })
-
-  it('says so in place when turning change protection on fails', async () => {
-    renderBadge(storeWith(verifiedBill(), null).store, { facts: { ...PROTECTED, protection: 'off' }, act: async () => false })
-    const dialog = openPanel()
-    await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: en['overview.undo.off.action'] })) })
-    expect(within(dialog).getByRole('alert').textContent).toBe(en['overview.protectionFailed'])
   })
 
   it('closes and opens the settings section for a row whose fix lives there', async () => {

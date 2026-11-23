@@ -45,7 +45,7 @@ function facts(overrides: Partial<OverviewFacts> = {}): OverviewFacts {
     run: { dangerous: 'off', prompts: 'safer', reach: { on: false } },
     everywhere: { on: false },
     workspaces: [],
-    protection: 'on',
+    undo: { protection: 'on', unreadable: 0, unversioned: 0 },
     devices: [],
     pin: { on: false },
     bill: bill(),
@@ -100,8 +100,17 @@ describe('overviewRows', () => {
     expect(rowOf(facts({ workspaces: [{ workspace: '/c', preset: 'workspace-write', grantedAt: 9 }] }), 'agent').status).toBe('green')
   })
 
-  it('is red when change protection is off, with turning it on as the fix', () => {
-    expect(rowOf(facts({ protection: 'off' }), 'undo')).toMatchObject({ status: 'red', cause: 'undo.off', action: { kind: 'protection-on' } })
+  it('is green with review on and with review off, because every change is still recorded and can be undone', () => {
+    expect(rowOf(facts(), 'undo')).toMatchObject({ status: 'green', cause: 'undo.on' })
+    expect(rowOf(facts({ undo: { protection: 'off', unreadable: 0, unversioned: 0 } }), 'undo')).toMatchObject({ status: 'green', cause: 'undo.recorded' })
+  })
+
+  it.each([
+    ['records Changes cannot read', { protection: 'off', unreadable: 1, unversioned: 0 }],
+    ['a change recorded without a saved version', { protection: 'off', unreadable: 0, unversioned: 1 }],
+    ['the same with review on', { protection: 'on', unreadable: 2, unversioned: 0 }],
+  ] as const)('is red only when undo cannot work: %s, with Changes as the place to look', (_name, undo) => {
+    expect(rowOf(facts({ undo }), 'undo')).toMatchObject({ status: 'red', cause: 'undo.broken', kind: 'fault', action: { kind: 'open-section' } })
   })
 
   it('marks phone access on as a choice, and a device unseen for weeks as needing a look', () => {
@@ -149,7 +158,7 @@ describe('overviewRows', () => {
     expect(rowOf(facts({ bill: start, checks: waiting }), 'copy')).toMatchObject({ status: 'green', cause: 'copy.checking' })
     // "Protected as Delorun intends" waits for the full check.
     expect(overviewHeadline(overviewRows(facts({ bill: start, checks: waiting })))).toBe('checking')
-    expect(overviewHeadline(overviewRows(facts({ bill: start, checks: waiting, protection: 'off' })))).toBe('red')
+    expect(overviewHeadline(overviewRows(facts({ bill: start, checks: waiting, undo: { protection: 'off', unreadable: 1, unversioned: 0 } })))).toBe('red')
     const unavailable: TrustChecks = { ...waiting, release: { ...waiting.release, full: { state: 'unavailable', reason: 'no-launcher' } } }
     expect(rowOf(facts({ bill: start, checks: unavailable }), 'copy')).toMatchObject({ status: 'look', cause: 'copy.not-full', action: { kind: 'check-now' } })
   })
@@ -170,7 +179,7 @@ describe('overviewRows', () => {
   })
 
   it('never reads a fact it could not read as protected', () => {
-    const rows = overviewRows(facts({ run: null, everywhere: null, protection: null, bill: null }))
+    const rows = overviewRows(facts({ run: null, everywhere: null, undo: null, bill: null }))
     expect(rows.map(entry => [entry.id, entry.status, entry.cause])).toEqual([
       ['agent', 'look', 'agent.unread'],
       ['undo', 'look', 'undo.unread'],
@@ -186,7 +195,7 @@ describe('a fact that could not be read', () => {
     ['the run settings', { run: null }, 'agent', 'agent.unread'],
     ['dangerous mode', { everywhere: null }, 'agent', 'agent.unread'],
     ['the workspaces\' access', { workspaces: null }, 'agent', 'agent.unread'],
-    ['change protection', { protection: null }, 'undo', 'undo.unread'],
+    ['Changes\' state', { undo: null }, 'undo', 'undo.unread'],
     ['the devices, with phone access on', { run: { dangerous: 'off', prompts: 'safer', reach: { on: true } }, devices: null }, 'reach', 'reach.unread'],
     ['PIN mode, with phone access on', { run: { dangerous: 'off', prompts: 'safer', reach: { on: true } }, pin: null }, 'reach', 'reach.unread'],
     ['the MCP servers waiting for a decision', { mcpWaiting: null }, 'addons', 'addons.unread'],
@@ -203,7 +212,7 @@ describe('a fact that could not be read', () => {
 
 describe('overviewHeadline', () => {
   it('takes the loudest row: red, then a look, then a choice', () => {
-    expect(overviewHeadline(overviewRows(facts({ protection: 'off', mcpWaiting: 1 })))).toBe('red')
+    expect(overviewHeadline(overviewRows(facts({ undo: { protection: 'on', unreadable: 1, unversioned: 0 }, mcpWaiting: 1 })))).toBe('red')
     expect(overviewHeadline(overviewRows(facts({ mcpWaiting: 1, run: { dangerous: 'off', prompts: 'safer', reach: { on: true } } })))).toBe('look')
     expect(overviewHeadline(overviewRows(facts({ run: { dangerous: 'off', prompts: 'safer', reach: { on: true } } })))).toBe('chosen')
   })

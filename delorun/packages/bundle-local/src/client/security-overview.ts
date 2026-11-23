@@ -7,7 +7,7 @@
  * - `chosen`: amber, quiet; the person chose it (Full access, phone access on, a plugin from a folder).
  * - `look`: amber, stronger; something needs a look (a device unseen for weeks, the release log not checked, a fact
  *   that could not be read).
- * - `red`: protection is off or failing (dangerous mode, a failed signature, an advisory or a changed plugin, Undo off).
+ * - `red`: protection is off or failing (dangerous mode, a failed signature, an advisory or a changed plugin, an undo that cannot work).
  *
  * A plugin row never says safe: plugins are not confined (A558), so its green reads "reviewed, no advisory".
  *
@@ -40,8 +40,11 @@ export interface OverviewFacts {
   readonly everywhere: { readonly on: boolean, readonly grantedAt?: string } | null
   /** Workspaces the person gave a preset, with when. */
   readonly workspaces: readonly { readonly workspace: string, readonly title?: string, readonly preset: string, readonly grantedAt: number | null }[] | null
-  /** Change protection: whether changes to Delorun wait for the person's review and can be undone. */
-  readonly protection: 'on' | 'off' | null
+  /**
+   * Undo of changes to Delorun and its plugins, from Changes' state: whether review before loading is on, how many records
+   * Changes cannot read, and how many applied agent changes it recorded without the saved version an undo needs.
+   */
+  readonly undo: { readonly protection: 'on' | 'off', readonly unreadable: number, readonly unversioned: number } | null
   /** The paired devices, with when each last signed in (milliseconds since the epoch). */
   readonly devices: readonly { readonly id: string, readonly label: string, readonly approvedAt: number, readonly lastSignInAt: number | null }[] | null
   /** PIN mode on devices. */
@@ -67,13 +70,13 @@ export type OverviewAction =
 
 /** The causes of each row's status, green ones first; the panel words each one. */
 export const OVERVIEW_GREEN_CAUSES = [
-  'agent.standard', 'undo.on', 'reach.private', 'reach.devices-off', 'addons.none', 'addons.reviewed', 'copy.verified', 'copy.checking',
+  'agent.standard', 'undo.on', 'undo.recorded', 'reach.private', 'reach.devices-off', 'addons.none', 'addons.reviewed', 'copy.verified', 'copy.checking',
 ] as const
 
 /** The causes of a row that is not green, each with its meaning, its reason and its action's words. */
 export const OVERVIEW_OPEN_CAUSES = [
   'agent.full-access', 'agent.dangerous', 'agent.unread',
-  'undo.off', 'undo.unread',
+  'undo.broken', 'undo.unread',
   'reach.phone', 'reach.unseen', 'reach.unread',
   'addons.unlisted', 'addons.unrestricted', 'addons.mcp-waiting', 'addons.unchecked', 'addons.advisory', 'addons.changed', 'addons.unread',
   'copy.not-full', 'copy.log', 'copy.security-update', 'copy.failed', 'copy.unread',
@@ -144,14 +147,19 @@ function agentRow(facts: OverviewFacts): OverviewRow {
 }
 
 /**
- * Undo: red when change protection is off, green when on.
+ * Undo of changes to Delorun and its plugins (contract C21). Review before loading is optional: with it off, the
+ * default, every change still loads as a recorded change the person can undo in Changes, so both settings are green.
+ * Red only when undo cannot work: Changes reports records it cannot read, or an applied change recorded without the
+ * saved version its undo needs. A state that does not read asks for a look.
  * @param facts - the facts.
  * @returns the row.
  */
 function undoRow(facts: OverviewFacts): OverviewRow {
-  if (facts.protection === 'off') return row('undo', 'red', 'undo.off', { kind: 'choice', action: { kind: 'protection-on' } })
-  if (facts.protection === null) return row('undo', 'look', 'undo.unread', { kind: 'fault', action: { kind: 'open-section', section: OVERVIEW_SECTIONS.changes } })
-  return row('undo', 'green', 'undo.on')
+  const open: OverviewAction = { kind: 'open-section', section: OVERVIEW_SECTIONS.changes }
+  if (facts.undo === null) return row('undo', 'look', 'undo.unread', { kind: 'fault', action: open })
+  const { protection, unreadable, unversioned } = facts.undo
+  if (unreadable > 0 || unversioned > 0) return row('undo', 'red', 'undo.broken', { kind: 'fault', action: open })
+  return protection === 'on' ? row('undo', 'green', 'undo.on') : row('undo', 'green', 'undo.recorded')
 }
 
 /**
