@@ -198,7 +198,7 @@ describe('the login shell fallback', () => {
   })
 
   it('finds the shell with `id` and `getent` started by --exec, never through a shell', async () => {
-    const run = vi.fn(async (args: readonly string[]) => args.includes('id')
+    const run = vi.fn(async (args: readonly string[], _deadline?: number) => args.includes('id')
       ? answer('alice\n') : answer('alice:x:1000:1000::/home/alice:/bin/bash\n'))
     expect(await findLoginShell('Ubuntu', run)).toEqual({ path: '/bin/bash', flavour: 'posix' })
     expect(run.mock.calls.map(call => call[0])).toEqual([
