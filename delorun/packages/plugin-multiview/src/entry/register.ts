@@ -184,7 +184,8 @@ function mountEntries(ctx: Context, store: MultiviewStore, injected: () => Entry
 }
 
 /**
- * Watch the main chat: pin and open for each new hand-off, and, with reopening on return off, close a chat that was left open.
+ * Watch the main chat: pin and open for each new hand-off, close Multiview while the chat's agent catalog is loaded and empty,
+ * and, with reopening on return off, close a chat that was left open.
  * @param ctx - the browser context.
  * @param store - the state.
  * @returns the disposer.
@@ -201,7 +202,10 @@ function observeChats(ctx: Context, store: MultiviewStore): () => void {
       if (!store.settings.getSnapshot().reopenOnReturn) for (const chat of [seen, main]) if (chat !== undefined && store.of(chat).getSnapshot().open) store.close(chat)
       seen = main
     }
-    const fresh = watcher.observe(main, main === undefined ? undefined : catalogOf(state, main))
+    const catalog = main === undefined ? undefined : catalogOf(state, main)
+    // The agents action, and the toggle at its end, hide while the catalog is empty, so Multiview would have no visible close.
+    if (main !== undefined && catalog?.length === 0 && store.of(main).getSnapshot().open) store.close(main)
+    const fresh = watcher.observe(main, catalog)
     if (main === undefined || fresh.length === 0) return
     store.pinAll(main, fresh)
     if (store.settings.getSnapshot().autoOpen && store.of(main).getSnapshot().pins.length > 0) store.open(main)

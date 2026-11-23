@@ -3,7 +3,7 @@
  * the layout picker, "Pin running" and "Open Multiview", and the icon toggle at the end of the agents action with its amber dot,
  * its layouts popover and the one-time hint.
  */
-import { useEffect, useId, useRef, useState, useSyncExternalStore, type PointerEvent, type ReactNode, type RefObject } from 'react'
+import { useEffect, useId, useRef, useState, useSyncExternalStore, type MouseEvent, type PointerEvent, type ReactNode, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import {
   IconCloseOutlineRegular, IconPinFillRegular, IconPinOutlineRegular, MenuSurface, Tooltip,
@@ -198,16 +198,16 @@ export function MultiviewToggle({ sessionId, useSessions, useSessionStatus, mult
           aria-label={t('button.aria')}
           aria-description={description === '' ? undefined : description}
           data-waiting={waiting || undefined}
-          onClick={() => {
-            if (press.consumeClick()) return
+          onClick={(event) => {
+            if (press.consumeClick(event)) return
             if (!nothing) openOrClose(multiview, sessionId, shown, unpinnedRunning)
           }}
           onContextMenu={(event) => { event.preventDefault(); setPicker(true) }}
           onPointerDown={press.onPointerDown}
           onPointerMove={press.onPointerMove}
-          onPointerUp={press.cancel}
+          onPointerUp={press.stop}
           onPointerCancel={press.cancel}
-          onPointerLeave={press.cancel}
+          onPointerLeave={press.stop}
         >
           <MultiviewGlyph />
           {waiting && <span className={css.dot} aria-hidden />}
@@ -295,9 +295,15 @@ function useOnceHint(hint: HintPreference | undefined, shown: boolean): [boolean
 interface LongPress {
   readonly onPointerDown: (event: PointerEvent<HTMLButtonElement>) => void
   readonly onPointerMove: (event: PointerEvent<HTMLButtonElement>) => void
+  /** Stop waiting for the hold, keeping a hold that already fired so the click that ends it is still ignored. */
+  readonly stop: () => void
+  /** The press was cancelled, so no click ends it: stop waiting and forget a hold that fired. */
   readonly cancel: () => void
-  /** Whether the click that ends a long press should be ignored; reading it clears it. */
-  readonly consumeClick: () => boolean
+  /**
+   * Whether this click ends a long press and should be ignored; reading it clears the hold. Only a pointer click (`detail` above
+   * 0) is ignored, so Enter or Space after a hold that ended without a click still presses the toggle.
+   */
+  readonly consumeClick: (event: MouseEvent<HTMLButtonElement>) => boolean
 }
 
 /**
@@ -309,17 +315,17 @@ function useLongPress(onLongPress: () => void): LongPress {
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const start = useRef({ x: 0, y: 0 })
   const fired = useRef(false)
-  const cancel = (): void => {
+  const stop = (): void => {
     if (timer.current === undefined) return
     clearTimeout(timer.current)
     timer.current = undefined
   }
-  useEffect(() => cancel, [])
+  useEffect(() => stop, [])
   return {
     onPointerDown: (event) => {
       fired.current = false
       if (event.pointerType === 'mouse') return
-      cancel()
+      stop()
       start.current = { x: event.clientX, y: event.clientY }
       timer.current = setTimeout(() => {
         timer.current = undefined
@@ -328,13 +334,17 @@ function useLongPress(onLongPress: () => void): LongPress {
       }, LONG_PRESS_MS)
     },
     onPointerMove: (event) => {
-      if (Math.hypot(event.clientX - start.current.x, event.clientY - start.current.y) > LONG_PRESS_SLOP) cancel()
+      if (Math.hypot(event.clientX - start.current.x, event.clientY - start.current.y) > LONG_PRESS_SLOP) stop()
     },
-    cancel,
-    consumeClick: () => {
+    stop,
+    cancel: () => {
+      stop()
+      fired.current = false
+    },
+    consumeClick: (event) => {
       const was = fired.current
       fired.current = false
-      return was
+      return was && event.detail > 0
     },
   }
 }

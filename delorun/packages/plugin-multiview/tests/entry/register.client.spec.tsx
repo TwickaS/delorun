@@ -164,6 +164,22 @@ describe('auto-pin on a hand-off', () => {
   })
 })
 
+describe('an emptied agent catalog', () => {
+  it('closes Multiview when the main chat\'s catalog is loaded and empty, since the toggle hides with it, and keeps the pins', async () => {
+    const h = harness({ initial: { [CHAT]: { pins: [A], layout: null, open: true } }, list: { main: CHAT, catalogs: { [CHAT]: [A] } } })
+    await h.fiber.await()
+    expect(h.state(CHAT).open).toBe(true)
+    h.setList({ main: CHAT, catalogs: { [CHAT]: [] } })
+    expect(h.state(CHAT)).toMatchObject({ open: false, pins: [A] })
+  })
+
+  it('leaves Multiview open while the catalog has not loaded yet', async () => {
+    const h = harness({ initial: { [CHAT]: { pins: [A], layout: null, open: true } }, list: { main: CHAT } })
+    await h.fiber.await()
+    expect(h.state(CHAT).open).toBe(true)
+  })
+})
+
 describe('reopen on return', () => {
   const saved = { [CHAT]: { pins: [A], layout: null, open: true } }
 
