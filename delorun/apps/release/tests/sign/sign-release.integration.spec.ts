@@ -23,6 +23,17 @@ import { COMMITTED_BASE_DIGEST, COMMITTED_COMPILER, PLATFORMS, RELEASE_BRANCH, r
 const MANIFEST = `delorun-${VERSION}.manifest.json`
 const RECORD = `delorun-${VERSION}.rebuild.json`
 
+/**
+ * Write the fixture's root file beside its release directory, as `--root` takes it.
+ * @param fixture - the fixture.
+ * @returns the root file's path.
+ */
+function rootPath(fixture: ReleaseFixture): string {
+  const path = join(fixture.release, '..', 'root.json')
+  writeFileSync(path, rootFile(fixture.keys).bytes)
+  return path
+}
+
 function refusal(stderr: string): void {
   expect(stderr).toContain(REQUIRED_SOURCE)
 }
@@ -322,7 +333,7 @@ describe('sign-release', CHILD_PROCESS_TIMEOUT, () => {
 
   it('refuses from the command line without a rebuild record, naming the required source', async (test) => {
     const fixture = await releaseFixture(test)
-    const args = ['--release', fixture.release, '--rebuild', fixture.rebuild, '--record', fixture.recordPath, '--attestation', fixture.attestationPath, '--attestation-key', fixture.attestationKeyPath, '--key', fixture.keyPath, '--release-branch', RELEASE_BRANCH]
+    const args = ['--release', fixture.release, '--rebuild', fixture.rebuild, '--record', fixture.recordPath, '--attestation', fixture.attestationPath, '--attestation-key', fixture.attestationKeyPath, '--key', fixture.keyPath, '--root', rootPath(fixture), '--release-branch', RELEASE_BRANCH]
     const result = fixture.run('sign-release.ts', args)
     refusal(result.stderr)
     expect(result.status).toBe(1)
@@ -333,7 +344,7 @@ describe('sign-release', CHILD_PROCESS_TIMEOUT, () => {
 
   it('reads the release branch origin/main by default from the command line, and takes no --allowed-signers', async (test) => {
     const fixture = await releaseFixture(test)
-    const args = ['--release', fixture.release, '--rebuild', fixture.rebuild, '--record', fixture.recordPath, '--attestation', fixture.attestationPath, '--attestation-key', fixture.attestationKeyPath, '--key', fixture.keyPath]
+    const args = ['--release', fixture.release, '--rebuild', fixture.rebuild, '--record', fixture.recordPath, '--attestation', fixture.attestationPath, '--attestation-key', fixture.attestationKeyPath, '--key', fixture.keyPath, '--root', rootPath(fixture)]
     const branch = fixture.run('sign-release.ts', args)
     expect(branch.stderr).toContain('signing refuses: the release branch origin/main names no commit')
     expect(branch.status).toBe(1)

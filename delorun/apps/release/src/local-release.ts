@@ -4,8 +4,8 @@
  *
  * `node_modules/.bin/tsx delorun/apps/release/src/local-release.ts --version <version> --summary <text> [--security] [--notes <file>] --out <channel dir>
  * --root <root file>... --targets-key <targets.pem> --timestamp-key <timestamp.pem> --state <state.json> --log-submit <url>
- * --log-checkpoint <url> --log-tiles <url> [--log-poll-seconds <n>] [--platform <platform>]... [--artifacts build|existing]
- * [--commit <rev>] [--closures-from <dir>] [--cache <dir>] [--production-keys <file>] [--allow-builder-paths]`
+ * --log-checkpoint <url> --log-tiles <url> [--log-poll-seconds <n>] [--log-entry-key <type>=<key.pem>]... [--platform <platform>]...
+ * [--artifacts build|existing] [--commit <rev>] [--closures-from <dir>] [--cache <dir>] [--production-keys <file>] [--allow-builder-paths]`
  *
  * `--summary` is the release's one-line summary and `--security` marks the release as a security fix; the signed
  * manifest carries both as `summary` and `security` (false without the flag), which an update notice shows.
@@ -28,6 +28,11 @@
  * manifest's entry to the log they name, so point them at a log you run, never at a public log unless the release is
  * meant to be logged there. The command asks the log for a witnessed checkpoint at most 60 times, `--log-poll-seconds`
  * apart (30 by default). `--state` is the timestamp signer's state file, created on the first release.
+ * `--log-entry-key` names a log-entry private key besides the targets key, with its entry key type, such as
+ * `PKIX_ECDSA_P256_SHA_256=<log-entry.pem>` (a mode-0600 PEM file). The entry is signed with the newest root's listed
+ * `active` log-entry keys in the root's order, each that the targets key or a `--log-entry-key` belongs to, and the next
+ * is tried only when the log refuses the entry's key type. A root without `logEntryKeys` verifies no release, so the
+ * command refuses it before building anything.
  * `--production-keys` is the production-keys registry, `delorun/release/production-keys.json` of the repository by
  * default; the command refuses, before it builds anything, a `--root` file, a key one of those roots lists, or a
  * `--targets-key` or `--timestamp-key` that the registry lists.
@@ -50,6 +55,7 @@ import { readRecipe } from './closure/config.ts'
 import { readSigningKey } from '@delorun/release-formats/sign/envelope'
 import { semanticVersion } from '@delorun/release-formats/brands'
 import { buildLocalRelease, copyClosureFiles, LOCAL_PLATFORM } from './local/release.ts'
+import { readLogEntryKey } from './log/key-file.ts'
 import { PRODUCTION_KEYS_PATH, readProductionKeysFile } from './local/production-keys.ts'
 
 /** The upstream release name a commit is based on: `upstream.ref` of the divergence ledger, `dsh-v<version>`. */
@@ -94,6 +100,7 @@ export async function main(argv: readonly string[], build: (repository: string, 
       'log-checkpoint': { type: 'string' },
       'log-tiles': { type: 'string' },
       'log-poll-seconds': { type: 'string', default: '30' },
+      'log-entry-key': { type: 'string', multiple: true },
       'platform': { type: 'string', multiple: true },
       'artifacts': { type: 'string', default: 'build' },
       'commit': { type: 'string', default: 'HEAD' },
@@ -143,6 +150,7 @@ export async function main(argv: readonly string[], build: (repository: string, 
       roots: root.map(path => readFileSync(resolve(path))),
       targetsKey: readSigningKey(resolve(values['targets-key']!)),
       timestampKey: readSigningKey(resolve(values['timestamp-key']!)),
+      logEntryKeys: (values['log-entry-key'] ?? []).map(readLogEntryKey),
       productionKeys,
       platforms,
       state: resolve(state),

@@ -1,7 +1,7 @@
 /**
  * Types and fixed values of contract C18, the release log and witness
  * (`delorun/docs/contracts/c18-release-log.md`). Every release manifest has a Rekor v2 `hashedrekord`
- * entry signed with Ed25519ph by the targets key;
+ * entry signed by a log-entry key the trusted root lists;
  * {@link ReleaseLogBundle} carries it with its inclusion proof and a witnessed checkpoint,
  * and {@link ReleaseLogCheckState} is what clients record per installed release.
  *
@@ -19,28 +19,51 @@ export const RELEASE_LOG_ENTRY_TYPE = 'hashedrekord'
 /** The entry body's `apiVersion`: Rekor v2's `hashedrekord` v0.0.2. */
 export const RELEASE_LOG_ENTRY_API_VERSION = '0.0.2'
 
-/** The entry's `keyDetails`: Ed25519ph (RFC 8032, empty context) over the manifest file's bytes. */
+/**
+ * The `keyDetails` of an Ed25519ph entry (RFC 8032, empty context) over the manifest file's bytes, which the 1.0 signing
+ * ceremony's `sign-release.ts` writes with the targets key.
+ */
 export const RELEASE_LOG_ENTRY_KEY_DETAILS = 'PKIX_ED25519_PH'
 
-/** The entry's digest algorithm, the hash Ed25519ph prehashes with: SHA-512 of the manifest file's bytes. */
+/** The digest algorithm of a {@link RELEASE_LOG_ENTRY_KEY_DETAILS} entry, the hash Ed25519ph prehashes with: SHA-512. */
 export const RELEASE_LOG_ENTRY_DIGEST_ALGORITHM = 'SHA2_512'
+
+/**
+ * The entry key types this contract defines, each with the digest algorithm its entry carries: Ed25519ph with SHA-512,
+ * and ECDSA P-256 with SHA-256 (an ASN.1 DER signature over the manifest file's bytes). A root's `logEntryKeys` may
+ * name another type; a client accepts an entry only of a type it implements.
+ */
+export const LOG_ENTRY_KEY_TYPES = {
+  PKIX_ED25519_PH: { digestAlgorithm: 'SHA2_512' },
+  PKIX_ECDSA_P256_SHA_256: { digestAlgorithm: 'SHA2_256' },
+} as const
+
+/** An entry key type this contract defines. */
+export type LogEntryKeyDetails = keyof typeof LOG_ENTRY_KEY_TYPES
+
+/** The digest algorithm of an entry key type this contract defines. */
+export type LogEntryDigestAlgorithm = (typeof LOG_ENTRY_KEY_TYPES)[LogEntryKeyDetails]['digestAlgorithm']
 
 /** The signature and its verifier, as Rekor v2's `Signature` message serializes them in JSON. */
 export interface HashedRekordSignature {
-  /** Base64 Ed25519ph signature over the manifest file's bytes. */
+  /** Base64 signature over the manifest file's bytes, by the entry key type's algorithm. */
   readonly content: string
   readonly verifier: {
-    /** Base64 DER (PKIX SubjectPublicKeyInfo) of the targets public key. */
+    /** Base64 DER (PKIX SubjectPublicKeyInfo) of the log-entry public key. */
     readonly publicKey: { readonly rawBytes: string }
-    /** Always {@link RELEASE_LOG_ENTRY_KEY_DETAILS}. */
-    readonly keyDetails: typeof RELEASE_LOG_ENTRY_KEY_DETAILS
+    /** The entry key type. */
+    readonly keyDetails: LogEntryKeyDetails
   }
 }
 
-/** `delorun-<version>.manifest.entry.json`: the request the release workflow submits to Rekor v2's `/api/v2/log/entries`. */
+/**
+ * `delorun-<version>.manifest.entry.json`: the request the release workflow submits to Rekor v2's `/api/v2/log/entries`.
+ * The signing command writes one per log-entry key it may sign with, in the root's order, the n-th as
+ * `delorun-<version>.manifest.entry.<n>.json`; once logged, the first file holds the request the log accepted.
+ */
 export interface HashedRekordRequest {
   readonly hashedRekordRequestV002: {
-    /** Base64 SHA-512 of the manifest file's bytes. */
+    /** Base64 digest of the manifest file's bytes, by the entry key type's digest algorithm. */
     readonly digest: string
     readonly signature: HashedRekordSignature
   }
@@ -53,7 +76,7 @@ export interface HashedRekordBody {
   readonly spec: {
     readonly hashedRekordV002: {
       /** The request's digest with its algorithm. */
-      readonly data: { readonly algorithm: typeof RELEASE_LOG_ENTRY_DIGEST_ALGORITHM, readonly digest: string }
+      readonly data: { readonly algorithm: LogEntryDigestAlgorithm, readonly digest: string }
       readonly signature: HashedRekordSignature
     }
   }

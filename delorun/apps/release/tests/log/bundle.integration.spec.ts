@@ -150,7 +150,7 @@ describe('release-log bundle checks, each on its own', () => {
     const bundle = log.bundle(index, { name: 'delorun-0.1.0.manifest.json', sha256: sha256Hex(DIGEST) }, witness.cosign(log.checkpoint(), 1_793_981_700))
     expect(failure(() => verifyBundle(root, MANIFEST, '0.1.0', bundle))).toBe('entry-signature-invalid')
     const pure = { hashedRekordRequestV002: { digest: SHA512, signature: { content: sign(null, MANIFEST, keys.targets).toString('base64'), verifier: { publicKey: { rawBytes: '' }, keyDetails: 'PKIX_ED25519' } } } }
-    expect(() => readEntryRequest(Buffer.from(JSON.stringify(pure)))).toThrow(/key details PKIX_ED25519 are not PKIX_ED25519_PH/u)
+    expect(() => readEntryRequest(Buffer.from(JSON.stringify(pure)))).toThrow(/key details PKIX_ED25519 are not an entry key type this client implements/u)
   })
 
   it('refuses an Ed25519ph signature under key details other than PKIX_ED25519_PH', () => {
@@ -167,13 +167,13 @@ describe('release-log bundle checks, each on its own', () => {
     expect(failure(() => verifyBundle(root, MANIFEST, '0.1.0', bundle))).toBe('entry-signature-invalid')
   })
 
-  it('refuses an entry whose verifier key does not parse, and names why it could not be read', () => {
+  it('refuses an entry whose verifier key does not parse, as a key the root does not list', () => {
     const { keys, log, witness, root } = setup()
     const index = log.append(body(keys.targets, { signature: signEd25519ph(keys.targets, MANIFEST), keyDetails: 'PKIX_ED25519_PH', rawBytes: Buffer.from('not a spki key') }))
     const bundle = log.bundle(index, { name: 'delorun-0.1.0.manifest.json', sha256: sha256Hex(DIGEST) }, witness.cosign(log.checkpoint(), 1_793_981_700))
     const error = refusal(() => verifyBundle(root, MANIFEST, '0.1.0', bundle))
     expect(error.failure).toBe('entry-signature-invalid')
-    expect(error.message).toContain('its verifier key does not parse')
+    expect(error.message).toContain('which the trusted root does not list')
   })
 
   it('refuses an entry body with a field Rekor v2\'s hashedrekord v0.0.2 does not have', () => {

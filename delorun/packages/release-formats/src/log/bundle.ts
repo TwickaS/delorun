@@ -1,22 +1,21 @@
 /**
  * The release-log bundle of contract C18 (`delorun-<version>.manifest.log.json`) and its offline verification: the
- * manifest digest, the Rekor v2 `hashedrekord` entry and its targets Ed25519ph signature, the RFC 6962 inclusion
- * proof, the checkpoint's
- * log signature, and at least the root metadata's threshold of cosignatures from listed witnesses. A bundle whose
+ * manifest digest, the Rekor v2 `hashedrekord` entry and its signature by a log-entry key the root lists, the RFC 6962
+ * inclusion proof, the checkpoint of a log the root lists with that log's signature, and at least the root metadata's
+ * threshold of cosignatures from listed witnesses. A bundle whose
  * checkpoint carries no valid listed cosignature fails, whatever its log signature says.
  *
  * @module @delorun/release-formats/log/bundle
  */
-import { createHash, createPublicKey } from 'node:crypto'
-import { RELEASE_LOG_BUNDLE_SCHEMA, RELEASE_LOG_BUNDLE_SIZE_LIMIT, RELEASE_LOG_ENTRY_DIGEST_ALGORITHM, RELEASE_LOG_ENTRY_KEY_DETAILS, MAX_PROOF_HASHES, WITNESS_THRESHOLD, type ReleaseLogBundle, type ReleaseLogFailure } from '@delorun/contract-release-log'
-import type { RootMetadata } from '@delorun/contract-release-manifest'
+import { createHash } from 'node:crypto'
+import { RELEASE_LOG_BUNDLE_SCHEMA, RELEASE_LOG_BUNDLE_SIZE_LIMIT, MAX_PROOF_HASHES, WITNESS_THRESHOLD, type ReleaseLogBundle, type ReleaseLogFailure } from '@delorun/contract-release-log'
+import type { LogEntryKey, RootMetadata } from '@delorun/contract-release-manifest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import semver from 'semver'
 import { z } from 'zod'
-import { keyIdOf, rawPublicKey } from '../sign/envelope.ts'
 import { parseStrictJson } from '../sign/json.ts'
-import { targetsKeysFor } from '../sign/verify.ts'
-import { EntryBodySchema, verifyEd25519ph } from './entry.ts'
+import { EntryBodySchema, type ParsedEntryBody } from './entry.ts'
+import { entryDigest, entryDigestAlgorithm, listedEntryKey, logRefusesRelease, trustedLog, verifyLogEntry } from './entry-keys.ts'
 import { leafHash, rootFromInclusionProof } from './merkle.ts'
 import { parseCheckpoint, parseVerifier, splitNote, verifySignature } from './note.ts'
 
@@ -50,11 +49,14 @@ export const BundleSchema = z.strictObject({
 
 /**
  * The name of the file that carries a manifest's log entry request from the signing machine to the release workflow.
+ * The signing command writes one request per log-entry key it may sign with, in the order the logging step tries them.
  * @param version - the release.
- * @returns `delorun-<version>.manifest.entry.json`.
+ * @param position - the request's position in that order, from 0.
+ * @returns `delorun-<version>.manifest.entry.json` for the first, `delorun-<version>.manifest.entry.<position + 1>.json`
+ *   for each later one.
  */
-export function logEntryName(version: string): string {
-  return `delorun-${version}.manifest.entry.json`
+export function logEntryName(version: string, position = 0): string {
+  return `delorun-${version}.manifest.entry${position === 0 ? '' : `.${String(position + 1)}`}.json`
 }
 
 /**
@@ -67,12 +69,15 @@ export function packsName(version: string): string {
 }
 
 /**
- * The name of the file that carries the packs file's log entry request to the release workflow.
+ * The name of the file that carries the packs file's log entry request to the release workflow, one per log-entry key
+ * as {@link logEntryName} names the manifest's.
  * @param version - the release.
- * @returns `delorun-<version>.packs.entry.json`.
+ * @param position - the request's position in the order the logging step tries them, from 0.
+ * @returns `delorun-<version>.packs.entry.json` for the first, `delorun-<version>.packs.entry.<position + 1>.json` for
+ *   each later one.
  */
-export function packsEntryName(version: string): string {
-  return `delorun-${version}.packs.entry.json`
+export function packsEntryName(version: string, position = 0): string {
+  return `delorun-${version}.packs.entry${position === 0 ? '' : `.${String(position + 1)}`}.json`
 }
 
 /**
@@ -105,12 +110,61 @@ export interface VerifiedBundle {
   readonly cosigned: number
 }
 
+/** An entry body's digest and signature, as they parsed. */
+type EntryParts = ParsedEntryBody['spec']['hashedRekordV002']
+
+/**
+ * Contract C18 step 2 under a root with `logEntryKeys`: the entry's type is listed and implemented, its key is a listed
+ * key of that type valid for the release, its digest is the type's digest of the signed file, and its signature
+ * verifies with the listed key.
+ * @param keys - the root's `logEntryKeys`.
+ * @param manifest - the signed file's bytes.
+ * @param version - the release version.
+ * @param data - the entry's digest.
+ * @param signature - the entry's signature and verifier.
+ * @throws LogVerificationError `manifest-digest-mismatch` or `entry-signature-invalid`.
+ */
+function verifyListedEntry(keys: readonly LogEntryKey[], manifest: Uint8Array, version: string, data: EntryParts['data'], signature: EntryParts['signature']): void {
+  const listed = listedEntryKey(keys, version, signature.verifier.keyDetails, Buffer.from(signature.verifier.publicKey.rawBytes, 'base64'))
+  if (!listed.ok) throw new LogVerificationError('entry-signature-invalid', listed.detail)
+  if (data.algorithm !== entryDigestAlgorithm(listed.keyDetails) || data.digest !== entryDigest(listed.keyDetails, manifest)) {
+    throw new LogVerificationError('manifest-digest-mismatch', `the log entry is not a Rekor v2 hashedrekord of the manifest's ${entryDigestAlgorithm(listed.keyDetails)} digest`)
+  }
+  if (!verifyLogEntry(listed.keyDetails, listed.key, manifest, Buffer.from(signature.content, 'base64'))) {
+    throw new LogVerificationError('entry-signature-invalid', `the log entry's ${listed.keyDetails} signature over the manifest does not verify with log-entry key ${listed.id}`)
+  }
+}
+
+/**
+ * Contract C18 step 2 on an entry body alone: the body is a Rekor v2 `hashedrekord` of the signed file, signed by a key
+ * the root trusts for the release's log entry. The signing tool runs it on its own request's body before submitting.
+ * @param root - the trusted root.
+ * @param manifest - the signed file's bytes.
+ * @param version - the release version, a semantic version.
+ * @param body - the entry body's bytes.
+ * @throws LogVerificationError `manifest-digest-mismatch` or `entry-signature-invalid`.
+ */
+export function verifyEntryBody(root: RootMetadata, manifest: Uint8Array, version: string, body: Uint8Array): void {
+  let decoded: unknown
+  try {
+    decoded = JSON.parse(Buffer.from(body).toString('utf8'))
+  } catch (error) {
+    // A SyntaxError: a body that is not JSON fails the schema check below, which reports it.
+    decoded = error
+  }
+  const parsed = EntryBodySchema.safeParse(decoded)
+  if (!parsed.success) throw new LogVerificationError('manifest-digest-mismatch', 'the log entry is not a Rekor v2 hashedrekord of the manifest')
+  const { data, signature } = parsed.data.spec.hashedRekordV002
+  if (root.logEntryKeys === undefined) throw new LogVerificationError('entry-signature-invalid', `root ${String(root.version)} lists no logEntryKeys, so it trusts no log entry`)
+  verifyListedEntry(root.logEntryKeys, manifest, version, data, signature)
+}
+
 /**
  * Verify a bundle offline, in contract C18's five steps.
  *
  * The three refusals this verifier shares with `@delorun/release-verify`, which is the client's own strict verifier: the
  * bundle must name the release's manifest file `delorun-<version>.manifest.json`, the release version must be a
- * semantic version before any targets key is compared with it, and the witness threshold has the contract's floor of
+ * semantic version before any log-entry key is compared with it, and the witness threshold has the contract's floor of
  * one, so a root that carries no threshold still needs a listed witness's cosignature.
  * @param root - the client's trusted root.
  * @param manifest - the manifest file's bytes, already verified under contract C2.
@@ -124,7 +178,7 @@ export interface VerifiedBundle {
 export function verifyBundle(root: RootMetadata, manifest: Uint8Array, version: string, bundle: ReleaseLogBundle, document: 'manifest' | 'packs' = 'manifest'): VerifiedBundle {
   if (semver.valid(version) === null) {
     // Contract C18 has no code of its own for a version no key can be shown valid for; it is a step 2 failure.
-    throw new LogVerificationError('entry-signature-invalid', `release version ${JSON.stringify(version)} is not a semantic version, so no targets key can be shown valid for it`)
+    throw new LogVerificationError('entry-signature-invalid', `release version ${JSON.stringify(version)} is not a semantic version, so no log-entry key can be shown valid for it`)
   }
   // Contract C2 names the release's manifest and packs files, so a bundle naming another file covers another document
   // whatever digest it carries.
@@ -135,37 +189,7 @@ export function verifyBundle(root: RootMetadata, manifest: Uint8Array, version: 
   const digest = createHash('sha256').update(manifest).digest('hex')
   if (bundle.manifest.sha256 !== digest) throw new LogVerificationError('manifest-digest-mismatch', `the bundle covers manifest ${bundle.manifest.sha256}, not ${digest}`)
   const body = Buffer.from(bundle.entry.body, 'base64')
-  let decoded: unknown
-  try {
-    decoded = JSON.parse(body.toString('utf8'))
-  } catch (error) {
-    // A SyntaxError: a body that is not JSON fails the schema check below, which reports it.
-    decoded = error
-  }
-  const parsed = EntryBodySchema.safeParse(decoded)
-  const sha512 = createHash('sha512').update(manifest).digest('base64')
-  if (!parsed.success || parsed.data.spec.hashedRekordV002.data.algorithm !== RELEASE_LOG_ENTRY_DIGEST_ALGORITHM || parsed.data.spec.hashedRekordV002.data.digest !== sha512) {
-    throw new LogVerificationError('manifest-digest-mismatch', 'the log entry is not a Rekor v2 hashedrekord of the manifest\'s SHA-512 digest')
-  }
-  const { signature } = parsed.data.spec.hashedRekordV002
-  if (signature.verifier.keyDetails !== RELEASE_LOG_ENTRY_KEY_DETAILS) {
-    throw new LogVerificationError('entry-signature-invalid', `the log entry's key details are ${signature.verifier.keyDetails}, not ${RELEASE_LOG_ENTRY_KEY_DETAILS}`)
-  }
-  let signerId: string
-  let unreadable = ''
-  try {
-    signerId = keyIdOf(rawPublicKey(createPublicKey({ key: Buffer.from(signature.verifier.publicKey.rawBytes, 'base64'), format: 'der', type: 'spki' })))
-  } catch (error) {
-    // A key-parsing error: an unreadable public key matches no targets key, and the refusal below names why.
-    signerId = ''
-    unreadable = error instanceof Error ? error.message : String(error)
-  }
-  const targets = targetsKeysFor(root, version).find(key => key.keyid === signerId)
-  if (targets === undefined || !verifyEd25519ph(targets.key, manifest, Buffer.from(signature.content, 'base64'))) {
-    throw new LogVerificationError('entry-signature-invalid', unreadable === ''
-      ? 'the log entry has no Ed25519ph signature over the manifest by a targets key valid for the release'
-      : `the log entry has no Ed25519ph signature over the manifest by a targets key valid for the release: its verifier key does not parse (${unreadable})`)
-  }
+  verifyEntryBody(root, manifest, version, body)
   const computed = rootFromInclusionProof(bundle.inclusion.logIndex, bundle.inclusion.treeSize, leafHash(body), bundle.inclusion.hashes.map((hash: string) => Buffer.from(hash, 'hex')))
   if (bundle.inclusion.logIndex !== bundle.entry.logIndex || computed === undefined || computed.toString('hex') !== bundle.inclusion.rootHash) {
     throw new LogVerificationError('inclusion-proof-invalid', 'the inclusion proof does not reproduce the bundle\'s root hash')
@@ -178,10 +202,13 @@ export function verifyBundle(root: RootMetadata, manifest: Uint8Array, version: 
   } catch (error) {
     throw new LogVerificationError('log-signature-invalid', `the checkpoint does not parse: ${(error as Error).message}`)
   }
-  if (checkpoint.origin !== root.log.origin || checkpoint.size !== bundle.inclusion.treeSize || checkpoint.rootHash.toString('hex') !== bundle.inclusion.rootHash) {
-    throw new LogVerificationError('log-signature-invalid', 'the checkpoint does not name the log\'s origin, the proof\'s tree size and its root hash')
+  const trusted = trustedLog(root, checkpoint.origin)
+  if (trusted === undefined || checkpoint.size !== bundle.inclusion.treeSize || checkpoint.rootHash.toString('hex') !== bundle.inclusion.rootHash) {
+    throw new LogVerificationError('log-signature-invalid', 'the checkpoint does not name a log the root trusts, the proof\'s tree size and its root hash')
   }
-  const log = parseVerifier(root.log.vkey)
+  const closed = logRefusesRelease(trusted, version)
+  if (closed !== undefined) throw new LogVerificationError('log-signature-invalid', closed)
+  const log = parseVerifier(trusted.vkey)
   if (!note.signatures.some(line => verifySignature(log, note.body, line) === true)) throw new LogVerificationError('log-signature-invalid', 'the checkpoint has no valid signature from the log\'s key')
   const cosigned = new Map<string, number>()
   for (const witness of root.witnesses.keys) {

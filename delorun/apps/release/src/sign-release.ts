@@ -2,7 +2,8 @@
  * The signing command of contract C2, run by the targets-key holder on their own machine, outside CI:
  *
  * `node_modules/.bin/tsx delorun/apps/release/src/sign-release.ts --release <dir> --rebuild <dir> --record <file>
- * --attestation <file> --attestation-key <file> --key <targets.pem> [--first-of-line] [--release-branch <revision>]`
+ * --attestation <file> --attestation-key <file> --key <targets.pem> --root <root file>... [--log-entry-key <type>=<key.pem>]...
+ * [--first-of-line] [--release-branch <revision>]`
  *
  * `--release` holds the release workflow's files with its `manifest-draft.json`; `--rebuild` is the holder's own
  * rebuild output on this machine, `--record` the rebuild record `record-rebuild.ts` wrote and `--attestation` the
@@ -19,7 +20,14 @@
  * version at the tagged commit, and a patch release that the patch rule of `sign/patch-rule.ts` refuses. A
  * patch version (such as `0.1.3`) with no earlier release of its major and minor tagged and listed in the committed
  * changelog refuses unless `--first-of-line` states that it is the first release of that line.
- * Before reading the rebuild it refuses a targets key that `delorun/release/production-keys.json` does not list, and a
+ * `--root` names the trusted root files, oldest first. `--log-entry-key` names a log-entry private key besides the
+ * targets key, such as `PKIX_ECDSA_P256_SHA_256=<log-entry.pem>` (a mode-0600 PEM file, read only from that path).
+ * Signing writes one entry request per `active` log-entry key of the newest root that the targets key or a
+ * `--log-entry-key` is, in the root's order: `delorun-<version>.manifest.entry.json` for the first and
+ * `delorun-<version>.manifest.entry.<n>.json` for the n-th, and the packs file's requests the same way; `log-release.ts`
+ * submits them in that order. It refuses a root chain that does not verify and a newest root that lists none of the keys.
+ * Before reading the rebuild it refuses a targets key or a log-entry key that `delorun/release/production-keys.json`
+ * does not list, and a
  * release tag that is not an annotated tag for its own name, signed with an SSH key that `delorun/release/allowed-signers`
  * lists, each file read as `--release-branch` (`origin/main` by default; fetch it first) commits it, never from the
  * working tree: both files list nothing until the owner adds the keys, so signing refuses until then. It also refuses
@@ -34,6 +42,7 @@
  *
  * @module @delorun/release/sign-release
  */
+import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
@@ -41,13 +50,14 @@ import { ADVISORY_FEED_URL } from '@delorun/contract-release-manifest'
 import { repositoryRoot } from '@delorun/tools/src/git.ts'
 import { readAttestationKey } from './rebuild/attestation.ts'
 import { readSigningKey } from '@delorun/release-formats/sign/envelope'
+import { readLogEntryKey } from './log/key-file.ts'
 import { signRelease, SigningRefusal } from './sign/release.ts'
 import { DEFAULT_RELEASE_BRANCH } from './sign/source.ts'
 
 async function main(argv: readonly string[]): Promise<number> {
-  const { values } = parseArgs({ args: [...argv], strict: true, options: { 'release': { type: 'string' }, 'rebuild': { type: 'string' }, 'record': { type: 'string' }, 'attestation': { type: 'string' }, 'attestation-key': { type: 'string' }, 'key': { type: 'string' }, 'first-of-line': { type: 'boolean', default: false }, 'release-branch': { type: 'string', default: DEFAULT_RELEASE_BRANCH } } })
-  if (values.release === undefined || values.rebuild === undefined || values.record === undefined || values.attestation === undefined || values['attestation-key'] === undefined || values.key === undefined) {
-    console.error('sign-release: pass --release <dir>, --rebuild <dir>, --record <file>, --attestation <file>, --attestation-key <file> and --key <targets.pem>, and optionally --first-of-line and --release-branch <revision>')
+  const { values } = parseArgs({ args: [...argv], strict: true, options: { 'release': { type: 'string' }, 'rebuild': { type: 'string' }, 'record': { type: 'string' }, 'attestation': { type: 'string' }, 'attestation-key': { type: 'string' }, 'key': { type: 'string' }, 'root': { type: 'string', multiple: true }, 'log-entry-key': { type: 'string', multiple: true }, 'first-of-line': { type: 'boolean', default: false }, 'release-branch': { type: 'string', default: DEFAULT_RELEASE_BRANCH } } })
+  if (values.release === undefined || values.rebuild === undefined || values.record === undefined || values.attestation === undefined || values['attestation-key'] === undefined || values.key === undefined || values.root === undefined) {
+    console.error('sign-release: pass --release <dir>, --rebuild <dir>, --record <file>, --attestation <file>, --attestation-key <file>, --key <targets.pem> and --root <root file>..., and optionally --log-entry-key <type>=<key.pem>..., --first-of-line and --release-branch <revision>')
     return 2
   }
   try {
@@ -60,6 +70,8 @@ async function main(argv: readonly string[]): Promise<number> {
       attestation: resolve(values.attestation),
       attestationKey: readAttestationKey(resolve(values['attestation-key'])),
       key: readSigningKey(resolve(values.key)),
+      roots: values.root.map(path => readFileSync(resolve(path))),
+      logEntryKeys: (values['log-entry-key'] ?? []).map(readLogEntryKey),
       env: process.env,
       now: new Date(),
       feed: ADVISORY_FEED_URL,

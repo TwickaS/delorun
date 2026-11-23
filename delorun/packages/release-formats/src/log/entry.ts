@@ -1,16 +1,18 @@
 /**
- * The release log entry of contract C18: a Rekor v2 `hashedrekord` v0.0.2 whose signature is the targets key's
- * Ed25519ph (RFC 8032, empty context) signature over the manifest file's bytes, with the SHA-512 digest Ed25519ph
- * prehashes and the targets public key in DER. The signing machine writes the request; Rekor v2 builds the entry body
- * from it, and the log's leaf is the body's RFC 8785 serialization. Node's crypto has no Ed25519ph, so signing and
- * verifying use `@noble/curves`.
+ * The release log entry of contract C18: a Rekor v2 `hashedrekord` v0.0.2 whose signature is a log-entry key's
+ * signature over the signed file's bytes, with the digest the entry key type carries and the public key in DER: ECDSA
+ * P-256 with SHA-256, or Ed25519ph (RFC 8032, empty context) with SHA-512, by a key the trusted root lists in
+ * `logEntryKeys` ({@link module:@delorun/release-formats/log/entry-keys}); a root without the list trusts no entry. The
+ * signing machine writes the request; Rekor v2 builds the entry body from it, and the log's leaf is the body's RFC 8785
+ * serialization. Node's crypto has no Ed25519ph, so Ed25519ph signing and verifying use `@noble/curves`.
  *
  * @module @delorun/release-formats/log/entry
  */
-import { createHash, createPublicKey, type KeyObject } from 'node:crypto'
-import { RELEASE_LOG_ENTRY_API_VERSION, RELEASE_LOG_ENTRY_DIGEST_ALGORITHM, RELEASE_LOG_ENTRY_KEY_DETAILS, RELEASE_LOG_ENTRY_TYPE, type HashedRekordBody, type HashedRekordRequest } from '@delorun/contract-release-log'
+import { createPublicKey, type KeyObject } from 'node:crypto'
+import { RELEASE_LOG_ENTRY_API_VERSION, RELEASE_LOG_ENTRY_KEY_DETAILS, RELEASE_LOG_ENTRY_TYPE, type HashedRekordBody, type HashedRekordRequest, type LogEntryKeyDetails } from '@delorun/contract-release-log'
 import { ed25519ph } from '@noble/curves/ed25519.js'
 import { z } from 'zod'
+import { entryDigest, entryDigestAlgorithm, isLogEntryKeyDetails, signLogEntry } from './entry-keys.ts'
 import { rawPublicKey } from '../sign/envelope.ts'
 import { canonicalJson, parseStrictJson, toJsonValue } from '../sign/json.ts'
 
@@ -68,18 +70,20 @@ export function verifyEd25519ph(key: KeyObject, message: Uint8Array, signature: 
 }
 
 /**
- * The request the release workflow submits for a manifest.
- * @param manifest - the manifest file's bytes.
- * @param key - the targets private key.
+ * The request the release workflow submits for a signed file.
+ * @param manifest - the signed file's bytes.
+ * @param key - the log-entry private key; the targets key under a root without `logEntryKeys`.
+ * @param keyDetails - the entry key type the key signs under; Ed25519ph by default.
  * @returns the request, as `delorun-<version>.manifest.entry.json` holds it.
+ * @throws Error when the key is not a private key of the type's kind.
  */
-export function entryRequest(manifest: Uint8Array, key: KeyObject): HashedRekordRequest {
+export function entryRequest(manifest: Uint8Array, key: KeyObject, keyDetails: LogEntryKeyDetails = RELEASE_LOG_ENTRY_KEY_DETAILS): HashedRekordRequest {
   return {
     hashedRekordRequestV002: {
-      digest: createHash('sha512').update(manifest).digest('base64'),
+      digest: entryDigest(keyDetails, manifest),
       signature: {
-        content: signEd25519ph(key, manifest).toString('base64'),
-        verifier: { publicKey: { rawBytes: createPublicKey(key).export({ format: 'der', type: 'spki' }).toString('base64') }, keyDetails: RELEASE_LOG_ENTRY_KEY_DETAILS },
+        content: signLogEntry(keyDetails, key, manifest).toString('base64'),
+        verifier: { publicKey: { rawBytes: createPublicKey(key).export({ format: 'der', type: 'spki' }).toString('base64') }, keyDetails },
       },
     },
   }
@@ -89,14 +93,16 @@ export function entryRequest(manifest: Uint8Array, key: KeyObject): HashedRekord
  * Read a request file.
  * @param bytes - the file's bytes.
  * @returns the request.
- * @throws Error when it exceeds 16 KiB, is not strict JSON, has other fields or names other key details.
+ * @throws Error when it exceeds 16 KiB, is not strict JSON, has other fields or names an entry key type this client
+ *   does not implement.
  */
 export function readEntryRequest(bytes: Uint8Array): HashedRekordRequest {
   const parsed = RequestSchema.safeParse(parseStrictJson(bytes, ENTRY_REQUEST_SIZE_LIMIT))
   if (!parsed.success) throw new Error(`log entry request: ${z.prettifyError(parsed.error).replaceAll('\n', '; ')}`)
   const { digest, signature } = parsed.data.hashedRekordRequestV002
-  if (signature.verifier.keyDetails !== RELEASE_LOG_ENTRY_KEY_DETAILS) throw new Error(`log entry request: key details ${signature.verifier.keyDetails} are not ${RELEASE_LOG_ENTRY_KEY_DETAILS}`)
-  return { hashedRekordRequestV002: { digest, signature: { content: signature.content, verifier: { publicKey: signature.verifier.publicKey, keyDetails: RELEASE_LOG_ENTRY_KEY_DETAILS } } } }
+  const keyDetails = signature.verifier.keyDetails
+  if (!isLogEntryKeyDetails(keyDetails)) throw new Error(`log entry request: key details ${keyDetails} are not an entry key type this client implements`)
+  return { hashedRekordRequestV002: { digest, signature: { content: signature.content, verifier: { publicKey: signature.verifier.publicKey, keyDetails } } } }
 }
 
 /**
@@ -106,6 +112,7 @@ export function readEntryRequest(bytes: Uint8Array): HashedRekordRequest {
  */
 export function entryBody(request: HashedRekordRequest): Buffer {
   const { digest, signature } = request.hashedRekordRequestV002
-  const body: HashedRekordBody = { apiVersion: RELEASE_LOG_ENTRY_API_VERSION, kind: RELEASE_LOG_ENTRY_TYPE, spec: { hashedRekordV002: { data: { algorithm: RELEASE_LOG_ENTRY_DIGEST_ALGORITHM, digest }, signature } } }
+  const algorithm = entryDigestAlgorithm(signature.verifier.keyDetails)
+  const body: HashedRekordBody = { apiVersion: RELEASE_LOG_ENTRY_API_VERSION, kind: RELEASE_LOG_ENTRY_TYPE, spec: { hashedRekordV002: { data: { algorithm, digest }, signature } } }
   return Buffer.from(canonicalJson(toJsonValue(body)))
 }

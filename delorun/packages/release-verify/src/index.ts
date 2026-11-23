@@ -23,7 +23,7 @@ export {
   STORED_CHECKPOINT_SIZE_LIMIT,
   type StoredCheckpoint,
 } from './checkpoint.ts'
-export { EntryBodySchema, keyIdOf, readEntryBody, requireReleaseVersion, targetsKeysFor, verifyEd25519ph, verifyEntryIdentity, type ReadEntry } from './entry.ts'
+export { EntryBodySchema, readEntryBody, requireReleaseVersion, verifyEntryIdentity, type ReadEntry } from './entry.ts'
 export {
   contractFailureOf,
   refuse,

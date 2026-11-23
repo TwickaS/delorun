@@ -3,11 +3,13 @@
  * of it, in the contract's five steps and against the keys of the client's own trusted root:
  *
  * 1. the bundle covers the manifest file the client verified under contract C2, by SHA-256;
- * 2. the entry body is a Rekor v2 `hashedrekord` `0.0.2` whose SHA-512 digest is the manifest file's, whose key details
- *    are `PKIX_ED25519_PH`, and whose Ed25519ph signature verifies with a targets key valid for the release;
+ * 2. the entry body is a Rekor v2 `hashedrekord` `0.0.2` over the manifest file signed by a key the root trusts for
+ *    the release's log entry: a log-entry key of a listed type that the root lists in `logEntryKeys` and that is valid
+ *    for the release; a root without `logEntryKeys` trusts no entry;
  * 3. the leaf hash, the inclusion proof and the tree size reproduce the bundle's root hash;
- * 4. the checkpoint names the trusted root's log origin with the proof's size and root hash, and its log signature
- *    verifies with the log key the root carries;
+ * 4. the checkpoint names a log the root lists in `logs`, which takes the release's version, with the proof's size and
+ *    root hash, and
+ *    its log signature verifies with the key the root lists for that log;
  * 5. at least the root's threshold of distinct listed witnesses cosigned that checkpoint.
  *
  * The log key and the witness keys are taken only from the trusted root (R6): a bundle cannot hand this client a key to
@@ -35,6 +37,7 @@ import { readEntryBody, requireReleaseVersion, verifyEntryIdentity } from './ent
 import { parseStrictJson } from './json.ts'
 import { leafHash, rootFromInclusionProof } from './merkle.ts'
 import { parseCheckpoint, splitNote, trustedLogKeys, verifySignature, type Checkpoint } from './note.ts'
+import { logRefusesRelease, trustedLog } from '@delorun/release-formats/log/entry-keys'
 
 /** A lowercase hex SHA-256 digest. */
 const hex = z.string().regex(/^[0-9a-f]{64}$/u)
@@ -119,12 +122,15 @@ export function verifyBundle(root: RootMetadata, version: string, manifest: Uint
   }
   const note = splitNote(bundle.checkpoint)
   const checkpoint = parseCheckpoint(note.body)
-  if (checkpoint.origin !== root.log.origin) throw refuse('log-origin-untrusted', `the checkpoint is for ${JSON.stringify(checkpoint.origin)}, not the trusted root's log ${JSON.stringify(root.log.origin)}`)
+  const log = trustedLog(root, checkpoint.origin)
+  if (log === undefined) throw refuse('log-origin-untrusted', `the checkpoint is for ${JSON.stringify(checkpoint.origin)}, which is no log the trusted root lists (its log is ${JSON.stringify(root.log.origin)})`)
+  const closed = logRefusesRelease(log, version)
+  if (closed !== undefined) throw refuse('log-origin-untrusted', closed)
   if (checkpoint.size !== bundle.inclusion.treeSize || checkpoint.rootHash.toString('hex') !== bundle.inclusion.rootHash) {
     throw refuse('log-origin-untrusted', 'the checkpoint names another tree than the inclusion proof')
   }
-  const keys = trustedLogKeys(root)
-  if (!note.signatures.some(line => verifySignature(keys.log, note.body, line) === true)) throw refuse('log-signature-invalid', 'the checkpoint has no valid signature from the trusted root\'s log key')
+  const keys = trustedLogKeys({ log, witnesses: root.witnesses })
+  if (!note.signatures.some(line => verifySignature(keys.log, note.body, line) === true)) throw refuse('log-signature-invalid', 'the checkpoint has no valid signature from the key the trusted root lists for its log')
   const cosigned = new Map<string, number>()
   for (const verifier of keys.witnesses) {
     for (const line of note.signatures) {

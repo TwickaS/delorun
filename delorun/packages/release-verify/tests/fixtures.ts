@@ -246,6 +246,8 @@ export interface EntryBodyOptions {
   readonly keyDetails?: string
   /** The signature's bytes; the signer's Ed25519ph signature over the manifest by default. */
   readonly signature?: Uint8Array
+  /** The verifier's DER public key bytes as the entry carries them; the verifier's SPKI as Node exports it by default. */
+  readonly publicKey?: Uint8Array
 }
 
 /**
@@ -255,7 +257,7 @@ export interface EntryBodyOptions {
  */
 export function entryBody(options: EntryBodyOptions): Buffer {
   const signer = options.verifier ?? options.signer
-  const der = createPublicKey(signer).export({ format: 'der', type: 'spki' }).toString('base64')
+  const der = Buffer.from(options.publicKey ?? createPublicKey(signer).export({ format: 'der', type: 'spki' })).toString('base64')
   return Buffer.from(JSON.stringify({
     apiVersion: options.apiVersion ?? RELEASE_LOG_ENTRY_API_VERSION,
     kind: options.kind ?? RELEASE_LOG_ENTRY_TYPE,
@@ -277,7 +279,7 @@ export function entryBody(options: EntryBodyOptions): Buffer {
 /** An in-memory log that serves the entries it accepted and the checkpoints it signs. */
 export class FixtureLog {
   /** The origin line the trusted root names. */
-  readonly origin = 'log.example.test'
+  readonly origin: string = 'log.example.test'
 
   /** The log's note key. */
   readonly key: KeyObject = generateKeyPairSync('ed25519').privateKey
@@ -415,6 +417,8 @@ export interface RootOptions {
   readonly log?: { readonly origin: string, readonly vkey: string }
   /** The witnesses the root names. */
   readonly witnesses?: { readonly keys: readonly { readonly name: string, readonly vkey: string }[], readonly threshold: number }
+  /** The log-entry keys the root lists, in place of the targets key as its one Ed25519ph key. */
+  readonly logEntryKeys?: RootMetadata['logEntryKeys']
   /** The targets keys the root lists, in place of the one active key. */
   readonly targets?: readonly { readonly keyid: KeyId, readonly status: 'active' | 'retired' | 'revoked', readonly lastRelease?: SemanticVersion }[]
 }
@@ -429,6 +433,7 @@ export interface RootOptions {
  */
 export function rootMetadata(keys: Keys, log: FixtureLog, witnesses: readonly FixtureWitness[], options: RootOptions = {}): RootMetadata {
   const listed = [keys.targets, keys.other, keys.log, keys.witness]
+  const trustedLog = options.log ?? { origin: log.origin, vkey: log.vkey }
   return {
     schema: RELEASE_SCHEMAS.root,
     version: 1,
@@ -441,8 +446,10 @@ export function rootMetadata(keys: Keys, log: FixtureLog, witnesses: readonly Fi
       timestamp: { keyids: [keyId(keys.other)], threshold: 1 },
       catalogue: { keyids: [keyId(keys.other)], threshold: 1 },
     },
-    log: options.log ?? { origin: log.origin, vkey: log.vkey },
+    log: trustedLog,
+    logs: [trustedLog],
     witnesses: options.witnesses ?? { keys: witnesses.map(witness => ({ name: witness.name, vkey: witness.vkey })), threshold: 1 },
+    logEntryKeys: options.logEntryKeys ?? [{ keyDetails: 'PKIX_ED25519_PH', public: createPublicKey(keys.targets).export({ format: 'der', type: 'spki' }).toString('base64'), status: 'active' }],
   }
 }
 

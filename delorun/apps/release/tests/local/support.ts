@@ -16,7 +16,7 @@ import { stampDelorunVersion } from '../../src/closure/delorun.ts'
 import { readEntryRequest } from '@delorun/release-formats/log/entry'
 import type { LogEndpoints } from '../../src/log/client.ts'
 import { rootFile, throwawayKeys, type Keys } from '../sign/fixture.ts'
-import { LogStandIn, WitnessStandIn } from '../log/standin.ts'
+import { EntryTypeRefused, LogStandIn, WitnessStandIn } from '../log/standin.ts'
 import { REPO, scratch, writeTree, type RunResult } from '../support.ts'
 
 /**
@@ -65,14 +65,23 @@ export function keyFile(directory: string, name: string, key: KeyObject): string
   return path
 }
 
+/** What a served stand-in log changes from answering every request as the log does. */
+export interface ServeLogOptions {
+  /** How many checkpoint requests the log answers before its witness has cosigned. */
+  readonly uncosignedPolls?: number
+  /** A fixed answer to an entry submission of the given key details, in place of the log's; `undefined` lets the log answer. */
+  readonly answer?: (keyDetails: string) => { readonly status: number, readonly body: string } | undefined
+}
+
 /**
  * Serve a stand-in log over HTTP, as Rekor v2 and its checkpoint distributor answer `log-release.ts`.
  * @param test - the running test.
  * @param trusted - the log and witness to serve.
- * @param options - how many checkpoint requests the log answers before its witness has cosigned.
+ * @param options - how many checkpoint requests the log answers before its witness has cosigned, and fixed answers to
+ *   entry submissions.
  * @returns the log's origin and the endpoints `log-release.ts` takes.
  */
-export async function serveLog(test: CleanupScope, trusted: Trust, options: { readonly uncosignedPolls?: number } = {}): Promise<{ readonly origin: string, readonly endpoints: LogEndpoints }> {
+export async function serveLog(test: CleanupScope, trusted: Trust, options: ServeLogOptions = {}): Promise<{ readonly origin: string, readonly endpoints: LogEndpoints }> {
   let polls = 0
   const server = createServer((request, response) => {
     const chunks: Buffer[] = []
@@ -80,7 +89,23 @@ export async function serveLog(test: CleanupScope, trusted: Trust, options: { re
     request.on('end', () => {
       const url = new URL(request.url ?? '/', 'http://stand-in')
       if (url.pathname === '/api/v2/log/entries') {
-        const logIndex = trusted.log.submit(readEntryRequest(Buffer.concat(chunks)))
+        const parsed = readEntryRequest(Buffer.concat(chunks))
+        const forced = options.answer?.(parsed.hashedRekordRequestV002.signature.verifier.keyDetails)
+        if (forced !== undefined) {
+          trusted.log.submitted.push(parsed.hashedRekordRequestV002.signature.verifier.keyDetails)
+          response.writeHead(forced.status, { 'content-type': 'application/json' })
+          response.end(forced.body)
+          return
+        }
+        let logIndex: number
+        try {
+          logIndex = trusted.log.submit(parsed)
+        } catch (error) {
+          if (!(error instanceof EntryTypeRefused)) throw error
+          response.writeHead(400, { 'content-type': 'application/json' })
+          response.end(JSON.stringify({ code: 3, message: 'invalid hashedrekord request', details: [] }))
+          return
+        }
         response.writeHead(200, { 'content-type': 'application/json' })
         response.end(JSON.stringify({ ...(logIndex === 0 ? {} : { logIndex: String(logIndex) }), kindVersion: { kind: 'hashedrekord', version: '0.0.2' }, canonicalizedBody: trusted.log.body(logIndex).toString('base64') }))
       } else if (url.pathname === '/checkpoint') {

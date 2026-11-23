@@ -65,6 +65,7 @@ describe('draft-root', CHILD_PROCESS_TIMEOUT, () => {
         '--log-origin', 'log.example.test',
         '--log-vkey', verifierKey('log.example.test', NOTE_ED25519, log),
         '--witness', verifierKey('witness.example.test', NOTE_COSIGNATURE, witness),
+        '--log-entry-key', `PKIX_ED25519_PH=${publicPem(directory, 'targets.pub.pem', keys.targets)}`,
         '--days', '90',
       ],
     }

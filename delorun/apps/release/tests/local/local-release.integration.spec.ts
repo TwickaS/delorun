@@ -4,7 +4,7 @@
  * with the timestamp moving to the second, and every refusal leaves the channel serving what it served before.
  */
 import { execFileSync } from 'node:child_process'
-import { createHash } from 'node:crypto'
+import { createHash, generateKeyPairSync } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { devNull } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -18,11 +18,13 @@ import { PRODUCTION_KEYS_PATH, PRODUCTION_KEYS_SCHEMA, readProductionKeys, readP
 import { publicKeyEntry } from '@delorun/release-formats/sign/envelope'
 import { verifySignedManifest, trustRootChain, verifyFileList, verifyPacks, verifyTimestamp } from '@delorun/release-formats/sign/verify'
 import { readBundle, verifyBundle } from '@delorun/release-formats/log/bundle'
+import { entryKeyId } from '@delorun/release-formats/log/entry-keys'
 import { checkPacksBundle } from '@delorun/release-verify/bundle'
 import { buildPackArchive } from '@delorun/release-formats/packs/archive'
 import { readEnvelope } from '@delorun/release-formats/sign/schemas'
 import { verifyChannel } from '../../scripts/cut-rc.ts'
 import { REPO, scratch } from '../support.ts'
+import { listedEntryKey, rootFile } from '../sign/fixture.ts'
 import { fixtureClosure, keyFile, serveLog, trust, type Trust } from './support.ts'
 
 const COMMIT = 'a'.repeat(40)
@@ -286,6 +288,22 @@ describe('a local release', () => {
       await expect(buildLocalRelease(await request(test, directory, trusted, '0.1.0', { productionKeys: listing(id(trusted.keys[role])), closures })))
         .rejects.toThrow(`${PRODUCTION_REFUSAL}: root 1 lists the production key ${id(trusted.keys[role])} in roles.${role}`)
     }
+    expect(built).toBe(false)
+    expect(existsSync(join(directory, 'channel'))).toBe(false)
+  })
+
+  it('local-release-refuses-production-log-entry-key: refuses an ECDSA log-entry key the registry lists, and a root listing it in logEntryKeys', async (test) => {
+    const directory = scratch(test)
+    let built = false
+    const closures = (): Promise<void> => { built = true; return Promise.resolve() }
+    const ecdsa = generateKeyPairSync('ec', { namedCurve: 'prime256v1' }).privateKey
+    const keyid = entryKeyId(ecdsa)
+    const trusted = trust()
+    await expect(buildLocalRelease(await request(test, directory, trusted, '0.1.0', { productionKeys: listing(keyid), logEntryKeys: [{ keyDetails: 'PKIX_ECDSA_P256_SHA_256', key: ecdsa }], closures })))
+      .rejects.toThrow(`${PRODUCTION_REFUSAL}: the PKIX_ECDSA_P256_SHA_256 log-entry key ${keyid} is a production key`)
+    const listingRoot = rootFile(trusted.keys, { log: { origin: trusted.log.origin, vkey: trusted.log.vkey }, witnesses: { keys: [{ name: trusted.witness.name, vkey: trusted.witness.vkey }], threshold: 1 }, logEntryKeys: [listedEntryKey('PKIX_ECDSA_P256_SHA_256', ecdsa), listedEntryKey('PKIX_ED25519_PH', trusted.keys.targets)] })
+    await expect(buildLocalRelease(await request(test, directory, { ...trusted, root: listingRoot.bytes }, '0.1.0', { productionKeys: listing(keyid), closures })))
+      .rejects.toThrow(`${PRODUCTION_REFUSAL}: root 1 lists the production key ${keyid} in logEntryKeys[0]`)
     expect(built).toBe(false)
     expect(existsSync(join(directory, 'channel'))).toBe(false)
   })

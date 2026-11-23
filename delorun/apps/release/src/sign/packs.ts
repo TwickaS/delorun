@@ -1,8 +1,8 @@
 /**
  * Signing a release's packs file (contract C2): the release workflow writes `delorun-<version>.packs.json` unsigned,
  * naming every pack archive with its digests; signing binds it to the manifest by digest, checks each archive in the
- * release directory against the file, signs it with the targets key, and writes the log entry request that a second
- * release-log record needs. A release with no packs file has no packs.
+ * release directory against the file, signs it with the targets key, and writes the log entry requests that a second
+ * release-log record needs, one per log-entry key in the order the logging step tries them. A release with no packs file has no packs.
  *
  * @module @delorun/release/sign/packs
  */
@@ -14,6 +14,7 @@ import { signEnvelope } from '@delorun/release-formats/sign/envelope'
 import { toJsonValue } from '@delorun/release-formats/sign/json'
 import { readEnvelope } from '@delorun/release-formats/sign/schemas'
 import { entryRequest } from '@delorun/release-formats/log/entry'
+import type { LogEntrySigner } from '@delorun/release-formats/log/entry-keys'
 import { packsEntryName, packsName } from '@delorun/release-formats/log/bundle'
 
 /** The files signing adds for the packs, by name. */
@@ -25,11 +26,14 @@ export type PackOutputs = ReadonlyArray<readonly [string, string | Buffer]>
  * @param version - the release version.
  * @param manifestBytes - the signed manifest file's bytes, whose SHA-256 the packs file names.
  * @param key - the targets private key.
- * @returns the signed packs file and its log entry request, or nothing when the release has no packs file.
+ * @param signers - the log-entry keys that sign the packs file's entry requests, in the order the logging step tries
+ *   them (`entrySigners` of `log/entry-keys`); the targets key as an Ed25519ph entry key by default.
+ * @returns the signed packs file and its log entry requests, named by {@link packsEntryName} in that order, or nothing
+ *   when the release has no packs file.
  * @throws Error when the file does not read, is for another release, or a pack archive it names is absent or differs
  * from its length or digests.
  */
-export async function signPacks(directory: string, version: string, manifestBytes: Uint8Array, key: KeyObject): Promise<PackOutputs> {
+export async function signPacks(directory: string, version: string, manifestBytes: Uint8Array, key: KeyObject, signers: readonly LogEntrySigner[] = [{ keyDetails: 'PKIX_ED25519_PH', key }]): Promise<PackOutputs> {
   const path = join(directory, packsName(version))
   if (!existsSync(path)) return []
   const draft = readEnvelope('packs', await readFile(path))
@@ -48,6 +52,6 @@ export async function signPacks(directory: string, version: string, manifestByte
   }
   const text = Buffer.from(`${JSON.stringify(signEnvelope({ signed: toJsonValue(signed), signatures: [] }, [key]), undefined, 2)}\n`)
   readEnvelope('packs', text)
-  const request = Buffer.from(`${JSON.stringify(entryRequest(text, key), undefined, 2)}\n`)
-  return [[packsName(version), text], [packsEntryName(version), request]]
+  const requests = signers.map((signer, position) => [packsEntryName(version, position), Buffer.from(`${JSON.stringify(entryRequest(text, signer.key, signer.keyDetails), undefined, 2)}\n`)] as const)
+  return [[packsName(version), text], ...requests]
 }

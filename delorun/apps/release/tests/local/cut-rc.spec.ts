@@ -52,7 +52,7 @@ describe('cut-rc plan', () => {
     for (const version of ['0.1.0-preview.1', '0.1.0-preview.2', '0.1.0-rc.1']) {
       const request = parseCutArgs(['--version', version, ...BASE.slice(2)])
       expect(localReleaseArgs(request)).toContain('--notes')
-      expect(planSteps(request).map(step => step.id)).toEqual(['tree', 'changelog', 'highlights', 'clear-stages', 'closure', 'sign', 'verify', 'smoke'])
+      expect(planSteps(request).map(step => step.id)).toEqual(['tree', 'probe', 'changelog', 'highlights', 'clear-stages', 'closure', 'sign', 'verify', 'smoke'])
     }
   })
 
@@ -85,7 +85,7 @@ describe('cut-rc plan', () => {
   })
 
   it('plans the highlights step and drops the build steps with --closures-from', () => {
-    expect(planSteps(parseCutArgs([...BASE, '--closures-from', '/x'])).map(step => step.id)).toEqual(['tree', 'changelog', 'highlights', 'sign', 'verify', 'smoke'])
+    expect(planSteps(parseCutArgs([...BASE, '--closures-from', '/x'])).map(step => step.id)).toEqual(['tree', 'probe', 'changelog', 'highlights', 'sign', 'verify', 'smoke'])
   })
 
   it('ends with the installed-release smoke against the channel, within its budget, unless --no-smoke', () => {

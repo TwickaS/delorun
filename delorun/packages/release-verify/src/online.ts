@@ -263,6 +263,11 @@ async function guarded<T>(call: () => Promise<T>, signal: AbortSignal): Promise<
 export async function checkOnline(input: OnlineCheckInput): Promise<OnlineVerdict> {
   const signal = input.signal ?? AbortSignal.timeout(ONLINE_CHECK_DEADLINE_SECONDS * 1000)
   const notices: string[] = []
+  // A bundle that verified in an earlier log the root lists is not checked against the current log, which holds no
+  // entry of it: the release stays `unchecked` until it updates to a release logged in the current log.
+  if (input.bundle.checkpoint.origin !== input.root.log.origin) {
+    return { ok: false, kind: 'unreachable', detail: `the release is logged in ${JSON.stringify(input.bundle.checkpoint.origin)}, an earlier log the trusted root lists, and the online check reads only the current log ${JSON.stringify(input.root.log.origin)}`, notices }
+  }
   const answer = await guarded(() => input.transport.latestCheckpoint(signal), signal)
   if (!answer.ok) return { ok: false, kind: 'unreachable', detail: `the release log gave no checkpoint (${reasonOf(answer.error)})`, notices }
   const note = answer.value

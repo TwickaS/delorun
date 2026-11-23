@@ -31,6 +31,7 @@ import {
   RELEASE_SCHEMAS,
   RELEASE_SUMMARY_MAX_LENGTH,
   type FileRef,
+  type KeyId,
   type ReleaseManifest,
   type RootMetadata,
   type RuntimePlatform,
@@ -42,9 +43,9 @@ import { brandString } from '@deepseek-ai/dsh-brand'
 import { semanticVersion, sha256Hex } from '@delorun/release-formats/brands'
 import { closureFileNames } from '../closure/tree.ts'
 import { homePathProblems, refuseHomePaths, type BuilderIdentity } from '@delorun/release-formats/gate/home-paths'
-import { logEntryName, packsLogName, packsName } from '@delorun/release-formats/log/bundle'
-import { logRelease, type LogEndpoints } from '../log/client.ts'
-import { entryRequest, readEntryRequest } from '@delorun/release-formats/log/entry'
+import { logEntryName, packsEntryName, packsLogName, packsName } from '@delorun/release-formats/log/bundle'
+import { logWithFallback, type LogEndpoints } from '../log/client.ts'
+import { entryKeyId, entrySigners, type LogEntrySigner } from '@delorun/release-formats/log/entry-keys'
 import { publicKeyEntry, signEnvelope } from '@delorun/release-formats/sign/envelope'
 import { toJsonValue } from '@delorun/release-formats/sign/json'
 import { LOCAL_RELEASE_BUILDER, ManifestSchema, readEnvelope, ReleaseSummarySchema } from '@delorun/release-formats/sign/schemas'
@@ -95,6 +96,12 @@ export interface LocalReleaseRequest {
   readonly targetsKey: KeyObject
   /** The timestamp private key. */
   readonly timestampKey: KeyObject
+  /**
+   * Log-entry private keys besides the targets key, each with its entry key type, such as an ECDSA P-256 key the newest
+   * root lists in `logEntryKeys`. The entry is signed with the root's listed `active` keys in the root's order, each that
+   * the targets key or one of these belongs to, moving to the next only when the log refuses the entry's key type.
+   */
+  readonly logEntryKeys?: readonly LogEntrySigner[]
   /** The production trust material, which none of {@link roots}, {@link targetsKey} and {@link timestampKey} may be. */
   readonly productionKeys: ProductionKeys
   /** The runtime platforms the release carries and its manifest lists, at least one, each once. */
@@ -118,7 +125,7 @@ export interface LocalReleaseRequest {
    * signing is refused before anything is signed (`@delorun/release-formats/gate/home-paths`).
    */
   readonly allowBuilderPaths?: boolean
-  /** Receives each warning of an allowed build; `console.warn` by default. */
+  /** Receives each warning of an allowed build and each log-entry key type the log refused; `console.warn` by default. */
   readonly warn?: (line: string) => void
   /** The user the scan looks for in the closure files; this computer's user by default. */
   readonly builder?: BuilderIdentity
@@ -200,7 +207,7 @@ function refuseProductionRoots(request: LocalReleaseRequest): void {
 }
 
 /**
- * Refuse a root that lists a production key, and a targets or timestamp key that is one.
+ * Refuse a root that lists a production key, and a targets, timestamp or log-entry key that is one.
  * @param request - the keys and the registry.
  * @param roots - the request's roots, read.
  * @throws Error naming the first production key found and where.
@@ -209,6 +216,10 @@ function refuseProductionKeys(request: LocalReleaseRequest, roots: readonly Root
   for (const [role, key] of [['targets', request.targetsKey], ['timestamp', request.timestampKey]] as const) {
     const keyid = publicKeyEntry(key).keyid
     if (request.productionKeys.keyids.has(keyid)) throw new Error(`${PRODUCTION_REFUSAL}: the ${role} key ${keyid} is a production key`)
+  }
+  for (const signer of request.logEntryKeys ?? []) {
+    const keyid = brandString<KeyId>(entryKeyId(signer.key))
+    if (request.productionKeys.keyids.has(keyid)) throw new Error(`${PRODUCTION_REFUSAL}: the ${signer.keyDetails} log-entry key ${keyid} is a production key`)
   }
   for (const root of roots) {
     for (const { keyid, where } of rootKeyIds(root)) {
@@ -260,6 +271,11 @@ export async function buildLocalRelease(request: LocalReleaseRequest): Promise<L
   if (!active.some(key => key.keyid === targets)) {
     throw new Error(`the targets key ${targets} is not the active targets key of root ${String(newest.metadata.version)}, so no client would accept what it signs`)
   }
+  const signers = entrySigners(newest.metadata, [...request.logEntryKeys ?? [], { keyDetails: 'PKIX_ED25519_PH', key: request.targetsKey }])
+  if (signers.length === 0) {
+    const what = newest.metadata.logEntryKeys === undefined ? 'lists no logEntryKeys' : 'lists neither a --log-entry-key nor the targets key as an active log-entry key'
+    throw new Error(`root ${String(newest.metadata.version)} ${what}, so no log entry of this release could verify`)
+  }
   // The work directory is renamed into place, so it lies on the channel's filesystem.
   await mkdir(join(request.channel, 'releases', 'download'), { recursive: true })
   await mkdir(join(request.channel, 'root'), { recursive: true })
@@ -288,19 +304,20 @@ export async function buildLocalRelease(request: LocalReleaseRequest): Promise<L
     const manifest = localManifest(request, runtime, request.notes === undefined ? undefined : await refOf(work, notesName))
     const manifestName = `delorun-${request.version}.manifest.json`
     const manifestBytes = Buffer.from(`${JSON.stringify(signEnvelope({ signed: toJsonValue(manifest), signatures: [] }, [request.targetsKey]), undefined, 2)}\n`)
-    const entry = entryRequest(manifestBytes, request.targetsKey)
-    const bundle = await logRelease(request.log, newest.metadata, manifestName, manifestBytes, request.version, entry, request.logAttempts, request.logWait)
+    const warn = request.warn ?? console.warn
+    const logged = await logWithFallback(request.log, newest.metadata, manifestName, manifestBytes, request.version, signers, request.logAttempts, request.logWait, 'manifest', warn)
     await writeFile(join(work, manifestName), manifestBytes)
-    await writeFile(join(work, logEntryName(request.version)), `${JSON.stringify(entry, undefined, 2)}\n`)
-    await writeFile(join(work, `delorun-${request.version}.manifest.log.json`), `${JSON.stringify(bundle, undefined, 2)}\n`)
+    await writeFile(join(work, logEntryName(request.version)), `${JSON.stringify(logged.entry, undefined, 2)}\n`)
+    await writeFile(join(work, `delorun-${request.version}.manifest.log.json`), `${JSON.stringify(logged.bundle, undefined, 2)}\n`)
     // The packs file, when the closure build wrote one, is signed against this manifest and logged as a second record, as sign/release.ts and log-release.ts do for a published release.
+    // Its entry starts from the signer the log accepted for the manifest; the entry file holds the request the log accepted.
     const packOutputs = await signPacks(work, request.version, manifestBytes, request.targetsKey)
     if (packOutputs.length > 0) {
       const packs = packOutputs.find(([name]) => name === packsName(request.version))![1]
-      const packsEntry = packOutputs.find(([name]) => name !== packsName(request.version))![1]
-      const packsBundle = await logRelease(request.log, newest.metadata, packsName(request.version), Buffer.from(packs), request.version, readEntryRequest(Buffer.from(packsEntry)), request.logAttempts, request.logWait, 'packs')
-      for (const [name, bytes] of packOutputs) await writeFile(join(work, name), bytes)
-      await writeFile(join(work, packsLogName(request.version)), `${JSON.stringify(packsBundle, undefined, 2)}\n`)
+      const packsLogged = await logWithFallback(request.log, newest.metadata, packsName(request.version), Buffer.from(packs), request.version, signers.slice(logged.signer), request.logAttempts, request.logWait, 'packs', warn)
+      await writeFile(join(work, packsName(request.version)), packs)
+      await writeFile(join(work, packsEntryName(request.version)), `${JSON.stringify(packsLogged.entry, undefined, 2)}\n`)
+      await writeFile(join(work, packsLogName(request.version)), `${JSON.stringify(packsLogged.bundle, undefined, 2)}\n`)
     }
     const state = existsSync(request.state) ? readTimestampState(await readFile(request.state)) : initialState(roots[0]!)
     const manifestFile = { name: manifestName, bytes: manifestBytes }

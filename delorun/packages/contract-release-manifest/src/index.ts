@@ -154,6 +154,16 @@ export interface LogIdentity {
   readonly vkey: string
 }
 
+/** A log a root lists in `logs` (contract C18). */
+export interface ListedLog extends LogIdentity {
+  /**
+   * For a log other than the root's current `log`, the last Delorun version whose bundle may be in it: a bundle of a
+   * later release in that log is refused, so only the current log takes new releases. Every other listed log carries
+   * it; the current log carries none.
+   */
+  readonly lastRelease?: SemanticVersion
+}
+
 /** One witness verifier key (contract C18). */
 export interface WitnessKey {
   /** The witness's name, as its verifier key names it. */
@@ -168,6 +178,27 @@ export interface WitnessSet {
   readonly keys: readonly WitnessKey[]
   /** Distinct listed witnesses that must cosign a checkpoint. */
   readonly threshold: number
+}
+
+/**
+ * A log-entry key's status, as a targets key's: `active` signs new log entries, `retired` verifies only the entries of
+ * releases at most `lastRelease`, and `revoked` verifies nothing.
+ */
+export type LogEntryKeyStatus = 'active' | 'retired' | 'revoked'
+
+/**
+ * One key the root trusts to sign release log entries (contract C18), with the entry key type it signs under. The key
+ * signs log entries only: it is not in {@link RootMetadata.keys}, so no role can sign a metadata envelope with it.
+ */
+export interface LogEntryKey {
+  /** The Rekor v2 `keyDetails` an entry signed by this key carries, such as `PKIX_ED25519_PH`. */
+  readonly keyDetails: string
+  /** The public key, base64 DER (PKIX SubjectPublicKeyInfo), byte for byte as a log entry's verifier carries it. */
+  readonly public: string
+  /** What the key may still verify. */
+  readonly status: LogEntryKeyStatus
+  /** For a `retired` key, the last Delorun version whose entry it signed. */
+  readonly lastRelease?: SemanticVersion
 }
 
 /** `root/<n>.root.json`: every role's keys, signed by the root role. */
@@ -189,8 +220,19 @@ export interface RootMetadata {
     readonly timestamp: RoleKeys
     readonly catalogue: RoleKeys
   }
-  /** The release log's identity. */
+  /** The release log's identity: the log new releases are logged in and the online check reads. */
   readonly log: LogIdentity
+  /**
+   * Every log whose checkpoints verify a release's bundle, `log` among them, so a release logged in an earlier log
+   * (such as a previous Rekor shard) still verifies after a rotation moves `log`, up to that log's `lastRelease`. A root
+   * without it trusts no log; it is optional only so that the root chain can read `1.root.json`, which predates it.
+   */
+  readonly logs?: readonly ListedLog[]
+  /**
+   * The keys trusted to sign release log entries, each with its entry key type, in the order the signing tool tries
+   * them. A root without it verifies no release; it is optional only so that the root chain can read `1.root.json`.
+   */
+  readonly logEntryKeys?: readonly LogEntryKey[]
   /** The witnesses clients require. */
   readonly witnesses: WitnessSet
 }
