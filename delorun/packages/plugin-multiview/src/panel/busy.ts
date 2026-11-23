@@ -1,6 +1,7 @@
 /**
  * When Multiview must not rearrange by itself: while the pointer is down in the layout (a drag of a pane or a divider, a text
- * selection) or while the person is typing in a pane. Typing counts from a key that writes text in a text field until a short
+ * selection; until it is released, its capture is lost, the window loses focus, or ten seconds pass) or while the person is typing
+ * in a pane. Typing counts from a key that writes text in a text field until a short
  * pause; a focused field the person is not typing in does not hold the layout, and neither does a key chord with Ctrl, Alt or
  * Meta, so the layout keys still act at once.
  * @module @delorun/plugin-multiview/panel/busy
@@ -10,6 +11,12 @@ import { useEffect, useState, type RefObject } from 'react'
 
 /** How long after the last key typed in a text field the layout stays held, in milliseconds. */
 export const TYPING_HOLD_MS = 1500
+
+/**
+ * The longest a pointer held down holds the layout, in milliseconds: a release the page never hears (the pointer let go outside
+ * the window, a capture taken away) must not freeze the layout.
+ */
+export const POINTER_HOLD_MS = 10_000
 
 /**
  * Report whether an element takes typed text.
@@ -36,9 +43,19 @@ export function useBusy(root: RefObject<HTMLElement | null>): boolean {
     const element = root.current
     if (element === null) return undefined
     const document = element.ownerDocument
+    const view = document.defaultView
     let timer: ReturnType<typeof setTimeout> | undefined
-    const onDown = (): void => { setPointer(true) }
-    const onUp = (): void => { setPointer(false) }
+    let pointerTimer: ReturnType<typeof setTimeout> | undefined
+    const onUp = (): void => {
+      if (pointerTimer !== undefined) clearTimeout(pointerTimer)
+      pointerTimer = undefined
+      setPointer(false)
+    }
+    const onDown = (): void => {
+      setPointer(true)
+      if (pointerTimer !== undefined) clearTimeout(pointerTimer)
+      pointerTimer = setTimeout(onUp, POINTER_HOLD_MS)
+    }
     const onKey = (event: KeyboardEvent): void => {
       if (event.ctrlKey || event.metaKey || event.altKey || !isTextField(event.target)) return
       setTyping(true)
@@ -54,13 +71,18 @@ export function useBusy(root: RefObject<HTMLElement | null>): boolean {
     element.addEventListener('pointerdown', onDown, true)
     document.addEventListener('pointerup', onUp, true)
     document.addEventListener('pointercancel', onUp, true)
+    document.addEventListener('lostpointercapture', onUp, true)
+    view?.addEventListener('blur', onUp)
     element.addEventListener('keydown', onKey, true)
     element.addEventListener('focusout', onBlur, true)
     return () => {
       if (timer !== undefined) clearTimeout(timer)
+      if (pointerTimer !== undefined) clearTimeout(pointerTimer)
       element.removeEventListener('pointerdown', onDown, true)
       document.removeEventListener('pointerup', onUp, true)
       document.removeEventListener('pointercancel', onUp, true)
+      document.removeEventListener('lostpointercapture', onUp, true)
+      view?.removeEventListener('blur', onUp)
       element.removeEventListener('keydown', onKey, true)
       element.removeEventListener('focusout', onBlur, true)
     }

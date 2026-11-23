@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, renderHook } from '@testing-library/react'
 import { useRef, type JSX } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { TYPING_HOLD_MS, isTextField, useBusy, useHeld } from '../../src/panel/busy.ts'
+import { POINTER_HOLD_MS, TYPING_HOLD_MS, isTextField, useBusy, useHeld } from '../../src/panel/busy.ts'
 
 beforeEach(() => { vi.useFakeTimers() })
 afterEach(() => {
@@ -28,6 +28,21 @@ describe('what holds the layout', () => {
     fireEvent.pointerDown(button)
     expect(seen.at(-1)).toBe(true)
     fireEvent.pointerUp(document.body)
+    expect(seen.at(-1)).toBe(false)
+  })
+
+  it('lets go of a held pointer when the window loses focus, the capture is lost, or after ten seconds', () => {
+    const { seen, button } = setup()
+    fireEvent.pointerDown(button)
+    fireEvent.blur(window)
+    expect(seen.at(-1)).toBe(false)
+    fireEvent.pointerDown(button)
+    fireEvent(button, new Event('lostpointercapture', { bubbles: true }))
+    expect(seen.at(-1)).toBe(false)
+    fireEvent.pointerDown(button)
+    act(() => { vi.advanceTimersByTime(POINTER_HOLD_MS - 1) })
+    expect(seen.at(-1)).toBe(true)
+    act(() => { vi.advanceTimersByTime(1) })
     expect(seen.at(-1)).toBe(false)
   })
 
