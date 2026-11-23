@@ -8,9 +8,9 @@ description: "Why Delorun: what the open-source coding agent studio built on Dee
 
 ## Summary
 
-Delorun is an open-source coding agent studio built on DeepSeek Harness, for open models, in your browser, on your desktop\* and on your phone. This page is for developers comparing coding agents: what you get, what Delorun changes from DeepSeek Harness, how it compares with six other tools, and when one of them fits better. Each claim links to the page that holds its detail and limits. Delorun is a preview that runs on Linux and on Windows through WSL2 ([Known issues](help/known-issues.zh.md#where-delorun-runs)).
+Delorun is an open-source coding agent studio built on DeepSeek Harness, for open models, in your browser and on your phone. A Windows desktop app is in preview and not out yet.
 
-\* Windows preview, unsigned.
+This page is for people comparing Delorun with other coding agents: what you get, what Delorun changes from DeepSeek Harness, how it compares with six other tools, and when one of them fits better. Each claim links to the page that holds its detail and limits. Delorun is a preview that runs on Linux and on Windows through WSL2 ([Known issues](help/known-issues.zh.md#where-delorun-runs)).
 
 ## Contents
 
@@ -26,7 +26,7 @@ Delorun is an open-source coding agent studio built on DeepSeek Harness, for ope
 
 ### Web first, phone included
 
-The whole studio is a web page, so it works wherever a browser does. The [studio](../reference/glossary.zh.md#studio) runs on your own computer and opens in any browser, and the desktop app is the same studio in its own window. On a phone there is no app to download: open the studio's address in the phone's browser, or choose **Add to Home screen** to install it. The phone reaches your computer over your own Tailscale network, with no Delorun service in between, once you approve it at your computer ([Reach the studio from your phone](everyday-use/reach.zh.md)). It is the same studio there, though a few steps, such as approving a new device, stay at your computer ([what a phone can and cannot do](everyday-use/reach.zh.md#what-an-approved-phone-can-and-cannot-do)).
+The whole studio is a web page, so it works wherever a browser does. The [studio](../reference/glossary.zh.md#studio) runs on your own computer and opens in any browser. A Windows desktop app, the same studio in its own window, is in preview and not out yet ([Roadmap](roadmap.zh.md#next)). On a phone there is no app to download: open the studio's address in the phone's browser, or choose **Add to Home screen** to install it. The phone reaches your computer over your own Tailscale network, with no Delorun service in between, once you approve it at your computer ([Reach the studio from your phone](everyday-use/reach.zh.md)). It is the same studio there, though a few steps, such as approving a new device, stay at your computer ([what a phone can and cannot do](everyday-use/reach.zh.md#what-an-approved-phone-can-and-cannot-do)).
 
 ![Three tracks on one bench, each carrying a sealed capsule from a phone to a computer: one runs straight through past a counter, one stops in a station under a reader head, and one passes through a closed tunnel.](pictures/reach-paths.svg)
 
@@ -36,6 +36,7 @@ The picture shows who stands between your phone and your computer.
 2. **A hosted service in the middle.** Some tools send the phone through a service their maker runs. What that service can see depends on the service, so read its own page.
 3. **The Delorun relay, planned.** For reach without Tailscale, the relay is designed as a closed tunnel that passes encrypted traffic it cannot read. It is not built; the [roadmap](roadmap.zh.md#next) says where it stands.
 
+### Asks first, keeps a way back
 
 Delorun shows you what is about to happen, and keeps a way back.
 
@@ -99,7 +100,7 @@ Checked on 2026-11-22 against each maker's own pages. "Not verified" means those
 
 | Tool | Runs on | On a phone | Models | Open source | Safety controls |
 | --- | --- | --- | --- | --- | --- |
-| Delorun | Web studio in any browser; Windows desktop app: in preview, not out yet\*; its home on Linux and WSL2 | The phone's browser, over your own Tailscale; installs from the browser | DeepSeek first; other providers; any OpenAI-compatible endpoint | Yes, MIT | Consents on by default, sandbox, signed releases, updates that roll back |
+| Delorun | Web studio in any browser; Windows desktop app: in preview, not out yet; its home on Linux and WSL2 | The phone's browser, over your own Tailscale; installs from the browser | DeepSeek first; other providers; any OpenAI-compatible endpoint | Yes, MIT | Consents on by default, sandbox, signed releases, updates that roll back |
 | DeepSeek Harness | Desktop app (macOS, Windows), terminal, local web UI | Not verified | DeepSeek, plus other providers | Yes, MIT | Approvals under a permission policy; default not verified |
 | T3 Code | Desktop app, web app, your own server | iOS and Android apps, hosted web app | Those of the agents it runs | Yes, MIT | Four permission modes, starting on Full access; optional git worktree per thread |
 | Claude Code | Terminal, IDE extensions, desktop app, web | Claude mobile app, for cloud sessions and Remote Control | Claude models | No | Permission modes; system sandbox available, off by default; cloud sessions in a managed VM |
@@ -131,7 +132,7 @@ Checked on 2026-11-22 against each maker's own pages. "Not verified" means those
 ## Try it
 
 ```sh
-npx delorun@latest
+npx delorun
 ```
 
 The command downloads Delorun, checks it and asks a few setup questions; [Install and first run](get-started/install.zh.md) walks through them. The source is at [github.com/twickas/delorun](https://github.com/twickas/delorun).

@@ -1,10 +1,10 @@
 {
   "title": "Help",
   "pages": [
+    "questions",
     "troubleshooting",
     "known-issues",
     "logs",
-    "questions",
     "[Glossary](/reference/glossary)"
   ]
 }

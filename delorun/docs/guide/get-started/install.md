@@ -27,7 +27,7 @@ Delorun is an agent harness that you shape to your own work. It is built on [Dee
 
 ## Before you start
 
-- **A supported computer.** Linux on x64, or Windows through WSL2 ([Windows through WSL2](#windows-through-wsl2)). Delorun does not run on Linux on ARM (arm64), on native Windows or on macOS ([Roadmap](../roadmap.md)).
+- **A supported computer.** Linux on x64, or Windows through WSL2 ([Windows through WSL2](#windows-through-wsl2)). Delorun does not run on Linux on ARM (arm64), on native Windows or on macOS ([Known issues](../help/known-issues.md#where-delorun-runs)).
 - **[Node.js](https://nodejs.org) 24.9 or newer.** The `delorun` command is a Node program, so it needs Node every time it starts, not only to install it. Check with `node --version`. If you have no Node, or an older one, use one of the official ways to install Node on [nodejs.org](https://nodejs.org/en/download). Ubuntu's own package for Node is far older (Ubuntu 24.04 offers Node 18), so `apt` does not give you a Node that works.
 - **bubblewrap, on Linux and in WSL2.** It is the program that confines the commands a chat runs. Install the `bubblewrap` package with your system's package manager. Without it, Delorun refuses every command on a computer that has a login session or a program such as tmux running, and `delorun doctor` shows `fail sandbox` ([What Delorun protects](../safety-and-updates/safety.md#the-sandbox)).
 - **A model key.** A key is a secret text that lets Delorun use an AI model on your account. The company or server that runs the model is the [model provider](../../reference/glossary.md#provider). The default is a DeepSeek API key. Other providers work too ([Model providers](providers.md)). Setup does not ask for it: the studio does, the first time it opens, and you can add it later.
@@ -98,11 +98,11 @@ Keep your projects inside the Ubuntu home folder, such as `~/projects`, because 
 Before it installs anything, the launcher proves the download is the release the maintainer published. It prints each check:
 
 ```text
-Resolving the release: the stable channel names 0.1.0-preview.2.1.
-Checking the signature: 0.1.0-preview.2.1 is signed under release root 1.
+Resolving the release: the stable channel names <version>.
+Checking the signature: <version> is signed under release root 1.
 Checking the release log: verified.
-Downloading delorun-0.1.0-preview.2.1-linux-x64.tar.gz (…).
-Installing release 0.1.0-preview.2.1.
+Downloading delorun-<version>-linux-x64.tar.gz (…).
+Installing release <version>.
 ```
 
 - **Channel.** A preview is published on the channel named `stable`, so the first line says so.
@@ -165,7 +165,7 @@ Studio: http://127.0.0.1:3080
 
 Next:
   1. Install the delorun command, which npx does not keep:
-     npm install -g delorun@0.1.0-preview.2.1
+     npm install -g delorun@<version>
   2. Add your model key in the studio (the welcome screen asks for it), or run delorun setup key.
   3. Start Delorun and open the studio: delorun
      Send a first message in a new chat. The install guide's section on your first chat walks through it: https://docs.delorun.com/guide/get-started/install#the-studio-and-your-first-chat

@@ -356,12 +356,22 @@ function renderCompared(data: ChangelogData): string {
 }
 
 /**
+ * The line under the changelog's title that says earlier versions were not public.
+ * @param data - the data file.
+ * @returns the sentence, naming the first public version; undefined when `publicFrom` is absent and every version is public.
+ */
+export function privatePreviewNote(data: ChangelogData): string | undefined {
+  return data.publicFrom === undefined ? undefined : `Versions before ${data.publicFrom} were private previews and are not listed.`
+}
+
+/**
  * `CHANGELOG.md`, rendered from the data. The file equals this text exactly.
  * @param data - the data file.
- * @returns the document: the title, the standing comparison, then every version newest first.
+ * @returns the document: the title, the private-preview note when `publicFrom` is set, the standing comparison, then every public version newest first.
  */
 export function renderChangelog(data: ChangelogData): string {
-  return ['# Changelog', '', renderCompared(data), ...publicVersions(data).map(renderEntry)].join('\n')
+  const note = privatePreviewNote(data)
+  return ['# Changelog', '', ...note === undefined ? [] : [note, ''], renderCompared(data), ...publicVersions(data).map(renderEntry)].join('\n')
 }
 
 /**

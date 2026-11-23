@@ -4,7 +4,7 @@
 
 > 英文页面是当前版本；本页可能落后于它。
 
-Delorun 的文档、skill、界面文案与拉取请求所用的词，每个概念只用一个规范术语。本页扩展了上游的[术语表](../../../docs/glossary.zh.md)；上游术语表定义 harness 自身的术语（agent、session、turn、step、tool、preset、plugin、bundle、profile），本页只定义 Delorun 新增的概念。
+Delorun 的文档、skill、界面文案与拉取请求所用的词，每个概念只用一个规范术语。本页扩展了上游的[术语表](../../../docs/glossary.zh.md)（在 GitHub 上）；上游术语表定义 harness 自身的术语（agent、session、turn、step、tool、preset、plugin、bundle、profile），本页只定义 Delorun 新增的概念。
 
 每个条目以一句平实的话开头，必要时再补充技术说明，并在二者不同时给出代码所用的名称。界面文本使用该术语；代码与维护者文档可以用反引号加上代码名称。引入新概念的拉取请求须在同一次提交中新增该概念的条目。
 

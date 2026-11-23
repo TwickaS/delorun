@@ -3,6 +3,7 @@
   "pages": [
     "install",
     "providers",
+    "---从 DeepSeek 迁移---",
     "switching",
     "import-deepseek-chats"
   ]

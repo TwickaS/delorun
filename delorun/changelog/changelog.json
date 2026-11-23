@@ -1274,7 +1274,7 @@
     {
       "area": "Studio",
       "section": "Changed",
-      "text": "The version line at the end of Settings → General → Updates names Delorun's version alone, for example \"Delorun 0.1.0-preview.1\", or \"Delorun source build\" from a checkout. Settings → About shows the Delorun version and the DeepSeek Harness version it runs on together."
+      "text": "The version line at the end of Settings → General → Updates names Delorun's version alone, for example \"Delorun 0.1.0-preview.2.6\", or \"Delorun source build\" from a checkout. Settings → About shows the Delorun version and the DeepSeek Harness version it runs on together."
     },
     {
       "area": "Studio",
@@ -1439,7 +1439,7 @@
     {
       "area": "Studio",
       "section": "Fixed",
-      "text": "In Settings → Appearance, choosing a theme tile after Custom now shows that theme. In 0.1.0-preview.1.6 the Soft tile after a custom accent, or any theme tile after a changed contrast, left the studio in Custom; the theme now also puts back Peach for Soft and the default contrast."
+      "text": "In Settings → Appearance, choosing a theme tile after Custom now shows that theme. The Soft tile after a custom accent, or any theme tile after a changed contrast, no longer leaves the studio in Custom; the theme also puts back Peach for Soft and the default contrast."
     },
     {
       "area": "Studio",
@@ -2504,7 +2504,7 @@
     {
       "area": "Plugins",
       "section": "Fixed",
-      "text": "Releases now publish their plugin packs, signed and recorded in the public release log, so Claude Code, Codex and the six optional features can be added from the setup guide; 0.1.0-preview.1.2 was built without them."
+      "text": "Releases now publish their plugin packs, signed and recorded in the public release log, so Claude Code, Codex and the six optional features can be added from the setup guide."
     },
     {
       "area": "Plugins",
@@ -2514,7 +2514,7 @@
     {
       "area": "Plugins",
       "section": "Fixed",
-      "text": "Adding Browser, Webhooks or another optional plugin from the setup guide or Plugins now loads it; in 0.1.0-preview.1.3 the download finished but the plugin could not load (`management-required` or `operation-error`)."
+      "text": "Adding Browser, Webhooks or another optional plugin from the setup guide or Plugins now loads it."
     },
     {
       "area": "Plugins",
@@ -2539,27 +2539,27 @@
     {
       "area": "Plugins",
       "section": "Fixed",
-      "text": "The Agent hooks pack's Claude Code and Codex hooks now load once added; in 0.1.0-preview.1.4 they installed but failed to load with \"Cannot find package\". Each optional pack now carries or links every package its plugins use, and a release is no longer built when a pack would miss one."
+      "text": "The Agent hooks pack's Claude Code and Codex hooks now load once added. Each optional pack now carries or links every package its plugins use, and a release is no longer built when a pack would miss one."
     },
     {
       "area": "Plugins",
       "section": "Fixed",
-      "text": "The Claude Code and Codex packs now load once added; in 0.1.0-preview.1.5 they installed but failed to load with \"Cannot find package\", because the copy Changes reviews left out the Delorun packages they share with the running release. Each pack's package.json now names every package the pack links, and a release is no longer built when the reviewed copy of a pack would miss one."
+      "text": "The Claude Code and Codex packs now load once added. The copy Changes reviews keeps the Delorun packages a pack shares with the running release. Each pack's package.json now names every package the pack links, and a release is no longer built when the reviewed copy of a pack would miss one."
     },
     {
       "area": "Plugins",
       "section": "Fixed",
-      "text": "Delorun starts again after you add an optional pack such as Browser or Webhooks; in 0.1.0-preview.1.5 the next start refused the profile, saying its plugins were not Delorun's own copy. A pack counts as Delorun's only when it loads from the signed pack the running release installed. A pack that does not load is now turned off with a reason in Plugins and home.log instead of stopping the studio, and a pack that cannot be fetched no longer blocks the start."
+      "text": "Delorun starts again after you add an optional pack such as Browser or Webhooks. A pack counts as Delorun's only when it loads from the signed pack the running release installed. A pack that does not load is now turned off with a reason in Plugins and home.log instead of stopping the studio, and a pack that cannot be fetched no longer blocks the start."
     },
     {
       "area": "Plugins",
       "section": "Fixed",
-      "text": "Browser now says \"Needs setup · Chromium download\" in Plugins when the Chromium build its Playwright expects is missing, with the command that downloads that exact build. Before, it said Browser was ready whenever Chrome was installed. A browser step that still finds the build missing fails with one short message telling the agent to stop and ask you to finish Browser setup in Plugins. In 0.1.0-preview.1.6 the agent kept trying other tools instead, at length."
+      "text": "Browser now says \"Needs setup · Chromium download\" in Plugins when the Chromium build its Playwright expects is missing, with the command that downloads that exact build. Before, it said Browser was ready whenever Chrome was installed. A browser step that still finds the build missing fails with one short message telling the agent to stop and ask you to finish Browser setup in Plugins."
     },
     {
       "area": "Plugins",
       "section": "Fixed",
-      "text": "New chats start again after you add the Browser pack and before you allow its playwright-mcp server; in 0.1.0-preview.1.6 every new chat failed with \"McpConsentRefusedError\" until the server was allowed. The chat now starts without the browser tools, home.log notes why, and the notice reads \"MCP tools are off until you allow playwright-mcp\" with the action that reviews and allows it. Once allowed, the server starts in your next new chat."
+      "text": "New chats start again after you add the Browser pack and before you allow its playwright-mcp server. The chat now starts without the browser tools, home.log notes why, and the notice reads \"MCP tools are off until you allow playwright-mcp\" with the action that reviews and allows it. Once allowed, the server starts in your next new chat."
     },
     {
       "area": "Plugins",
@@ -2629,7 +2629,7 @@
     {
       "area": "Plugins",
       "section": "Fixed",
-      "text": "`delorun plugin new` now writes `engines.delorun` as `^0.1.0-0`, so `delorun plugin check` and the installer admit the plugin on a prerelease such as 0.1.0-preview.1.18 as well as on the final release, and `--dir` creates missing parent folders such as `plugins/home`."
+      "text": "`delorun plugin new` now writes `engines.delorun` as `^0.1.0-0`, so `delorun plugin check` and the installer admit the plugin on a prerelease such as 0.1.0-preview.2.6 as well as on the final release, and `--dir` creates missing parent folders such as `plugins/home`."
     },
     {
       "area": "Plugins",

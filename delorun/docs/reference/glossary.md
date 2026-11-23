@@ -2,7 +2,7 @@
 
 English | [中文](glossary.zh.md)
 
-The words every Delorun document, skill, interface string and pull request uses, one canonical term per concept. It extends upstream's [glossary](../../../docs/glossary.md), which owns the harness's own terms (agent, session, turn, step, tool, preset, plugin, bundle, profile); this page owns what Delorun adds.
+The words every Delorun document, skill, interface string and pull request uses, one canonical term per concept. It extends upstream's [glossary](../../../docs/glossary.md) (on GitHub), which owns the harness's own terms (agent, session, turn, step, tool, preset, plugin, bundle, profile); this page owns what Delorun adds.
 
 Each entry starts with one plain-English sentence, then adds a technical note where it helps and, where they differ, the name the code uses. Interface text uses the term; code and maintainer docs may add the code name in backticks. A new concept gets its entry in the same pull request that introduces it.
 
