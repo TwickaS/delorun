@@ -2227,6 +2227,9 @@ importers:
       '@delorun/contract-update-report':
         specifier: workspace:*
         version: link:../contract-update-report
+      '@delorun/desktop-home':
+        specifier: workspace:*
+        version: link:../desktop-home
       '@delorun/external-agents':
         specifier: workspace:*
         version: link:../external-agents
@@ -2672,6 +2675,8 @@ importers:
         version: link:../contract-release-manifest
 
   delorun/packages/contract-verification-checks: {}
+
+  delorun/packages/desktop-home: {}
 
   delorun/packages/external-agents:
     dependencies:
@@ -3980,6 +3985,9 @@ importers:
       '@delorun/contract-setup-answers':
         specifier: workspace:*
         version: link:../contract-setup-answers
+      '@delorun/desktop-home':
+        specifier: workspace:*
+        version: link:../desktop-home
       '@delorun/external-agents':
         specifier: workspace:*
         version: link:../external-agents

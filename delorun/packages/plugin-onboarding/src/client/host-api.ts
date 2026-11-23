@@ -4,6 +4,7 @@
  * @module @delorun/plugin-onboarding/client/host-api
  */
 import type { z } from 'zod'
+import { atComputer } from '@delorun/desktop-home'
 import {
   AGENT_MODELS_PATH, AgentModelsAnswer, DEFER_STEP_PATH, DeferStepAnswer, KEY_TEST_PATH, KeyTestAnswer, LOCAL_MODELS_PATH, LocalModelsAnswer, READINESS_PATH, Readiness, RECOMMEND_PATH, RecommendAnswer, START_PATH, StartAnswer, WORKSPACE_NOTICE_PATH, WorkspaceNoticeAnswer,
 } from '../wire.ts'
@@ -41,6 +42,15 @@ export function isLoopbackHostname(hostname: string): boolean {
 }
 
 /**
+ * Whether the guide's page is at the person's computer: the Delorun desktop app's home kind when it reports one (its page
+ * host is `app`, which says nothing about where the person is), otherwise the page's host name as on the web. The guide
+ * only shows or hides steps by it; the home's own checks stay the authority.
+ */
+export function pageAtComputer(): boolean {
+  return atComputer(isLoopbackHostname(location.hostname))
+}
+
+/**
  * Read the studio's address over Tailscale.
  * @returns the address of the first ready option; undefined when none is ready, the route is absent or it cannot be read.
  */
@@ -63,7 +73,7 @@ export async function readReachAddress(): Promise<string | undefined> {
  *   be read, `set-up` when an option is ready, `off` otherwise.
  */
 export async function readReach(): Promise<ReachState> {
-  if (!isLoopbackHostname(location.hostname)) return 'remote'
+  if (!pageAtComputer()) return 'remote'
   try {
     const response = await fetch(REACH_STATUS_PATH.slice(1), { headers: { accept: 'application/json' } })
     if (!response.ok) return 'absent'

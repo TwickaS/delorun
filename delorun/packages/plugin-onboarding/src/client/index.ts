@@ -56,7 +56,7 @@ import { downloadBrowserShown, turnBrowserOff } from './browser-pack.ts'
 import { BrowserSettings, type BrowserSettingsInjected } from './browser/BrowserSettings.tsx'
 import { createBundleInstaller } from './bundles.ts'
 import { closeSidebarDrawer } from './focus.ts'
-import { hostApi, isLoopbackHostname, readStartId, readWorkspaceNotice } from './host-api.ts'
+import { hostApi, pageAtComputer, readStartId, readWorkspaceNotice } from './host-api.ts'
 import { createKeyStatus } from './key-status.ts'
 import { DICTIONARIES, type OnboardingLocaleKey } from './locales.ts'
 import { createProvidersFace } from './providers-face.ts'
@@ -385,7 +385,7 @@ export function applyStudio(ctx: Context): void {
     host: { reach: hostApi.reach, reachAddress: hostApi.reachAddress, defer: hostApi.defer },
     loadRecord: loadSetupRecord,
     fetch: (input, init) => globalThis.fetch(input, init),
-    atComputer: () => isLoopbackHostname(location.hostname),
+    atComputer: pageAtComputer,
     progress,
     deferredOnly,
     changed: deferredChanged,
@@ -399,7 +399,7 @@ export function applyStudio(ctx: Context): void {
       bundles: installer,
       browser: browserFace,
       // A studio opened from a phone cannot add or turn on packs; the page then points to the computer.
-      remote: !isLoopbackHostname(location.hostname),
+      remote: !pageAtComputer(),
     },
     // Looked up on click: `settingsShell` is not in this plugin's `inject`, so the property read does not reach the service.
     openPlugins: () => { ctx.get('settingsShell')?.openSection('plugins') },

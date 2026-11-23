@@ -119,6 +119,7 @@
     "@delorun/contract-reach-providers": "workspace:*",
     "@delorun/contract-setup-answers": "workspace:*",
     "@delorun/contract-update-report": "workspace:*",
+    "@delorun/desktop-home": "workspace:*",
     "@delorun/external-agents": "workspace:*",
     "@delorun/home-auth": "workspace:*",
     "@delorun/install": "workspace:*",

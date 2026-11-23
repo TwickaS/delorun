@@ -7,7 +7,7 @@
       "state": "shipped",
       "standing": "on",
       "requires": [],
-      "files": 254,
+      "files": 268,
       "folder": "delorun/packages/bundle-local"
     },
     {
@@ -67,7 +67,7 @@
       "state": "shipped",
       "standing": "on",
       "requires": [],
-      "files": 23,
+      "files": 22,
       "folder": "delorun/packages/plugin-tool-failure-guard"
     },
     {
@@ -227,7 +227,7 @@
       "state": "shipped",
       "standing": "on",
       "requires": [],
-      "files": 100,
+      "files": 102,
       "folder": "delorun/packages/plugin-theme"
     },
     {
@@ -267,7 +267,7 @@
       "state": "shipped",
       "standing": "on",
       "requires": [],
-      "files": 142,
+      "files": 143,
       "folder": "delorun/packages/plugin-onboarding"
     },
     {
