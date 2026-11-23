@@ -73,6 +73,8 @@ describe('a package being added', () => {
 
   it('draws the download under the card with the panel\'s status, its speed and time left once bytes arrive a second apart', () => {
     vi.useFakeTimers()
+    // The speed's timed reads fall on the clock's whole seconds.
+    vi.setSystemTime(Date.UTC(2026, 10, 22, 12))
     const source = createFakeDownloadsSource([{ key: 'pi', state: 'downloading', receivedBytes: 1 * MB, totalBytes: 20 * MB }])
     const withdraw = provideDownloadsSource(source)
     try {
