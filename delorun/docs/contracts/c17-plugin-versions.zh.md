@@ -82,11 +82,11 @@ Delorun 有自己的语义化版本，并基于一个上游 DSH 版本构建，�
 | --- | --- | --- |
 | 版本满足的范围 | 满足 | 满足 |
 | 版本不满足的范围 | 未满足 | 未满足 |
-| 空字符串、`workspace:` 值或无效范围 | 未满足 | 未满足 |
+| 空字符串、`workspace:` 值或无效范围 | 未满足 | 未满足 (an empty or whitespace-only `engines.delorun` is unreadable) |
 | 非字符串 | 不可读 | 不可读 |
 | 不存在 | 由对等依赖规则决定：满足或未满足；插件没有 DSH 对等依赖时为 `none` | `none` |
 
-不可读的声明按未满足处理：上游拒绝它无法校验的要求元数据，Delorun 轴同样如此。评估只读取插件的 manifest，从不导入插件代码。
+不可读的声明按未满足处理：上游拒绝它无法校验的要求元数据，Delorun 轴同样如此。An unreadable `engines.delorun` is refused and the upstream axis is not consulted in its place. An empty or whitespace-only `engines.delorun` is unreadable: it never means any version, and it never silences a DSH range, so the plugin is refused with `requirement-unreadable` even when its `engines.dsh` is met. 评估只读取插件的 manifest，从不导入插件代码。
 
 各轴在以下时机接受检查：
 

@@ -36,7 +36,10 @@ export const DELORUN_VERSION_ENV = 'DELORUN_VERSION'
 export interface DelorunRequirement {
   /** The Delorun version the requirement was checked against. */
   delorunVersion: string
-  /** `met` or `unmet` for a range, `unreadable` for a declaration that is not a string, which is refused as unmet. */
+  /**
+   * `met` or `unmet` for a range, `unreadable` for a declaration that is not a string or is empty or only whitespace, which is refused
+   * as unmet.
+   */
   status: 'met' | 'unmet' | 'unreadable'
   /** The declared range, for `met` and `unmet`. */
   requirement?: string
@@ -98,8 +101,9 @@ function satisfies(runtimeVersion: string, range: string): boolean {
 
 /**
  * Check a plugin's `engines.delorun` range against Delorun's version, without importing plugin code.
- * An absent declaration has no Delorun requirement; a non-string one is unreadable and is refused as unmet;
- * an empty, `workspace:` or invalid range is unmet. Prereleases participate in ranges.
+ * An absent declaration has no Delorun requirement; a non-string, empty or whitespace-only one is unreadable and is refused as
+ * unmet, never read as `*` and never a reason to read the dsh ranges; a `workspace:` or invalid range is unmet.
+ * Prereleases participate in ranges.
  * @param manifest - parsed plugin package.json; inherited fields are ignored.
  * @param delorunVersion - the Delorun version to check against, read from {@link DELORUN_VERSION_ENV} by default.
  * @returns the requirement's result, or undefined when Delorun's version is unknown or the plugin declares none.
@@ -117,7 +121,7 @@ export function evaluateDelorunRequirement(
   const engines = Object.hasOwn(fields, 'engines') ? objectOf(fields.engines, 'Plugin manifest engines') : {}
   if (!Object.hasOwn(engines, 'delorun')) return undefined
   const range = engines.delorun
-  if (typeof range !== 'string') return { delorunVersion, status: 'unreadable' }
+  if (typeof range !== 'string' || range.trim() === '') return { delorunVersion, status: 'unreadable' }
   return { delorunVersion, status: satisfies(delorunVersion, range) ? 'met' : 'unmet', requirement: range }
 }
 

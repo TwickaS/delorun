@@ -83,7 +83,7 @@ With `--json` it prints one JSON object on one line, and no other output, for to
 | Field | Meaning |
 | --- | --- |
 | `decidedBy` | `delorun` when `engines.delorun` is declared, else `dsh` when `engines.dsh` is, else `peer` when a `@deepseek-ai/dsh*` peer is, else `none`. |
-| `range` | The range that decided, as written; for `peer`, each DSH peer as `<name> <range>` joined by `, `; `null` for `none`, and when `engines.delorun` or `engines.dsh` is not a string. |
+| `range` | The range that decided, with leading and trailing whitespace trimmed; for `peer`, each DSH peer as `<name> <range>` joined by `, `; `null` for `none`, when `engines.delorun` or `engines.dsh` is not a string, and for an empty or whitespace-only `engines.delorun`, which is unreadable. |
 | `checkedAgainst` | The version the range was checked against: the running Delorun's for `delorun`, the running DSH's for `dsh` and `peer`; `null` for `none`. |
 | `verdict` | `admitted` or `refused`: the installer's decision on this release. |
 | `readable` | `false` when a declaration is in a form Delorun cannot read, which is refused. |

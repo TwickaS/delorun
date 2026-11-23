@@ -245,6 +245,8 @@ function unmetRequirements(bundle: string, manifest: Record<string, unknown>, op
       }
     }
   }
+  // An empty or whitespace-only `engines.delorun` is unreadable, as upstream reads it, and never means any version.
+  if (engines.data.delorun !== undefined && engines.data.delorun.trim() === '') throw malformed('engines')
   const delorunUnmet = engines.data.delorun !== undefined && !satisfiesRange(delorun, engines.data.delorun) ? [`it requires Delorun ${engines.data.delorun} and the target installs Delorun ${delorun}`] : []
   if (dshUnmet.length === 0 && delorunUnmet.length === 0) return []
   const identity = identitySchema.safeParse(manifest)

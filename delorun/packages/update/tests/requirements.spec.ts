@@ -160,6 +160,18 @@ describe('decidePluginVersion', () => {
     expect(decideOn({ peerDependencies: { react: '^18.0.0' } })).toMatchObject({ decidedBy: 'none', verdict: 'admitted' })
   })
 
+  it.each(['', ' ', '  '])('refuses an engines.delorun of %j as unreadable, whatever engines.dsh says', (range) => {
+    for (const dsh of ['^0.3.0', '^0.2.0']) {
+      expect(decideOn({ engines: { delorun: range, dsh } })).toEqual({ decidedBy: 'delorun', range: null, checkedAgainst: '1.0.0', verdict: 'refused', readable: false })
+      expect(decide({ engines: { delorun: range, dsh } }).delorun).toEqual({ kind: 'unreadable' })
+    }
+  })
+
+  it('gives the range trimmed of leading and trailing whitespace', () => {
+    expect(decideOn({ engines: { delorun: '  ^1.0.0 ' } })).toMatchObject({ range: '^1.0.0', verdict: 'admitted', readable: true })
+    expect(decideOn({ engines: { dsh: ' ^0.3.0\n' } })).toMatchObject({ range: '^0.3.0', verdict: 'admitted' })
+  })
+
   it('refuses a declaration it cannot read, and does not fall back to the DSH ranges', () => {
     expect(decideOn({ engines: { delorun: 3, dsh: '^0.3.0' } })).toEqual({ decidedBy: 'delorun', range: null, checkedAgainst: '1.0.0', verdict: 'refused', readable: false })
     expect(decideOn({ engines: { dsh: 3 } })).toMatchObject({ decidedBy: 'dsh', verdict: 'refused', readable: false })
