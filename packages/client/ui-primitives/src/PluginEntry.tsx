@@ -101,7 +101,7 @@ export interface PluginEntryCardProps extends Omit<LiHTMLAttributes<HTMLLIElemen
 export function PluginEntryCard({
   title, icon, iconFallback, onOpen, openLabel, heading, badges, description, clamp = true, meta, action, children, className, ...item
 }: PluginEntryCardProps): ReactNode {
-  const Title = heading === undefined ? 'span' : HEADINGS[heading]
+  const TitleTag = heading === undefined ? 'span' : HEADINGS[heading]
   return (
     <li {...item} className={className === undefined ? css.card : `${css.card} ${className}`}
       data-static={onOpen === undefined ? '' : undefined} data-clamp={clamp ? undefined : 'false'}>
@@ -109,7 +109,7 @@ export function PluginEntryCard({
       <div className={css.main}>
         <div className={css.titleRow}>
           {onOpen === undefined
-            ? <Title className={css.title}>{title}</Title>
+            ? <TitleTag className={css.title}>{title}</TitleTag>
             : <button type="button" className={`${css.title} ${css.open}`} aria-label={openLabel} onClick={onOpen}>{title}</button>}
           {badges}
         </div>
