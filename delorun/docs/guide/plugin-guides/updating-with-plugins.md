@@ -47,9 +47,9 @@ Read the lines under `Changes`. Each starts with what happens to the plugin:
 
 Read each `disabled` line with the plugin's author in mind. A plugin that declares no range is `kept`, with a line saying its compatibility is not stated.
 
-Check a plugin before the release exists, or one you are writing, with `delorun plugin check <directory>`. It reads the folder's `package.json`, runs none of its files, and says what each of the plugin's version ranges admits against the release you run. It applies no exemption.
+Check a plugin before the release exists, or one you are writing, with `delorun plugin check <directory>`. It reads the folder's `package.json`, runs none of its files, and says what each of the plugin's version ranges admits against the release you run. It applies no exemption. A plugin that declares `engines.delorun` is checked on that range alone on Delorun: its `engines.dsh` and DeepSeek Harness peer ranges are not checked, and the command says so. A plugin that declares no `engines.delorun` is checked on its DeepSeek Harness range, as in DeepSeek Harness itself.
 
-When a `disabled` line is a DeepSeek Harness range and you want the plugin anyway, the report prints the way to try it. A version exemption accepts the risk for one exact plugin version on one exact DeepSeek Harness version:
+When a `disabled` line is a DeepSeek Harness range (a plugin that declares `engines.delorun` never gets one) and you want the plugin anyway, the report prints the way to try it. A version exemption accepts the risk for one exact plugin version on one exact DeepSeek Harness version:
 
 ```text
 delorun plugin allow-version acme-tools@1.2.0 --dsh-version 0.2.2 --accept-risk

@@ -66,8 +66,8 @@ An update is the person's choice: `delorun update` and the studio's Update now s
 
 ### Targeting Delorun
 
-19. The two axes stay independent: `engines.delorun` never overrides the upstream axis.
-20. `delorun plugin check <directory>` reads the plugin's `package.json` without importing its code, evaluates both axes against the running release with upstream's `evaluatePluginCompatibility`, the installer's evaluation, and prints what each declared range admits, what is undeclared, and the `engines.delorun` range that targets the running Delorun minor.
+19. A plugin that declares `engines.delorun` is checked on that range alone on Delorun, and its `engines.dsh` and DSH peers are not checked; a plugin that declares none is checked on its upstream axis, as on stock DSH ([C17](../contracts/c17-plugin-versions.md)). The update notice counts plugins the same way.
+20. `delorun plugin check <directory>` reads the plugin's `package.json` without importing its code, decides it against the running release with upstream's `evaluatePluginCompatibility`, the installer's evaluation, and prints what each declared range admits, what is undeclared, and the `engines.delorun` range that targets the running Delorun minor. For a plugin that declares `engines.delorun` it says the DSH ranges are not checked on Delorun. `--json` prints the decision record ([C22](../contracts/c22-delorun-plugin-interface.md#checking-a-plugin)).
 
 ## What this does not protect against
 
