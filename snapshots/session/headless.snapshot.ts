@@ -1408,6 +1408,9 @@ describe('headless recorded-session snapshots', () => {
       let initialWorkspace: WorkspaceSnapshotEntry[] | undefined
       let finalWorkspace: WorkspaceSnapshotEntry[] | undefined
       const spillRoot = await mkdtemp(join(tmpdir(), 'acp-snap-spill-'))
+      // Delorun plugins resolve their own home from DELORUN_HOME, else ~/.delorun: a scratch home keeps the replay off
+      // the machine's real one (its agent accounts file would add an external-agent/status event).
+      const delorunHome = await mkdtemp(join(tmpdir(), 'dsh-log-snap-delorun-home-'))
       const fixturePath = join(scenario.dir, fixtureFiles[0] ?? sessionFixtureName(0, SESSION_FORMAT_VERSION))
       const locatorRoot = snapshotSpillRoot(fixturePath)
       const mcpDemo = scenario.name === 'plugin-manager-mcp' || scenario.name === 'mcp-template-error'
@@ -1440,6 +1443,7 @@ describe('headless recorded-session snapshots', () => {
               DSH_SNAPSHOT_PROVIDER: model.provider,
               DSH_SNAPSHOT_MODEL: model.model,
             }),
+            DELORUN_HOME: delorunHome,
             DSH_SNAPSHOT_SPILL_ROOT: spillRoot,
             DSH_SNAPSHOT_SPILL_LOCATOR_ROOT: locatorRoot,
             DSH_SNAPSHOT_FILE: fixturePath,
@@ -1589,6 +1593,7 @@ describe('headless recorded-session snapshots', () => {
       } finally {
         await mcpDemo?.close()
         await rm(spillRoot, { recursive: true, force: true })
+        await rm(delorunHome, { recursive: true, force: true })
       }
 
       const stderrLog = mode === 'replay' ? primaryFixture : actualLogs[0]?.content
