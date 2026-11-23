@@ -1,5 +1,6 @@
 /** The phone's two presentations: the quiet row for the setup guide's footer, and the header icon with its bottom sheet. */
 import { IconChevronDownOutlineRegular, IconChevronUpOutlineRegular, IconCloseOutlineRegular, IconDownloadOutlineRegular, IconWarningOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
+import { ALERT_CLASSES } from '@delorun/brand/alert'
 import { useEffect, useId, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { headerText } from './Card.tsx'
 import { ItemList } from './Items.tsx'
@@ -90,7 +91,7 @@ export function DownloadsSheet({ model, source, t }: { readonly model: PanelMode
       )}
       {shown && open && (
         <div className={css.backdrop} onClick={close}>
-          <div className={css.sheet} role="dialog" aria-modal="true" aria-label={t('title')} onClick={(event) => { event.stopPropagation() }}
+          <div className={`${ALERT_CLASSES.glass} ${css.sheet}`} role="dialog" aria-modal="true" aria-label={t('title')} onClick={(event) => { event.stopPropagation() }}
             onKeyDown={(event) => { if (event.key === 'Escape') { event.stopPropagation(); close() } }}>
             <div className={css.sheetHeader}>
               <span className={css.sheetTitle}>{headerText(model, t)}</span>

@@ -108,16 +108,19 @@
   pointer-events: auto;
 }
 
-.sheet {
-  box-sizing: border-box;
+/*
+ * The sheet's surface is the theme's `delorun-glass`; it rises from the screen's bottom edge, so only its top corners
+ * are rounded and it has no bottom edge. Two classes outrank the glass rule whatever the sheets' order.
+ */
+.backdrop > .sheet {
   width: 100%;
   max-height: 70vh;
   overflow-y: auto;
   padding: var(--delorun-space-6);
   padding-bottom: max(var(--delorun-space-6), env(safe-area-inset-bottom));
-  border-radius: var(--dsw-radius-lg) var(--dsw-radius-lg) 0 0;
-  background: var(--dsw-alias-bg-layer-1);
-  color: var(--dsw-alias-label-primary);
+  border-bottom-width: 0;
+  border-radius: var(--delorun-glass-radius-dialog) var(--delorun-glass-radius-dialog) 0 0;
+  box-shadow: inset 0 1px 0 var(--delorun-glass-highlight), var(--delorun-glass-shadow-raised);
   animation: sheet-in 0.22s ease-out;
 }
 
@@ -158,7 +161,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .sheet {
+  .backdrop > .sheet {
     animation: none;
   }
 

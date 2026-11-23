@@ -1,13 +1,10 @@
-/* The card sits in the toast area, which owns its place and its layer. */
+/*
+ * The card sits in the toast area, which owns its place and its layer. Its surface (edge, fill, blur, radius and
+ * shadow) is the theme's `delorun-glass`; this sheet keeps its width, its clip and its enter.
+ */
 .card {
-  box-sizing: border-box;
   width: 100%;
   overflow: hidden;
-  border: 0.5px solid var(--dsw-alias-border-l1);
-  border-radius: var(--dsw-radius-lg);
-  background: var(--dsw-alias-bg-layer-1);
-  box-shadow: var(--dsw-shadow-lv3);
-  color: var(--dsw-alias-label-primary);
   animation: card-in 0.22s ease-out;
 }
 
@@ -41,16 +38,10 @@
   white-space: nowrap;
 }
 
+/* The dismiss button is the alert's close button; this only places it at the header's end. */
 .dismiss {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  border: none;
-  background: transparent;
-  color: var(--dsw-alias-label-secondary);
-  cursor: pointer;
+  flex: none;
+  margin-inline-end: var(--delorun-space-5);
 }
 
 .toggle:focus-visible,
@@ -60,8 +51,7 @@
 }
 
 @media (hover: hover) {
-  .toggle:hover,
-  .dismiss:hover {
+  .toggle:hover {
     background: var(--dsw-alias-interactive-bg-hover);
   }
 }

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 /** The downloads panel: the card, the phone row, the sheet and their states against the fake source. */
+import { ALERT_CLASSES } from '@delorun/brand/alert'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DownloadsCard } from '../src/client/Card.tsx'
@@ -112,6 +113,16 @@ describe('the desktop card', () => {
     expect(document.querySelector('section')).toBeNull()
   })
 
+  it('draws the card on the studio\'s glass surface, with the alert\'s close button for dismissing failures', () => {
+    render(<Card source={createFakeDownloadsSource(mixed())} />)
+    const card = screen.getByRole('region', { name: 'Downloads' })
+    expect(card.classList.contains(ALERT_CLASSES.glass)).toBe(true)
+    expect(screen.queryByRole('button', { name: 'Dismiss' })).toBeNull()
+    cleanup()
+    render(<Card source={createFakeDownloadsSource([item('a', { state: 'failed' })])} />)
+    expect(screen.getByRole('button', { name: 'Dismiss' }).classList.contains(ALERT_CLASSES.close)).toBe(true)
+  })
+
   it('dismisses every failure from the header', () => {
     const source = createFakeDownloadsSource([item('a', { state: 'failed' }), item('b', { state: 'failed' })])
     render(<Card source={source} />)
@@ -217,6 +228,7 @@ describe('the phone header icon and sheet', () => {
     const icon = screen.getByRole('button', { name: /Downloads, 4/ })
     fireEvent.click(icon)
     const dialog = screen.getByRole('dialog', { name: 'Downloads' })
+    expect(dialog.classList.contains(ALERT_CLASSES.glass)).toBe(true)
     expect(within(dialog).getAllByRole('listitem').length).toBe(5)
     expect(document.activeElement).toBe(within(dialog).getByRole('button', { name: 'Close' }))
     fireEvent.keyDown(dialog, { key: 'Escape' })

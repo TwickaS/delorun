@@ -1,163 +1,59 @@
 /*
- * The update notice below the chat list: a quiet bordered block in the list's side margins, small secondary text, the
- * title in the primary label. Spacing, type sizes, corners and colours are the studio's tokens; the lengths below are
- * the notice's own geometry.
+ * The update notice below the chat list: the studio's alert card (`Alert`, inline), which the theme draws as quiet
+ * glass. This sheet holds only its placement in the list's side margins and the blocks inside its line; spacing, type
+ * sizes and colours are the studio's tokens.
  */
-.notice {
-  --notice-dismiss: 24px;
-  --notice-dismiss-hit: 32px;
+.notice[data-update-notice] {
   --notice-touch: 44px;
-  --notice-icon: 14px;
-  --notice-line: 18px;
   --notice-foot-clear: 12px;
 
-  display: flex;
   flex: none;
-  flex-direction: column;
-  gap: var(--delorun-space-1);
   min-width: 0;
   /* Above the sidebar's bottom fade, which would otherwise dim the notice's last line, and clear of the foot that overlaps the list's end. */
   position: relative;
   z-index: 1;
+  width: auto;
   margin: 0 var(--delorun-space-4) calc(var(--delorun-space-2) + var(--notice-foot-clear));
-  padding: var(--delorun-space-3) var(--delorun-space-4);
-  border: 1px solid var(--dsw-alias-border-l1);
-  border-radius: var(--dsw-radius-sm);
-  color: var(--dsw-alias-label-secondary);
-  font-size: var(--dsw-font-xxs-12-font-size);
-  line-height: var(--notice-line);
-  overflow-wrap: anywhere;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .notice {
-    animation: noticeIn 200ms ease-out both;
-  }
+/* The alert's line holds blocks of its own: each is a span laid out as a column. */
+.facts,
+.summary,
+.run,
+.details,
+.detailTitle {
+  display: block;
 }
 
-.head {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--delorun-space-2);
-  min-width: 0;
+.details {
+  padding-top: var(--delorun-space-1);
 }
 
-.status {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: var(--delorun-space-1);
-  min-width: 0;
+.summary,
+.summaryToggle,
+.whatsNew,
+.updateNow,
+.run {
+  margin-top: var(--delorun-space-1);
 }
 
-.title {
-  margin: 0;
+.detailTitle {
   color: var(--dsw-alias-label-primary);
   font-size: var(--dsw-font-xs-13-font-size);
   font-weight: 500;
 }
 
-.dismiss {
-  display: inline-flex;
-  flex: none;
-  align-items: center;
-  justify-content: center;
-  width: var(--notice-dismiss);
-  height: var(--notice-dismiss);
-  margin: calc(var(--delorun-space-1) * -1) calc(var(--delorun-space-2) * -1) 0 0;
-  padding: 0;
-  border: 0;
-  border-radius: var(--dsw-radius-xs);
-  background: transparent;
-  color: var(--dsw-alias-label-secondary);
-  cursor: pointer;
-  outline: none;
-}
-
-@media (hover: hover) {
-  .dismiss:hover {
-    background: var(--dsw-alias-interactive-bg-hover);
-    color: var(--dsw-alias-label-primary);
-  }
-
-  .summaryToggle:hover {
-    color: var(--dsw-alias-label-primary);
-  }
-}
-
-@media (pointer: coarse) {
-  .dismiss {
-    width: var(--notice-dismiss-hit);
-    height: var(--notice-dismiss-hit);
-  }
-}
-
-/*
- * A remote page is a phone's: the notice is one row of the title on one line, What's new and the close button, each at
- * the 44px touch size, and the rest opens under What's new. The close button's 44px box is pulled into the notice's
- * padding so the row stays as tall as the buttons.
- */
-.notice[data-remote='true'] {
-  padding-block: 0;
-}
-
-.notice[data-remote='true'] .head {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  align-items: center;
-  column-gap: var(--delorun-space-2);
-}
-
-.notice[data-remote='true'] .title {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
+/* A phone's touch size for What's new; the alert's own close button keeps its size. */
 .notice[data-remote='true'] .whatsNew {
   min-height: var(--notice-touch);
   padding-inline: var(--delorun-space-2);
   white-space: nowrap;
 }
 
-.notice[data-remote='true'] .dismiss {
-  width: var(--notice-touch);
-  height: var(--notice-touch);
-  margin: 0 calc(var(--delorun-space-4) * -1) 0 0;
-}
-
-.detailTitle {
-  margin: 0;
-  color: var(--dsw-alias-label-primary);
-  font-size: var(--dsw-font-xs-13-font-size);
-  font-weight: 500;
-}
-
-.details {
+.whatsNew,
+.updateNow {
   display: flex;
-  flex-direction: column;
-  gap: var(--delorun-space-1);
-  padding-bottom: var(--delorun-space-3);
-}
-
-.dismiss:focus-visible,
-.summaryToggle:focus-visible {
-  box-shadow: inset 0 0 0 var(--dsw-focus-ring-width) var(--dsw-alias-brand-primary);
-}
-
-.dismissIcon {
-  width: var(--notice-icon);
-  height: var(--notice-icon);
-}
-
-.facts,
-.summary,
-.run {
-  margin: 0;
-}
-
-.whatsNew {
-  align-self: flex-start;
+  width: fit-content;
 }
 
 .notes {
@@ -198,6 +94,16 @@
   line-clamp: none;
 }
 
+@media (hover: hover) {
+  .summaryToggle:hover {
+    color: var(--dsw-alias-label-primary);
+  }
+}
+
+.summaryToggle:focus-visible {
+  box-shadow: inset 0 0 0 var(--dsw-focus-ring-width) var(--dsw-alias-brand-primary);
+}
+
 /*
  * The label that marks the summary as the release's own text, apart from the studio's instruction: the summary's
  * colour, in the title's weight.
@@ -212,14 +118,4 @@
   user-select: all;
   overflow-wrap: normal;
   white-space: nowrap;
-}
-
-@keyframes noticeIn {
-  from {
-    opacity: 0;
-  }
-}
-
-.updateNow {
-  align-self: flex-start;
 }
