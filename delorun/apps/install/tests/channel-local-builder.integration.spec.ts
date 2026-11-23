@@ -8,12 +8,15 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { RELEASE_METADATA_ORIGIN } from '@delorun/contract-release-manifest'
+import { RELEASE_METADATA_ORIGIN, type SemanticVersion } from '@delorun/contract-release-manifest'
+import { brandString } from '@deepseek-ai/dsh-brand'
+import { publicKeyEntry } from '@delorun/release-formats/sign/envelope'
 import { LOCAL_RELEASE_BUILDER } from '@delorun/release-formats/sign/schemas'
 import { Downloader } from '../src/download.ts'
 import { isInstallError, type InstallError } from '../src/errors.ts'
 import { LauncherChannel, type ReleaseSource } from '../src/channel.ts'
 import { PREVIEW_ROOT_SHA256 } from '../src/local-builder.ts'
+import { writeStoredRootChain, writeTrustedRoot } from '../src/state.ts'
 import { envelope, fixtureKeys, fixtureRelease, logService, nextRoot, NOW, releasePaths, sha256, type Fixture, type FixtureOptions } from './support.ts'
 
 let homes: string[] = []
@@ -30,14 +33,14 @@ afterEach(async () => {
  * @param change - the extra files served and the options the channel gets.
  * @returns the channel.
  */
-async function production(fixture: Fixture, change: { readonly extra?: ReadonlyMap<string, Buffer>, readonly previewRoots?: readonly string[], readonly roots?: readonly Uint8Array[], readonly productionRoot?: boolean, readonly source?: ReleaseSource } = {}): Promise<LauncherChannel> {
+async function production(fixture: Fixture, change: { readonly extra?: ReadonlyMap<string, Buffer>, readonly previewRoots?: readonly string[], readonly roots?: readonly Uint8Array[], readonly productionRoot?: boolean, readonly source?: ReleaseSource, readonly home?: string } = {}): Promise<LauncherChannel> {
   const files = releasePaths(fixture)
   for (const [path, bytes] of change.extra ?? []) files.set(path, bytes)
   const served: typeof globalThis.fetch = async (input) => {
     const bytes = files.get(new URL(input instanceof Request ? input.url : String(input)).pathname)
     return bytes === undefined ? new Response(null, { status: 404 }) : new Response(new Uint8Array(bytes), { status: 200 })
   }
-  const home = await mkdtemp(join(tmpdir(), 'delorun-install-local-builder-'))
+  const home = change.home ?? await mkdtemp(join(tmpdir(), 'delorun-install-local-builder-'))
   homes.push(home)
   const source = change.source ?? { metadata: RELEASE_METADATA_ORIGIN, files: (version: string, name: string) => `${RELEASE_METADATA_ORIGIN}/releases/${version}/${name}` }
   const origin = new URL(source.metadata)
@@ -101,7 +104,7 @@ describe('a production channel and a release the maintainer\'s PC built', () => 
   it('refuses a 0.x release under a root whose digest is not the published preview root', async () => {
     const error = await refused((await production(await local())).resolve())
     expect(error.detail).toContain(`names the builder "${LOCAL_RELEASE_BUILDER}"`)
-    expect(error.detail).toContain('only while it is a 0.x release under the pinned preview root')
+    expect(error.detail).toContain('only while it is a 0.x release under a root chain that holds the pinned preview root')
   })
 
   it.each(['1.0.0', '1.0.0-rc.1', '2.3.4'])('refuses release %s under the preview root, through resolve and newest', async (version) => {
@@ -111,9 +114,29 @@ describe('a production channel and a release the maintainer\'s PC built', () => 
     await refused((await production(fixture, { previewRoots: previewOf(fixture) })).newest())
   })
 
-  it('refuses a 0.x release under a later root, though that root descends from the preview root', async () => {
+  it('allows a 0.x release under a later root that descends from the pinned root and keeps its targets key, also once the home stored that root', async () => {
     const fixture = await local()
     const second = nextRoot(fixture.rootMetadata, fixture.keys, [fixture.keys.root])
+    const timestamp = envelope({ ...fixture.timestamp, root: { version: 2, sha256: sha256(second) } }, [fixture.keys.timestamp])
+    const extra = new Map([['/timestamp.json', timestamp], ['/root/2.root.json', second]])
+    expect(String((await (await production(fixture, { extra, previewRoots: previewOf(fixture) })).resolve()).version)).toBe(fixture.manifest.version)
+    // A home that adopted root 2 walks from the launcher's shipped root 1 through its stored chain, so the pin is still in the walk.
+    const home = await mkdtemp(join(tmpdir(), 'delorun-install-local-builder-'))
+    await writeTrustedRoot(home, second)
+    await writeStoredRootChain(home, [fixture.roots[0]!, second])
+    expect(String((await (await production(fixture, { extra, previewRoots: previewOf(fixture), home })).resolve()).version)).toBe(fixture.manifest.version)
+  })
+
+  it('refuses a 0.x release under a later root that names another active targets key', async () => {
+    const fixture = await local()
+    const ceremony = fixtureKeys()
+    const added = publicKeyEntry(ceremony.targets)
+    // The old targets key is retired past this release, so the manifest still verifies and only the allowance can refuse it.
+    const second = nextRoot(fixture.rootMetadata, fixture.keys, [fixture.keys.root], next => ({
+      ...next,
+      keys: { ...next.keys, [added.keyid]: added.entry },
+      roles: { ...next.roles, targets: { keys: [{ keyid: publicKeyEntry(fixture.keys.targets).keyid, status: 'retired', lastRelease: brandString<SemanticVersion>('0.9.9') }, { keyid: added.keyid, status: 'active' }], threshold: 1 } },
+    }))
     const timestamp = envelope({ ...fixture.timestamp, root: { version: 2, sha256: sha256(second) } }, [fixture.keys.timestamp])
     const extra = new Map([['/timestamp.json', timestamp], ['/root/2.root.json', second]])
     const error = await refused((await production(fixture, { extra, previewRoots: previewOf(fixture) })).resolve())

@@ -3,7 +3,7 @@
  * root without them, as `1.root.json` is, verifies no release; a home adopts a root 2 that lists them and installs an
  * ECDSA-logged release under it; a home that adopted a root which revoked a key cannot be moved back to the root that
  * listed it; a list in a root the chain does not verify is never read; and the production allowance for a locally built
- * 0.x release holds under the one root file the launcher pins by its digest.
+ * 0.x release holds under a root chain that holds the root file the launcher pins by its digest (L196).
  */
 import { createPublicKey, generateKeyPairSync, type KeyObject } from 'node:crypto'
 import { brandString } from '@deepseek-ai/dsh-brand'
@@ -192,7 +192,7 @@ describe('a locally built 0.x release from the production channel', () => {
    * @param pinned - the root file the launcher pins as the preview root.
    * @returns the channel.
    */
-  async function production(fixture: Fixture, files: ReadonlyMap<string, Buffer>, pinned: Buffer): Promise<LauncherChannel> {
+  async function production(fixture: Fixture, files: ReadonlyMap<string, Buffer>, pinned: Buffer, shipped: readonly Uint8Array[] = fixture.roots): Promise<LauncherChannel> {
     const paths = releasePaths(fixture)
     for (const [path, bytes] of files) paths.set(path, bytes)
     const served: typeof globalThis.fetch = async (input) => {
@@ -205,7 +205,7 @@ describe('a locally built 0.x release from the production channel', () => {
     return new LauncherChannel({
       home,
       platform: fixture.platform,
-      roots: fixture.roots,
+      roots: shipped,
       channel: 'stable',
       log: logService(fixture.checkpoint),
       source,
@@ -215,12 +215,21 @@ describe('a locally built 0.x release from the production channel', () => {
     })
   }
 
-  it('local-builder-pins-root-digest: installs under the pinned root 2, and is refused when the pin names root 1', async () => {
+  it('local-builder-pins-root-chain: installs under the pinned root 2 and under a root 3 that chains from it, and not under a root 2 that is another file', async () => {
     const fixture = await fixtureRelease({ builder: LOCAL_RELEASE_BUILDER, ...ECDSA_LOGGED, bareRoot: true })
     const second = rootTwo(fixture)
     const files = new Map([['/timestamp.json', timestampFor(fixture, second)], ['/root/2.root.json', second]])
     expect(String((await (await production(fixture, files, second)).resolve()).version)).toBe(VERSION)
-    const error = await refusal((await production(fixture, files, Buffer.from(fixture.roots[0]!))).resolve(), 'INSTALL_VERIFY_FAILED')
+    // A root 3 that root 2's keys sign, as a log-entry key revocation would be: a launcher shipping root 2 alone follows it.
+    const secondMetadata = (JSON.parse(second.toString('utf8')) as { signed: RootMetadata }).signed
+    const third = nextRoot(secondMetadata, fixture.keys, [fixture.keys.root], next => ({ ...next, logEntryKeys: [listed('PKIX_ECDSA_P256_SHA_256', ECDSA), listed('PKIX_ED25519_PH', fixture.keys.targets, 'revoked')] }))
+    const later = new Map([['/timestamp.json', timestampFor(fixture, third)], ['/root/2.root.json', second], ['/root/3.root.json', third]])
+    expect(String((await (await production(fixture, later, second, [second])).resolve()).version)).toBe(VERSION)
+    // A root 2 that root 1 signs but that is not the pinned file: the chain never holds the pin.
+    const other = rootTwo(fixture, [fixture.keys.root], [listed('PKIX_ECDSA_P256_SHA_256', ECDSA)])
+    expect(sha256(other)).not.toBe(sha256(second))
+    const forked = new Map([['/timestamp.json', timestampFor(fixture, other)], ['/root/2.root.json', other]])
+    const error = await refusal((await production(fixture, forked, second)).resolve(), 'INSTALL_VERIFY_FAILED')
     expect(error.detail).toContain(`names the builder "${LOCAL_RELEASE_BUILDER}"`)
   })
 })

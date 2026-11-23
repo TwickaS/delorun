@@ -16,7 +16,7 @@ A client ([C18](../../../../delorun/docs/contracts/c18-release-log.md#verifying-
 
 The lists change only by a root rotation, which the offline root key signs; the timestamp and targets keys cannot change them. A client keeps the newest root it verified, so a replayed older root cannot bring back a removed key type. Security fundamental F25 states the rule.
 
-The production allowance for a locally built 0.x release (A506) pins one root file by its SHA-256: `2.root.json` once the rotation that adds these fields is signed, and the launcher ships that root alone, so it never verifies anything under `1.root.json`.
+The production allowance for a locally built 0.x release (A506, L196) anchors on one root file by the SHA-256 of its exact bytes: `2.root.json` once the rotation that adds these fields is signed. It holds for that root and for every later root that chains from it, each verified under its predecessor's root threshold and its own, while the verifying root keeps root 2's active targets key, so a rotation that only revokes a log-entry key needs no launcher update and the 1.0 ceremony's new targets key ends it. The launcher ships root 2 alone, so it never verifies anything under `1.root.json`.
 
 ## Verification
 
@@ -34,7 +34,7 @@ The [extension-point-first decision](2026-11-06-delorun-extension-point-first.md
 
 **Keeping the Ed25519ph-by-targets rule for a root without the list.** It kept copies on 0.1.0-preview.2.7 updating without a reinstall, at the cost of a second verification path; with no users to keep (A616) the path was removed.
 
-**A production allowance for every later root that keeps the preview targets key.** It needs no code change after the rotation, but walks the chain from `1.root.json` and adds a rule; pinning `2.root.json`'s digest is one comparison, and the Trust page publishes that digest anyway.
+**Pinning `2.root.json` alone by its digest.** One comparison, but the first root rotation after it, such as one that revokes the ECDSA key after a compromise, would end the allowance until a launcher update shipped a new digest; anchoring on root 2 and following its chain keeps revocation fast (L196).
 
 ## Consequences
 

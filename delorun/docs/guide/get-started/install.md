@@ -109,7 +109,7 @@ When the output goes to a file or a pipe instead of a terminal, each step is one
 
 - **Channel.** A preview is published on the channel named `stable`, so the first step says so.
 - **Signature.** Delorun's release keys sign the release. The launcher checks the signatures and that the downloaded file matches. If anything does not match, nothing is installed.
-- **Built on one machine.** Until `1.0.0`, the maintainer builds and signs each release on the maintainer's PC, and no second builder rebuilds it. The launcher installs such a 0.x release when it verifies under the preview root. It refuses a release built this way when it is a `1.0.0` release or is signed under another root ([What you trust](../safety-and-updates/trust.md#how-releases-are-signed-in-the-preview)).
+- **Built on one machine.** Until `1.0.0`, the maintainer builds and signs each release on the maintainer's PC, and no second builder rebuilds it. The launcher installs such a 0.x release when it verifies under the preview root or a later root that follows from it and keeps its targets key. It refuses a release built this way when it is a `1.0.0` release or is signed under any other root ([What you trust](../safety-and-updates/trust.md#how-releases-are-signed-in-the-preview)).
 - **Public release log.** Every release is also entered in a public, append-only [release log](../../reference/glossary.md#release-log). The launcher checks the entry. If the log cannot be reached, the launcher installs the release on its signature alone, prints a warning, and checks the log again at the next start that can reach it.
 - **Every start.** The launcher compares the installed files with the signed list. A start with a release installed needs no network.
 

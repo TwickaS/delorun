@@ -34,7 +34,7 @@ import type { FilledRelease } from '@delorun/runtime-store'
 import type { RuntimeChannel, ChannelRelease } from '@delorun/runtime-store'
 import { parseRuntimeVersion } from '@delorun/runtime-store'
 import { archiveFormat } from '@delorun/release-formats/archive/entry'
-import { checkFileRef, walkRootChain, type TrustedRoot } from '@delorun/release-formats/sign/verify'
+import { checkFileRef, readRoot, walkRootChain, type TrustedRoot } from '@delorun/release-formats/sign/verify'
 import { LOCAL_RELEASE_BUILDER } from '@delorun/release-formats/sign/schemas'
 import { localBuilderAllowed } from './local-builder.ts'
 import { HomeLayoutError } from '@delorun/home'
@@ -441,7 +441,7 @@ export class LauncherChannel implements RuntimeChannel {
       if (unconfirmed && isInstallError(error, 'RELEASE_NOT_OFFERED')) throw new Unconfirmable(`release ${String(target)} is not the one the ${this.options.channel} channel currently names`, error, pointer.release)
       throw error
     }
-    this.refuseLocalRelease(verified.manifest, pointer.release, root)
+    this.refuseLocalRelease(verified.manifest, pointer.release, walkRootChain(roots))
     if (record) this.options.progress?.({ step: 'signature-checked', version: pointer.release, rootVersion: root.metadata.version })
     return { root, timestamp, pointer, verified, manifestBytes: manifest.bytes, bundleBytes: bundle.bytes }
   }
@@ -509,7 +509,7 @@ export class LauncherChannel implements RuntimeChannel {
     const manifest = await this.fetchFrom(this.fileCandidates(version, manifestFileName(version)), manifestFileName(version), url => this.downloader.bytes(url, RELEASE_FILE_SIZE_LIMITS.manifest))
     const bundle = await this.bundleOf(version)
     const verified = verifyUnconfirmedRelease({ root: root.metadata, channel: this.options.channel, manifest: manifest.bytes, bundle: bundle.bytes, version })
-    this.refuseLocalRelease(verified.manifest, version, root)
+    this.refuseLocalRelease(verified.manifest, version, chain)
     const agreed = await unconfirmed.allow({ version, reason, ...below === undefined ? {} : { belowFloor: below } })
     if (!agreed) throw new InstallError('RELEASE_NOT_OFFERED', `release ${version}`, `you did not agree to install release ${version} without the channel confirming it, so nothing was installed`)
     // The roots verified; the stale timestamp is never stored, so the stored one never goes back.
@@ -521,19 +521,20 @@ export class LauncherChannel implements RuntimeChannel {
   /**
    * Refuse a release the local release build signed when the verifying root is a production root: the channel fetches
    * from the production publication, or the options say the launcher's roots are production roots, as they do for a
-   * `--from` folder. {@link localBuilderAllowed} is the one exception: a 0.x release under the pinned preview root (A369,
-   * A506, A616).
+   * `--from` folder. {@link localBuilderAllowed} is the one exception: a 0.x release under a chain that holds the
+   * pinned preview root and whose verifying root keeps its active targets key (A369, A506, L196).
    * @param manifest - the verified manifest.
    * @param version - the release, for the message.
-   * @param root - the root that verified the release.
+   * @param chain - the root chain this install walked from the launcher's shipped roots, whose last root verified the
+   *   release.
    * @throws {InstallError} `INSTALL_VERIFY_FAILED` when the manifest names {@link LOCAL_RELEASE_BUILDER} and
    *   {@link localBuilderAllowed} does not allow it.
    */
-  private refuseLocalRelease(manifest: ReleaseManifest, version: string, root: TrustedRoot): void {
+  private refuseLocalRelease(manifest: ReleaseManifest, version: string, chain: readonly TrustedRoot[]): void {
     const production = this.options.productionRoot === true || this.source.metadata === RELEASE_METADATA_ORIGIN
     if (!production || !manifest.rebuild.builders.some(builder => builder.name === LOCAL_RELEASE_BUILDER)) return
-    if (localBuilderAllowed(manifest.version, root, this.options.previewRoots)) return
-    throw new InstallError('INSTALL_VERIFY_FAILED', `${this.options.channel} manifest`, `release ${version} names the builder "${LOCAL_RELEASE_BUILDER}": it was built by local-release.ts, which no second builder rebuilt and no allowed signer tagged, and the production channel installs such a release only while it is a 0.x release under the pinned preview root (a root of any other digest refuses)`)
+    if (localBuilderAllowed(manifest.version, chain, this.options.previewRoots)) return
+    throw new InstallError('INSTALL_VERIFY_FAILED', `${this.options.channel} manifest`, `release ${version} names the builder "${LOCAL_RELEASE_BUILDER}": it was built by local-release.ts, which no second builder rebuilt and no allowed signer tagged, and the production channel installs such a release only while it is a 0.x release under a root chain that holds the pinned preview root and keeps its targets key`)
   }
 
   /**
@@ -673,10 +674,10 @@ export class LauncherChannel implements RuntimeChannel {
   }
 
   /**
-   * The root files this install walks forward from: the stored root once the launcher's shipped roots lead to it, so a
-   * home that adopted a newer root never walks back to an older one; otherwise the shipped roots. A stored root that
-   * no shipped root leads to is ignored here, as the launcher's remedy for it is to install again from the shipped
-   * roots.
+   * The root files this install walks forward from: the shipped roots, followed, once they lead to a stored root newer
+   * than all of them, by the chain an install walked to it (`trust/roots/`), so a home that adopted a newer root never
+   * walks back to an older one and the walk always starts at the launcher's own roots. A stored root that no shipped
+   * root leads to is ignored here, as the launcher's remedy for it is to install again from the shipped roots.
    * @returns the root files, oldest first, whose last file is the newest root trusted.
    */
   private async anchor(): Promise<readonly Uint8Array[]> {
@@ -684,8 +685,15 @@ export class LauncherChannel implements RuntimeChannel {
     const stored = await readStoredRootBytes(this.options.home)
     if (stored === undefined) return shipped
     try {
-      const trusted = verifyStoredRoot({ stored, shipped, walked: await readStoredRootChain(this.options.home), source: 'trust/root.json' })
-      return trusted.metadata.version > newestRootVersion(shipped) ? [stored] : shipped
+      const walked = await readStoredRootChain(this.options.home)
+      const trusted = verifyStoredRoot({ stored, shipped, walked, source: 'trust/root.json' })
+      const newest = newestRootVersion(shipped)
+      if (trusted.metadata.version <= newest) return shipped
+      // verifyStoredRoot walked exactly these files from the shipped roots to the stored one.
+      return [...shipped, ...walked.filter((bytes) => {
+        const version = readRoot(bytes).metadata.version
+        return version > newest && version <= trusted.metadata.version
+      })]
     } catch (error) {
       if (!isInstallError(error, 'INSTALL_VERIFY_FAILED')) throw error
       return shipped
