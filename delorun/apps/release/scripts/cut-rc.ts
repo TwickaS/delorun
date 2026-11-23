@@ -8,12 +8,16 @@
  * [--artifacts build|existing] [--platform <platform>]... [--log-submit <url> --log-checkpoint <url> --log-tiles <url>]
  * [--log-poll-seconds <n>] [--smoke-minutes <n>] [--smoke-previous <version>] [--no-smoke] [--allow-builder-paths] [--dry-run]`
  *
- * `--keys` is a directory holding `targets.pem` and `timestamp.pem`; their contents are passed to no log and no output,
- * only their paths reach the signing command. `--highlights` is where the release-notes file is written (default
+ * `--keys` is a directory holding `targets.pem` and `timestamp.pem`, and `log-entry-ecdsa.pem` when the root lists an
+ * ECDSA P-256 log-entry key; their contents are passed to no log and no output, only their paths reach the signing
+ * command, which signs the log entry with the root's listed keys in order and moves to the next only when the log refuses
+ * the entry's key type. `--highlights` is where the release-notes file is written (default
  * `<work>/notes-<version>.txt`); every candidate signs it into the manifest as `notes`.
  * `--work` (default: the channel's parent directory) holds the closure, the build cache and `cut-rc-<version>.log`, to
  * which every step's output goes; a step that fails names the log. The log endpoints default to the public Rekor v2
- * instance the release runbook names. `--closures-from` signs closure files an earlier run built and skips the build,
+ * instance the release runbook names. Before anything is built, `probe-log.ts` submits one throwaway entry over random
+ * bytes for each entry key type the root lists to that log and reports which it accepts; the cut stops when it accepts
+ * none. `--closures-from` signs closure files an earlier run built and skips the build,
  * which is also how to rerun after a timestamp or logging failure without rebuilding.
  *
  * Signing refuses closure or pack files that name the building user's home directory, user name as a folder or a unique
@@ -194,7 +198,7 @@ export function parseCutArgs(argv: readonly string[]): CutRequest {
 /** One step of the plan. */
 export interface PlannedStep {
   /** A short name, stable for specs. */
-  readonly id: 'tree' | 'changelog' | 'highlights' | 'clear-stages' | 'closure' | 'sign' | 'verify' | 'smoke'
+  readonly id: 'tree' | 'probe' | 'changelog' | 'highlights' | 'clear-stages' | 'closure' | 'sign' | 'verify' | 'smoke'
   /** What the step does, for the log. */
   readonly title: string
   /** The commands it runs, as printable lines; key files appear by path only. */
@@ -248,9 +252,22 @@ export function localReleaseArgs(request: CutRequest): string[] {
     '--state', request.state, '--closures-from', closureDirectory(request),
     ...request.platforms.flatMap(platform => ['--platform', platform]),
     '--log-submit', request.log.submit, '--log-checkpoint', request.log.checkpoint, '--log-tiles', request.log.tiles, '--log-poll-seconds', request.logPollSeconds,
+    ...existsSync(join(request.keys, LOG_ENTRY_ECDSA_KEY)) ? ['--log-entry-key', `PKIX_ECDSA_P256_SHA_256=${join(request.keys, LOG_ENTRY_ECDSA_KEY)}`] : [],
     '--notes', request.highlights,
     ...request.allowBuilderPaths ? ['--allow-builder-paths'] : [],
   ]
+}
+
+/** The file in `--keys` that holds the ECDSA P-256 log-entry key, when the root lists one. */
+export const LOG_ENTRY_ECDSA_KEY = 'log-entry-ecdsa.pem'
+
+/**
+ * The arguments of the probe step for `tsx`.
+ * @param request - the request.
+ * @returns the arguments of `probe-log.ts`.
+ */
+export function probeArgs(request: CutRequest): string[] {
+  return ['delorun/apps/release/scripts/probe-log.ts', '--root', request.root, '--log-submit', request.log.submit]
 }
 
 /**
@@ -263,6 +280,7 @@ export function planSteps(request: CutRequest): PlannedStep[] {
   const buildArgs = ['delorun/apps/release/src/build-closure.ts', '--version', request.version, '--commit', request.commit, '--out', closureDirectory(request), '--cache', join(request.work, 'cache'), '--artifacts', request.artifacts, ...request.platforms.flatMap(platform => ['--platform', platform])]
   return [
     { id: 'tree', title: `check a clean tracked tree at ${request.commit}`, commands: [`git rev-parse --verify ${request.commit}^{commit}`, 'git rev-parse HEAD', 'git status --porcelain --untracked-files=no'] },
+    { id: 'probe', title: `ask ${request.log.submit} which entry key types it accepts`, commands: [`${tsx} ${probeArgs(request).join(' ')}`] },
     { id: 'changelog', title: `assemble the changelog for ${request.version} when it has no entry`, commands: [`${tsx} delorun/apps/release/src/changelog/assemble.ts --version ${request.version}`] },
     { id: 'highlights', title: `write the release notes to ${request.highlights}`, commands: [`${tsx} delorun/apps/release/src/changelog/assemble.ts --version ${request.version} --highlights ${request.highlights}`] },
     ...request.closuresFrom === undefined
@@ -498,6 +516,13 @@ export async function cutRelease(request: CutRequest, deps: CutDeps): Promise<Cu
   if (resolved === '' || resolved !== head) return failed(`HEAD (${head}) is not ${request.commit}`, `check out ${request.commit} (detached) in a worktree and run again`)
   const dirty = (await command('git', ['status', '--porcelain', '--untracked-files=no'])).stdout.trim()
   if (dirty !== '') return failed(`tracked files are modified:\n${dirty}`, 'commit or revert them, then run again')
+  done(started)
+
+  started = begin('probe')
+  const probed = await command(tsx, probeArgs(request))
+  const answers = probed.stdout.trim().split('\n').filter(line => line.startsWith('probe-log:'))
+  for (const line of answers) say(`      ${line}`)
+  if (probed.status !== 0) return failed('the log accepts none of the entry key types the root lists, so the release could not be logged', `read ${logFile}; a root rotation that lists a type the log accepts is the remedy (release runbook, "Rotate the root to add a log-entry key")`)
   done(started)
 
   started = begin('changelog')

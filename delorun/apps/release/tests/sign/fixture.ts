@@ -7,7 +7,7 @@
  * metadata over throwaway keys. Every key is generated in the test and removed with its temporary directory.
  */
 import { execFileSync } from 'node:child_process'
-import { createHash, generateKeyPairSync, randomBytes, type KeyObject } from 'node:crypto'
+import { createHash, createPublicKey, generateKeyPairSync, randomBytes, type KeyObject } from 'node:crypto'
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { gzipSync } from 'node:zlib'
 import { devNull } from 'node:os'
@@ -103,16 +103,29 @@ export function throwawayKeys(): Keys {
 }
 
 /**
- * Signed root metadata over the given keys.
+ * A log-entry key as a root lists it, `active`.
+ * @param keyDetails - the entry key type.
+ * @param key - the key, private or public.
+ * @returns the listed key.
+ */
+export function listedEntryKey(keyDetails: string, key: KeyObject): NonNullable<RootMetadata['logEntryKeys']>[number] {
+  return { keyDetails, public: createPublicKey(key).export({ format: 'der', type: 'spki' }).toString('base64'), status: 'active' }
+}
+
+/**
+ * Signed root metadata over the given keys. Unless `overrides` names them, it lists the targets key as its one
+ * Ed25519ph log-entry key and its `log` as its one log, so releases verify under it; `bare` leaves both fields out, as
+ * `1.root.json` does.
  * @param keys - the role keys.
  * @param overrides - fields to replace, such as the version or the targets keys.
  * @param signers - the keys that sign it; the root key by default.
+ * @param bare - leave out `logEntryKeys` and `logs` unless `overrides` names them.
  * @returns the root file's bytes and its content.
  */
-export function rootFile(keys: Keys, overrides: Partial<RootMetadata> = {}, signers: readonly KeyObject[] = [keys.root]): { bytes: Buffer, metadata: RootMetadata } {
+export function rootFile(keys: Keys, overrides: Partial<RootMetadata> = {}, signers: readonly KeyObject[] = [keys.root], bare = false): { bytes: Buffer, metadata: RootMetadata } {
   const entries = [keys.root, keys.targets, keys.timestamp, keys.catalogue].map(publicKeyEntry)
   const [root, targets, timestamp, catalogue] = entries.map(entry => entry.keyid)
-  const metadata: RootMetadata = {
+  const content: RootMetadata = {
     schema: RELEASE_SCHEMAS.root,
     version: 1,
     issued: brandString<UtcTimestamp>('2026-11-01T00:00:00Z'),
@@ -126,8 +139,10 @@ export function rootFile(keys: Keys, overrides: Partial<RootMetadata> = {}, sign
     },
     log: { origin: 'log.example.test/fixture', vkey: 'log.example.test/fixture+00000000+AQ==' },
     witnesses: { keys: [{ name: 'witness.example.test', vkey: 'witness.example.test+00000000+BA==' }], threshold: 1 },
+    ...bare ? {} : { logEntryKeys: [listedEntryKey('PKIX_ED25519_PH', keys.targets)] },
     ...overrides,
   }
+  const metadata: RootMetadata = bare || overrides.logs !== undefined ? content : { ...content, logs: [content.log] }
   const envelope = signEnvelope({ signed: toJsonValue(metadata), signatures: [] }, signers)
   return { bytes: Buffer.from(`${JSON.stringify(envelope, undefined, 2)}\n`), metadata }
 }

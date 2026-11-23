@@ -1,16 +1,28 @@
 /**
  * Local stand-ins for the release log and its witness, so the release-log specs need no network: an in-memory RFC
- * 6962 log that, like Rekor v2, accepts `hashedrekord` v0.0.2 requests only with `PKIX_ED25519_PH` key details, builds
+ * 6962 log that accepts `hashedrekord` v0.0.2 requests with the key types it is set to accept (Ed25519ph and ECDSA
+ * P-256 by default, `PKIX_ED25519_PH` alone where a spec stands in for a Rekor v2 instance that refuses the other), builds
  * the entry body from them and signs checkpoints with a throwaway Ed25519 note key, and a witness that cosigns a
  * checkpoint with a throwaway cosignature key. The stand-in does not check the request's signature; the bundle
  * verifier does. The log serves its tree as C2SP `tlog-tiles` do, and can stop serving each partial tile whose full tile
  * exists, as a log may.
  */
 import { generateKeyPairSync, type KeyObject } from 'node:crypto'
-import { RELEASE_LOG_ENTRY_KEY_DETAILS, type HashedRekordRequest, type ReleaseLogBundle } from '@delorun/contract-release-log'
+import type { HashedRekordRequest, ReleaseLogBundle } from '@delorun/contract-release-log'
 import { entryBody } from '@delorun/release-formats/log/entry'
 import { inclusionProof, leafHash, nodeHash, treeRoot } from '@delorun/release-formats/log/merkle'
 import { checkpointBody, NOTE_COSIGNATURE, NOTE_ED25519, signatureLine, verifierKey } from '@delorun/release-formats/log/note'
+
+/** The log refused an entry's key type, which Rekor v2 answers with HTTP 400 `invalid hashedrekord request`. */
+export class EntryTypeRefused extends Error {
+  /**
+   * @param details - the refused key details.
+   */
+  constructor(details: string) {
+    super(`unsupported entry algorithm ${details}`)
+    this.name = 'EntryTypeRefused'
+  }
+}
 
 /** An in-memory log. */
 export class LogStandIn {
@@ -23,16 +35,21 @@ export class LogStandIn {
   keepsReplacedPartials = true
   /** Every tile path asked for, in order. */
   readonly tileRequests: string[] = []
+  /** The entry key types the log accepts; a spec removes one to stand in for a log that refuses it. */
+  readonly accepts = new Set<string>(['PKIX_ED25519_PH', 'PKIX_ECDSA_P256_SHA_256'])
+  /** The key details of every request submitted, accepted or refused, in order. */
+  readonly submitted: string[] = []
 
   /**
-   * Accept a request as Rekor v2 does: refuse key details other than Ed25519ph and append the body built from it.
+   * Accept a request as Rekor v2 does: refuse key details the log does not accept and append the body built from it.
    * @param request - the request.
    * @returns the entry's index.
-   * @throws Error when the key details are not `PKIX_ED25519_PH`.
+   * @throws EntryTypeRefused when the log does not accept the key details.
    */
   submit(request: HashedRekordRequest): number {
     const details: string = request.hashedRekordRequestV002.signature.verifier.keyDetails
-    if (details !== RELEASE_LOG_ENTRY_KEY_DETAILS) throw new Error(`unsupported entry algorithm ${details}`)
+    this.submitted.push(details)
+    if (!this.accepts.has(details)) throw new EntryTypeRefused(details)
     return this.append(entryBody(request))
   }
 

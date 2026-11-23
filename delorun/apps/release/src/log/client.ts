@@ -12,7 +12,9 @@ import { RELEASE_LOG_BUNDLE_SCHEMA, RELEASE_LOG_REQUEST_TIMEOUT_SECONDS, type Ha
 import type { RootMetadata } from '@delorun/contract-release-manifest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { z } from 'zod'
-import { LogVerificationError, verifyBundle } from '@delorun/release-formats/log/bundle'
+import { LogVerificationError, verifyBundle, verifyEntryBody } from '@delorun/release-formats/log/bundle'
+import { entryBody, entryRequest } from '@delorun/release-formats/log/entry'
+import type { LogEntrySigner } from '@delorun/release-formats/log/entry-keys'
 import { parseCheckpoint, splitNote } from '@delorun/release-formats/log/note'
 import { inclusionProofFromTiles, TILE_WIDTH } from '@delorun/release-formats/log/tiles'
 
@@ -34,6 +36,70 @@ const Submitted = z.looseObject({ logIndex: int64.optional(), integratedTime: in
 
 /** The size limit of a checkpoint note: a checkpoint with its signature lines is a few hundred bytes. */
 const CHECKPOINT_SIZE_LIMIT = 64 * 1024
+
+/** The size limit of a refusal body the submit step reads to name the log's reason. */
+const REFUSAL_BODY_LIMIT = 4 * 1024
+
+/**
+ * The only answers that mean the log refuses an entry's key type: HTTP 400 with a JSON body whose `message` is one of
+ * these. Rekor v2 gives the first whenever it cannot build a `hashedrekord` entry from a request, which includes a key
+ * type its instance does not allow; Rekor v1 gives the second for a disallowed algorithm. Because Rekor v2's message
+ * also covers a malformed request, a signer moves to its next key only after its own request verified locally.
+ */
+export const ENTRY_TYPE_REFUSALS: readonly string[] = ['invalid hashedrekord request', 'entry algorithms are not allowed']
+
+/** The log answered an entry submission with a status other than success. */
+export class LogSubmitError extends Error {
+  /** The HTTP status. */
+  readonly status: number
+  /** The answer's body as text, at most {@link REFUSAL_BODY_LIMIT} bytes. */
+  readonly body: string
+
+  /**
+   * @param url - the submission URL.
+   * @param status - the HTTP status.
+   * @param body - the answer's body as text.
+   */
+  constructor(url: string, status: number, body: string) {
+    super(`${url} answered HTTP ${String(status)}${body === '' ? '' : `: ${body.replace(/\s+/gu, ' ').trim()}`}`)
+    this.name = 'LogSubmitError'
+    this.status = status
+    this.body = body
+  }
+}
+
+/**
+ * Whether a submission failure is the log refusing the entry's key type, and nothing else.
+ * @param error - the failure.
+ * @returns `true` only for a {@link LogSubmitError} of status 400 whose body is a JSON object whose `message` is exactly
+ *   one of {@link ENTRY_TYPE_REFUSALS}.
+ */
+export function isEntryTypeRefusal(error: unknown): boolean {
+  if (!(error instanceof LogSubmitError) || error.status !== 400) return false
+  let decoded: unknown
+  try {
+    decoded = JSON.parse(error.body)
+  } catch (_notJson) {
+    // A body that is not JSON is no type refusal.
+    return false
+  }
+  if (typeof decoded !== 'object' || decoded === null || !('message' in decoded)) return false
+  return typeof decoded.message === 'string' && ENTRY_TYPE_REFUSALS.includes(decoded.message)
+}
+
+/**
+ * Submit an entry request.
+ * @param url - the log's `/api/v2/log/entries`.
+ * @param entry - the request.
+ * @returns the answer.
+ * @throws LogSubmitError when the log answers with a status other than 2xx; Error when it cannot be reached.
+ */
+async function submitEntry(url: string, entry: HashedRekordRequest): Promise<Response> {
+  const response = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(entry), signal: AbortSignal.timeout(RELEASE_LOG_REQUEST_TIMEOUT_SECONDS * 1000) })
+  if (response.ok) return response
+  const body = Buffer.from(await response.arrayBuffer().catch(() => new ArrayBuffer(0))).subarray(0, REFUSAL_BODY_LIMIT).toString('utf8')
+  throw new LogSubmitError(url, response.status, body)
+}
 
 async function respond(url: string, init?: RequestInit): Promise<Response> {
   const response = await fetch(url, { ...init, signal: AbortSignal.timeout(RELEASE_LOG_REQUEST_TIMEOUT_SECONDS * 1000) })
@@ -79,7 +145,7 @@ async function fetchTile(prefix: string, path: string): Promise<Uint8Array | und
  * other step.
  */
 export async function logRelease(endpoints: LogEndpoints, root: RootMetadata, manifestName: string, manifest: Uint8Array, version: string, entry: HashedRekordRequest, attempts: number, wait: () => Promise<void>, document: 'manifest' | 'packs' = 'manifest'): Promise<ReleaseLogBundle> {
-  const answer: unknown = await (await respond(endpoints.submit, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(entry) })).json()
+  const answer: unknown = await (await submitEntry(endpoints.submit, entry)).json()
   const submitted = Submitted.parse(answer)
   // Protobuf JSON omits an int64 that is zero, so an absent index or time is 0.
   const logged = { logIndex: submitted.logIndex ?? 0, integratedTime: submitted.integratedTime ?? 0, body: submitted.canonicalizedBody }
@@ -105,4 +171,56 @@ export async function logRelease(endpoints: LogEndpoints, root: RootMetadata, ma
     await wait()
   }
   throw new Error(`no checkpoint cosigned by a listed witness covered log index ${String(logged.logIndex)} after ${String(attempts)} attempts; the release is not published`)
+}
+
+/** A release file logged by {@link logWithFallback}. */
+export interface LoggedFile {
+  /** The verified bundle. */
+  readonly bundle: ReleaseLogBundle
+  /** The request the log accepted. */
+  readonly entry: HashedRekordRequest
+  /** The position in the signers of the one whose entry the log accepted. */
+  readonly signer: number
+}
+
+/**
+ * Log a signed release file with the first of the signers whose entry key type the log accepts.
+ *
+ * Each signer's request is verified first as a client would verify its entry under the root ({@link verifyEntryBody}),
+ * so a request of ours that is wrong never reaches the log. The next signer is tried only when the log refuses the entry
+ * with one of {@link ENTRY_TYPE_REFUSALS} ({@link isEntryTypeRefusal}); any other status, an unreachable log, a timeout,
+ * a checkpoint that never covers the entry and a bundle that does not verify end the attempt. The log accepting an
+ * entry proves nothing by itself: {@link logRelease} returns only a bundle that verified under the root.
+ * @param endpoints - the log's and the distributor's URLs.
+ * @param root - the trusted root the release verifies under.
+ * @param name - the signed file's name.
+ * @param bytes - the signed file's bytes.
+ * @param version - the release version.
+ * @param signers - the keys that may sign the entry, in the order to try them ({@link entrySigners}).
+ * @param attempts - how many times to ask for a witnessed checkpoint that covers the entry.
+ * @param wait - waits between attempts.
+ * @param document - which signed release file is logged.
+ * @param warn - reports each refused key type.
+ * @returns the bundle, the accepted request and its signer's position.
+ * @throws Error when no signer is given, a request does not verify locally, the last signer's type is refused, or any
+ *   other failure of {@link logRelease}.
+ */
+export async function logWithFallback(endpoints: LogEndpoints, root: RootMetadata, name: string, bytes: Uint8Array, version: string, signers: readonly LogEntrySigner[], attempts: number, wait: () => Promise<void>, document: 'manifest' | 'packs', warn: (line: string) => void): Promise<LoggedFile> {
+  if (signers.length === 0) throw new Error(`no key this machine holds may sign the log entry of ${name} under root ${String(root.version)}`)
+  for (const [position, signer] of signers.entries()) {
+    const entry = entryRequest(bytes, signer.key, signer.keyDetails)
+    try {
+      verifyEntryBody(root, bytes, version, entryBody(entry))
+    } catch (error) {
+      throw new Error(`the ${signer.keyDetails} log entry of ${name} does not verify under root ${String(root.version)}, so it was not submitted: ${(error as Error).message}`, { cause: error })
+    }
+    try {
+      return { bundle: await logRelease(endpoints, root, name, bytes, version, entry, attempts, wait, document), entry, signer: position }
+    } catch (error) {
+      if (!isEntryTypeRefusal(error) || position === signers.length - 1) throw error
+      warn(`the log refused the ${signer.keyDetails} entry of ${name} (${(error as Error).message}); trying ${signers[position + 1]!.keyDetails}`)
+    }
+  }
+  // The loop returns or throws at its last signer.
+  throw new Error(`no signer logged ${name}`)
 }

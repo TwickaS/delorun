@@ -4,8 +4,8 @@
  *
  * `node_modules/.bin/tsx delorun/apps/release/src/local-release.ts --version <version> --summary <text> [--security] [--notes <file>] --out <channel dir>
  * --root <root file>... --targets-key <targets.pem> --timestamp-key <timestamp.pem> --state <state.json> --log-submit <url>
- * --log-checkpoint <url> --log-tiles <url> [--log-poll-seconds <n>] [--platform <platform>]... [--artifacts build|existing]
- * [--commit <rev>] [--closures-from <dir>] [--cache <dir>] [--production-keys <file>] [--allow-builder-paths]`
+ * --log-checkpoint <url> --log-tiles <url> [--log-poll-seconds <n>] [--log-entry-key <type>=<key.pem>]... [--platform <platform>]...
+ * [--artifacts build|existing] [--commit <rev>] [--closures-from <dir>] [--cache <dir>] [--production-keys <file>] [--allow-builder-paths]`
  *
  * `--summary` is the release's one-line summary and `--security` marks the release as a security fix; the signed
  * manifest carries both as `summary` and `security` (false without the flag), which an update notice shows.
@@ -28,6 +28,11 @@
  * manifest's entry to the log they name, so point them at a log you run, never at a public log unless the release is
  * meant to be logged there. The command asks the log for a witnessed checkpoint at most 60 times, `--log-poll-seconds`
  * apart (30 by default). `--state` is the timestamp signer's state file, created on the first release.
+ * `--log-entry-key` names a log-entry private key besides the targets key, with its entry key type, such as
+ * `PKIX_ECDSA_P256_SHA_256=<log-entry.pem>` (a mode-0600 PEM file). The entry is signed with the newest root's listed
+ * `active` log-entry keys in the root's order, each that the targets key or a `--log-entry-key` belongs to, and the next
+ * is tried only when the log refuses the entry's key type. A root without `logEntryKeys` verifies no release, so the
+ * command refuses it before building anything.
  * `--production-keys` is the production-keys registry, `delorun/release/production-keys.json` of the repository by
  * default; the command refuses, before it builds anything, a `--root` file, a key one of those roots lists, or a
  * `--targets-key` or `--timestamp-key` that the registry lists.
@@ -35,7 +40,8 @@
  * @module @delorun/release/local-release
  */
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { createPrivateKey, createPublicKey } from 'node:crypto'
+import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -47,10 +53,30 @@ import { buildClosuresChecked, isRuntimePlatform, type BuildRequest } from './bu
 import type { ClosureFiles } from './closure/archive-closure.ts'
 import { isArtifactSource } from './closure/artifacts.ts'
 import { readRecipe } from './closure/config.ts'
+import { entryPublicKey, isLogEntryKeyDetails, type LogEntrySigner } from '@delorun/release-formats/log/entry-keys'
 import { readSigningKey } from '@delorun/release-formats/sign/envelope'
 import { semanticVersion } from '@delorun/release-formats/brands'
 import { buildLocalRelease, copyClosureFiles, LOCAL_PLATFORM } from './local/release.ts'
 import { PRODUCTION_KEYS_PATH, readProductionKeysFile } from './local/production-keys.ts'
+
+/**
+ * Read a `--log-entry-key` value: an entry key type and a private key file of that type's kind.
+ * @param value - `<type>=<path>`.
+ * @returns the signer.
+ * @throws Error when the value has no `=`, names a type this tool does not implement, the file is readable by others
+ *   than its owner, or it holds no private key of the type's kind.
+ */
+export function readLogEntryKey(value: string): LogEntrySigner {
+  const split = value.indexOf('=')
+  const keyDetails = split < 0 ? '' : value.slice(0, split)
+  if (!isLogEntryKeyDetails(keyDetails)) throw new Error(`--log-entry-key ${JSON.stringify(value)} is not <type>=<key.pem> with type PKIX_ED25519_PH or PKIX_ECDSA_P256_SHA_256`)
+  const path = resolve(value.slice(split + 1))
+  const mode = statSync(path).mode & 0o777
+  if ((mode & 0o077) !== 0) throw new Error(`${path} has mode ${mode.toString(8).padStart(4, '0')}; a signing key file must be readable by its owner only (chmod 600)`)
+  const key = createPrivateKey(readFileSync(path))
+  if (entryPublicKey(keyDetails, createPublicKey(key).export({ format: 'der', type: 'spki' })) === undefined) throw new Error(`${path} holds no ${keyDetails} private key`)
+  return { keyDetails, key }
+}
 
 /** The upstream release name a commit is based on: `upstream.ref` of the divergence ledger, `dsh-v<version>`. */
 const UPSTREAM_REF = /^dsh-v(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)$/u
@@ -94,6 +120,7 @@ export async function main(argv: readonly string[], build: (repository: string, 
       'log-checkpoint': { type: 'string' },
       'log-tiles': { type: 'string' },
       'log-poll-seconds': { type: 'string', default: '30' },
+      'log-entry-key': { type: 'string', multiple: true },
       'platform': { type: 'string', multiple: true },
       'artifacts': { type: 'string', default: 'build' },
       'commit': { type: 'string', default: 'HEAD' },
@@ -143,6 +170,7 @@ export async function main(argv: readonly string[], build: (repository: string, 
       roots: root.map(path => readFileSync(resolve(path))),
       targetsKey: readSigningKey(resolve(values['targets-key']!)),
       timestampKey: readSigningKey(resolve(values['timestamp-key']!)),
+      logEntryKeys: (values['log-entry-key'] ?? []).map(readLogEntryKey),
       productionKeys,
       platforms,
       state: resolve(state),
