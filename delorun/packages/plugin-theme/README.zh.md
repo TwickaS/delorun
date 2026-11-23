@@ -18,6 +18,7 @@ kind: "package-reference"
 - [约定](#contract)
 - [配置](#configuration)
 - [外观](#the-look)
+- [Alerts and pop-ups](#alerts-and-pop-ups)
 - [stock 外观](#the-stock-look)
 - [调色板与署名](#palettes-and-attribution)
 - [测试](#tests)
@@ -78,6 +79,18 @@ kind: "package-reference"
 
 <a id="the-stock-look"></a>
 
+<a id="alerts-and-pop-ups"></a>
+
+## Alerts and pop-ups
+
+While the look is on, the style element also carries [`src/client/alerts.css`](src/client/alerts.css), the one quiet glass style of every alert and pop-up in the studio. The stock look removes it with the rest of the element, so upstream's toast and dialog keep upstream's styles.
+
+- **Surface tokens** on `body`, which follow the scheme: `--delorun-glass-fill` (`--dsw-alias-bg-layer-1` at 86% opacity), `--delorun-glass-fill-solid`, `--delorun-glass-blur` (a 24 px backdrop blur), `--delorun-glass-edge` (a 1 px `--dsw-alias-border-l2` hairline), `--delorun-glass-shadow` and `--delorun-glass-shadow-raised` (a contact shadow under a soft drop, stronger in dark, where a 1 px top highlight is added), `--delorun-glass-radius` (`--dsw-radius-md`) and `--delorun-glass-radius-dialog` (`--dsw-radius-lg`). The surface is opaque where `backdrop-filter` is unsupported, under `prefers-reduced-transparency: reduce` and under `prefers-contrast: more`, which also takes the stronger `--dsw-alias-border-l4` edge.
+- **The alert** is [`@delorun/brand`'s `Alert`](../brand/README.zh.md): a 24 px tinted circle with a 14 px glyph of its own for each kind (info, success, warning, error, progress), a 14 px title at weight 500, one 13 px line in `--dsw-alias-label-secondary`, a tinted text button (`--delorun-alert-action`, the accent's text colour mixed 80% with the primary text, on 8% of the accent, 12% in dark), a quiet button and an optional close. Its variants are `inline` (a column such as the sidebar), `toast` (at most 380 px) and `banner` (actions on the text's row). A dialog uses `delorun-glass` with `data-variant="dialog"` (440 px, 24 px padding) and puts its actions in `delorun-alert-dialog-actions`, secondary first and primary last.
+- **Motion:** an 8 px slide and fade in over 200 ms (`--delorun-alert-ease`, a soft ease-out) and out over 150 ms, as transitions on `transform` and `opacity`, so a leave that starts mid-enter turns back from where the card is. Under `prefers-reduced-motion: reduce` nothing slides or fades, and the progress glyph stops turning.
+- **Upstream's surfaces,** through stable attributes and without edits: the toast (`[data-toast-area] > [role='alert']`) becomes the glass card, with its glyph in a tinted circle and its action in the action colour, and it enters and leaves by the same slide toward the toast position the person chose; the dialog (`[role='presentation'] > [role='dialog'][aria-modal='true']`, so also `@delorun/brand`'s `Dialog`) takes the glass at dialog size and the same enter.
+- **Contrast:** the title, the line and the tinted action reach 4.5:1 on the glass in every preset palette and both schemes, over a page covered in dense text under the blur ([`alerts.client.spec.ts`](tests/alerts.client.spec.ts)).
+
 ## stock 外观
 
 开关关闭期间，Delorun 外观的任何内容都不生效：没有令牌层，没有字体，没有 style 元素，没有首次绘制样式，没有各部分，没有标题，没有词汇，也没有服务。插件在 `settings.general.item` 中注册一行（`delorun-look`，位于「语言」之后），带一个标为「Delorun look」的开关和一行说明；开启它会写入 `studioAdditions: true`，studio 无需重新加载即可恢复。它还在 `<html>` 上设置 `data-delorun-stock`，并移除页面提供时带有的首次绘制 style 元素（通过 `FIRST_PAINT_MARK`，即其文本的开头找到它），所以上游的颜色立即恢复。释放浏览器一半也会移除该元素。studio 一半的「外观」行是同一个开关的另一面：它处于开启状态，关闭它会调用 `useStockLook()`。
@@ -101,6 +114,7 @@ Soft 是 Delorun 自己的。T3 Code 的六个主题以 [`src/palette/t3-themes.
 - [`host.spec.ts`](tests/host.spec.ts) 检查设置的默认值、`studioAdditions` 是默认值为 `false` 的易变字段，以及首次绘制样式、启动字标和设置只在开关开启期间打印。
 - [`landmark.client.spec.tsx`](tests/landmark.client.spec.tsx) 检查主面板在存在时、之后出现时以及被框架替换时都会被标记，已有角色的面板保持不动，以及释放会移除该角色并停止监视。
 - [`boot-settings.client.spec.tsx`](tests/boot-settings.client.spec.tsx) 读回已打印的设置，并拒绝缺少字段或含有配置不接受的字段的值。
+- [`alerts.client.spec.ts`](tests/alerts.client.spec.ts) holds the alert sheet to the `Alert` component's classes, the opaque fallbacks, transform-and-opacity motion that stops under reduced motion, and AA contrast on the glass.
 - [`studio.client.spec.tsx`](tests/studio.client.spec.tsx) 证明该开关：关闭时没有服务、层、style 元素、字体、部分或词汇，只注册「通用」行；开启时，服务、外观、hero 字标和四个「通用」行都存在，各行通过主题行的表单写入，外观离开或插件被释放之后，首次绘制元素消失；`useStockLook()` 会卸载依赖它的插件；没有已打印的设置时，Host 应答之前不注册任何内容；有已打印的设置时，外观和服务（因而依赖它的插件）在表单加载期间已就位，表单的第一次应答会取代它们，无效的已打印设置会被报告并忽略。
 - [`appearance.client.spec.tsx`](tests/appearance.client.spec.tsx)、[`appearance-rows.client.spec.tsx`](tests/appearance-rows.client.spec.tsx)、[`conversation.client.spec.tsx`](tests/conversation.client.spec.tsx)、[`look-row.client.spec.tsx`](tests/look-row.client.spec.tsx) 和 [`controller.client.spec.tsx`](tests/controller.client.spec.tsx) 渲染各部分、各行和控制器：每个控件写入其字段，标题指明各自的部分，「思考」选择框会打开所提供显示方式的菜单。
 

@@ -35,6 +35,7 @@ The package exports its source, as [`@delorun/settings-controls`](../settings-co
 | `@delorun/brand/tokens.css` | The same values as `--dl-*` custom properties |
 | `@delorun/brand/fonts.css` | `@font-face` for Schibsted Grotesk and JetBrains Mono, Latin subset, SIL OFL 1.1 |
 | `@delorun/brand/mark` | `MARK` (the path data) and `Mark` (the component) |
+| `@delorun/brand/alert` | `Alert`, `ALERT_CLASSES` and `ALERT_EXIT_MS`, the studio's alert (also exported from the index) |
 | `@delorun/brand/toast` | `Toaster`, `showToast` and `ToastCard`, for the website and the docs only: the toast is drawn through Sonner, which the studio does not load |
 
 ## Tokens
@@ -57,6 +58,7 @@ Each is a function component with a documented props interface. "Upstream" means
 | `Pill` | `Pill` | Tones |
 | `Dialog` | `Modal` | Actions footer and a `warning` tone |
 | `Card` | none | Bordered section named by its `<h3>` |
+| `Alert` | none | The studio's alert: kinds `info`, `success`, `warning`, `error` and `progress`, each with its own glyph in a tinted circle; a title, one muted line, a tinted primary and a quiet secondary action, an optional close; `inline`, `toast` and `banner` variants; role `alert` for a warning or an error and `status` otherwise unless the caller names one; `closing` plays the leave and `onClosed` reports its end. It holds no styles: `@delorun/plugin-theme` styles `ALERT_CLASSES` while the Delorun look is on (its README, "Alerts and pop-ups") |
 | `Notice` | none | Four tones, optional icon, title, sentence and actions, caller-chosen live-region role |
 | `OutcomePanel` | none | A centred full-panel result: icon disc, heading, sentence, actions |
 | `StatusCard` | `Pill` | Icon disc, title, detail and a state pill |

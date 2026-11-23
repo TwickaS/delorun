@@ -24,6 +24,9 @@ import { en as conversationEn, zh as conversationZh } from '../src/client/conver
 import { EFFORT_ATTRIBUTE } from '../src/client/effort.ts'
 import { STUDIO_ON, themeForm, type ThemeFormHandle } from './theme-form.client.ts'
 
+// Vitest compiles stylesheets to empty text; a marker stands in for the alert sheet so the spec can see where it goes.
+vi.mock('../src/client/alerts.css?inline', () => ({ default: '.delorun-alert{/*alert sheet*/}' }))
+
 type Layer = Readonly<Record<string, { light: string; dark: string }>>
 
 interface Registered {
@@ -180,6 +183,19 @@ describe('with the studio additions on', () => {
     expect(faces()).toBeNull()
     expect(slots.size + dictionaries.size + overrides.size).toBe(0)
     expect(ctx.get('delorunStudio')).toBeUndefined()
+  })
+
+  it('carries the alert sheet in the look\'s style element, which the stock look and disposal remove', async () => {
+    const form = themeForm(STUDIO_ON)
+    const { fiber, faces } = await mount(form)
+    expect(faces()?.textContent).toContain('/*alert sheet*/')
+    form.publish({ value: { ...STUDIO_ON, studioAdditions: false } })
+    expect(faces()).toBeNull()
+    expect(document.head.innerHTML).not.toContain('/*alert sheet*/')
+    form.publish({ value: STUDIO_ON })
+    expect(faces()?.textContent).toContain('/*alert sheet*/')
+    await fiber.dispose()
+    expect(document.head.innerHTML).not.toContain('/*alert sheet*/')
   })
 
   it('leaves the Conversation section out while the Host does not serve upstream\'s chat settings', async () => {
