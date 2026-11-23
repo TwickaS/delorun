@@ -3,7 +3,7 @@
  * check) and the state line under the card (checking, adding, restart, unavailable or failed with what to do next).
  */
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
-import { currentDownloadsSource, useDownloadStatusText, type DownloadItem } from '@delorun/plugin-downloads/row'
+import { currentDownloadsSource, type DownloadItem, Figures, useDownloadStatusText } from '@delorun/plugin-downloads/row'
 import { useCallback, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
 import type { BundleState } from '../bundles.ts'
@@ -101,7 +101,7 @@ export function DownloadBlock({ label, download }: { readonly label: string; rea
         : percent === undefined
         ? <span className={css.bar} aria-hidden="true" />
         : <span className={css.bar} role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} aria-valuetext={`${String(percent)}%`}><span style={{ width: `${String(percent)}%` }} /></span>}
-      <p className={css.rate} data-empty={status === '' || undefined}>{status === '' ? '\u00a0' : status}</p>
+      <p className={css.rate} data-empty={status === '' || undefined}>{status === '' ? '\u00a0' : <Figures text={status} />}</p>
     </div>
   )
 }

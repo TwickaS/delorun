@@ -2,6 +2,7 @@
 import { IconCheckOutlineRegular, IconCloseOutlineRegular, IconWarningOutlineRegular } from '@deepseek-ai/dsh-client-ui-primitives'
 import { formatSize } from '@delorun/plugin-packs/transfer'
 import type { ReactNode } from 'react'
+import { Figures } from './Figures.tsx'
 import css from './Items.module.css'
 import { itemFraction } from './model.ts'
 import { nameOf } from './names.ts'
@@ -103,14 +104,14 @@ function Row({ item, source, t, tone }: Omit<ItemListProps, 'items' | 'label'> &
       <div className={css.main}>
         <span className={css.name}>{name}</span>
         {failed || done
-          ? <span className={css.status} data-failed={failed || undefined}>{text}</span>
+          ? <span className={css.status} data-failed={failed || undefined}><Figures text={text} /></span>
           : (
             <>
               <span className={css.track}>
                 <span role="progressbar" aria-label={name} aria-valuemin={0} aria-valuemax={100} aria-valuenow={unmeasured(item) ? undefined : Math.floor(itemFraction(item) * 100)} aria-valuetext={valueText}
                   className={`${css.fill} ${running && tone === 'card' ? css.accent : ''}`} data-unmeasured={unmeasured(item) || undefined} style={unmeasured(item) ? undefined : { width: `${String(itemFraction(item) * 100)}%` }} />
               </span>
-              <span className={css.status}>{text}</span>
+              <span className={css.status}><Figures text={text} /></span>
             </>
           )}
       </div>
