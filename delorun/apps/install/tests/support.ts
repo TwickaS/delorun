@@ -6,7 +6,7 @@
  *
  * @module @delorun/install/tests/support
  */
-import { createHash, generateKeyPairSync, type KeyObject } from 'node:crypto'
+import { createHash, createPublicKey, generateKeyPairSync, type KeyObject } from 'node:crypto'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { brandString } from '@deepseek-ai/dsh-brand'
@@ -15,6 +15,7 @@ import { gzip } from '@delorun/release-formats/archive/bytes'
 import type { ArchiveEntry } from '@delorun/release-formats/archive/entry'
 import { tarStream } from '@delorun/release-formats/archive/tar'
 import { entryBody, entryRequest } from '@delorun/release-formats/log/entry'
+import type { LogEntrySigner } from '@delorun/release-formats/log/entry-keys'
 import { inclusionProof, leafHash, treeRoot } from '@delorun/release-formats/log/merkle'
 import { checkpointBody, NOTE_COSIGNATURE, NOTE_ED25519, signatureLine, verifierKey } from '@delorun/release-formats/log/note'
 import { publicKeyEntry, signEnvelope } from '@delorun/release-formats/sign/envelope'
@@ -152,6 +153,12 @@ export interface FixtureOptions {
   readonly keys?: FixtureKeys
   /** The builder the manifest's rebuild names; the targets-key holder by default. */
   readonly builder?: string
+  /** The key that signs the log entry, with its entry key type; an Ed25519ph entry by the targets key by default. */
+  readonly entrySigner?: (keys: FixtureKeys) => LogEntrySigner
+  /** The log-entry keys and logs the root lists, in place of the targets key as its one Ed25519ph key and its log. */
+  readonly rootExtra?: (keys: FixtureKeys) => Pick<RootMetadata, 'logEntryKeys' | 'logs'>
+  /** Leave `logEntryKeys` and `logs` out of the root, as `1.root.json` does, so no release verifies under it. */
+  readonly bareRoot?: boolean
 }
 
 /**
@@ -208,7 +215,8 @@ export async function fixtureRelease(options: FixtureOptions = {}): Promise<Fixt
   }
   const manifestBytes = envelope(manifest, options.manifestSigners ?? [keys.targets])
   const bundledManifest = options.bundleOver?.manifest ?? manifestBytes
-  const body = entryBody(entryRequest(bundledManifest, keys.targets))
+  const signer = options.entrySigner?.(keys) ?? { keyDetails: 'PKIX_ED25519_PH', key: keys.targets }
+  const body = entryBody(entryRequest(bundledManifest, signer.key, signer.keyDetails))
   const leaves = [leafHash(body)]
   const rootMetadata = rootMetadataFor(keys, options)
   const cosigners = options.cosigners?.(keys) ?? [{ name: WITNESS_NAME, key: keys.witness }]
@@ -278,6 +286,8 @@ function image(): NonNullable<ReleaseManifest['images']>['s2'] {
 export function rootMetadataFor(keys: FixtureKeys, options: FixtureOptions = {}): RootMetadata {
   const entries = [keys.root, keys.targets, keys.timestamp, keys.catalogue].map(publicKeyEntry)
   const [root, targets, timestamp, catalogue] = entries.map(entry => entry.keyid)
+  const log = { origin: LOG_ORIGIN, vkey: verifierKey(LOG_ORIGIN, NOTE_ED25519, keys.log) }
+  const trust = options.bareRoot === true ? {} : { logs: [log], logEntryKeys: [{ keyDetails: 'PKIX_ED25519_PH', public: createPublicKey(keys.targets).export({ format: 'der', type: 'spki' }).toString('base64'), status: 'active' as const }] }
   return {
     schema: RELEASE_SCHEMAS.root,
     version: 1,
@@ -290,7 +300,9 @@ export function rootMetadataFor(keys: FixtureKeys, options: FixtureOptions = {})
       timestamp: { keyids: [timestamp!], threshold: 1 },
       catalogue: { keyids: [catalogue!], threshold: 1 },
     },
-    log: { origin: LOG_ORIGIN, vkey: verifierKey(LOG_ORIGIN, NOTE_ED25519, keys.log) },
+    log,
+    ...trust,
+    ...options.rootExtra?.(keys),
     witnesses: { keys: [{ name: WITNESS_NAME, vkey: verifierKey(WITNESS_NAME, NOTE_COSIGNATURE, keys.witness) }], threshold: 1 },
   }
 }
@@ -300,11 +312,12 @@ export function rootMetadataFor(keys: FixtureKeys, options: FixtureOptions = {})
  * @param previous - the root the client trusts now, whose log and witnesses the next version keeps.
  * @param keys - the next version's role keys; the same keys unless a rotation replaces them.
  * @param signers - the keys that sign it.
+ * @param change - replaces fields of the next version, such as its log-entry keys; none by default.
  * @returns its file bytes.
  */
-export function nextRoot(previous: RootMetadata, keys: FixtureKeys, signers: readonly KeyObject[]): Buffer {
+export function nextRoot(previous: RootMetadata, keys: FixtureKeys, signers: readonly KeyObject[], change: (next: RootMetadata) => RootMetadata = next => next): Buffer {
   const rotated = rootMetadataFor(keys)
-  return envelope({ ...previous, version: previous.version + 1, keys: rotated.keys, roles: rotated.roles }, signers)
+  return envelope(change({ ...previous, version: previous.version + 1, keys: rotated.keys, roles: rotated.roles }), signers)
 }
 
 /**

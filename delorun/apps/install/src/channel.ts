@@ -521,8 +521,8 @@ export class LauncherChannel implements RuntimeChannel {
   /**
    * Refuse a release the local release build signed when the verifying root is a production root: the channel fetches
    * from the production publication, or the options say the launcher's roots are production roots, as they do for a
-   * `--from` folder. {@link localBuilderAllowed} is the one exception: a 0.x release under the preview root (A369,
-   * A506).
+   * `--from` folder. {@link localBuilderAllowed} is the one exception: a 0.x release under the pinned preview root (A369,
+   * A506, A616).
    * @param manifest - the verified manifest.
    * @param version - the release, for the message.
    * @param root - the root that verified the release.
@@ -533,7 +533,7 @@ export class LauncherChannel implements RuntimeChannel {
     const production = this.options.productionRoot === true || this.source.metadata === RELEASE_METADATA_ORIGIN
     if (!production || !manifest.rebuild.builders.some(builder => builder.name === LOCAL_RELEASE_BUILDER)) return
     if (localBuilderAllowed(manifest.version, root, this.options.previewRoots)) return
-    throw new InstallError('INSTALL_VERIFY_FAILED', `${this.options.channel} manifest`, `release ${version} names the builder "${LOCAL_RELEASE_BUILDER}": it was built by local-release.ts, which no second builder rebuilt and no allowed signer tagged, and the production channel installs such a release only while it is a 0.x release under the preview root`)
+    throw new InstallError('INSTALL_VERIFY_FAILED', `${this.options.channel} manifest`, `release ${version} names the builder "${LOCAL_RELEASE_BUILDER}": it was built by local-release.ts, which no second builder rebuilt and no allowed signer tagged, and the production channel installs such a release only while it is a 0.x release under the pinned preview root (a root of any other digest refuses)`)
   }
 
   /**

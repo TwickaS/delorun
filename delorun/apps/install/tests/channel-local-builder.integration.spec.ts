@@ -101,7 +101,7 @@ describe('a production channel and a release the maintainer\'s PC built', () => 
   it('refuses a 0.x release under a root whose digest is not the published preview root', async () => {
     const error = await refused((await production(await local())).resolve())
     expect(error.detail).toContain(`names the builder "${LOCAL_RELEASE_BUILDER}"`)
-    expect(error.detail).toContain('only while it is a 0.x release under the preview root')
+    expect(error.detail).toContain('only while it is a 0.x release under the pinned preview root')
   })
 
   it.each(['1.0.0', '1.0.0-rc.1', '2.3.4'])('refuses release %s under the preview root, through resolve and newest', async (version) => {

@@ -4,7 +4,7 @@
  * fixture release log whose entry, inclusion proof and witnessed checkpoint are computed locally; and a `fetch` that
  * answers as that log's tlog-tiles API. No spec reaches the network, and no key here is a real one.
  */
-import { createHash, type KeyObject } from 'node:crypto'
+import { createHash, createPublicKey, type KeyObject } from 'node:crypto'
 import { chmodSync, mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -81,7 +81,8 @@ export interface InstalledHome {
 }
 
 /**
- * The trusted root over the role keys, naming the fixture log and witness.
+ * The trusted root over the role keys, naming the fixture log and witness, with the targets key as its one Ed25519ph
+ * log-entry key.
  * @param keys - the role keys.
  * @param log - the log.
  * @param witness - the witness.
@@ -103,7 +104,9 @@ function rootMetadata(keys: Keys, log: FixtureLog, witness: FixtureWitness): Roo
       catalogue: { keyids: [catalogue!], threshold: 1 },
     },
     log: { origin: log.origin, vkey: log.vkey },
+    logs: [{ origin: log.origin, vkey: log.vkey }],
     witnesses: { keys: [{ name: witness.name, vkey: witness.vkey }], threshold: 1 },
+    logEntryKeys: [{ keyDetails: 'PKIX_ED25519_PH', public: createPublicKey(keys.targets).export({ format: 'der', type: 'spki' }).toString('base64'), status: 'active' }],
   }
 }
 

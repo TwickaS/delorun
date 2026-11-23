@@ -1,6 +1,6 @@
 /**
  * The rule that lets a production-channel launcher install a release built on the maintainer's PC (A369, A506): a 0.x
- * release under the preview root, and nothing else.
+ * release under the pinned preview root, and nothing else.
  */
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
@@ -31,9 +31,9 @@ describe('localBuilderAllowed', () => {
     expect(localBuilderAllowed(version, rootOf(1, PREVIEW_ROOT_SHA256))).toBe(false)
   })
 
-  it('refuses a later root with the same digest, and root 1 with another digest', () => {
-    expect(localBuilderAllowed('0.1.0', rootOf(2, PREVIEW_ROOT_SHA256))).toBe(false)
+  it('refuses a root of any version whose digest is not the pinned one', () => {
     expect(localBuilderAllowed('0.1.0', rootOf(1, 'f'.repeat(64)))).toBe(false)
+    expect(localBuilderAllowed('0.1.0', rootOf(2, 'f'.repeat(64)))).toBe(false)
   })
 
   it('takes the digests a spec supplies in place of the published one', () => {
