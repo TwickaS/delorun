@@ -239,7 +239,17 @@
     {
       "area": "Install and update",
       "section": "Changed",
+      "text": "Container images are published at ghcr.io/twickas, and the plugin catalogue lives at github.com/TwickaS/delorun-plugins."
+    },
+    {
+      "area": "Install and update",
+      "section": "Changed",
       "text": "An install, `delorun update`, `delorun repair` and a plugin pack download show a live bar with size, speed and time left, then a checklist with a tick and a time for each step. A log or a pipe gets one plain line per step and one line for each tenth of a download."
+    },
+    {
+      "area": "Install and update",
+      "section": "Changed",
+      "text": "The `delorun` package page on npm says what Delorun is, what the launcher needs, and links to the website, the docs and the issue tracker."
     },
     {
       "area": "Install and update",
@@ -375,6 +385,11 @@
       "area": "Install and update",
       "section": "Security",
       "text": "The update report says when the release log could not be reached as the release was installed, and does not show its log check as passed, and `delorun update --yes` does not confirm such a release."
+    },
+    {
+      "area": "Install and update",
+      "section": "Security",
+      "text": "Release root 2 lists the keys allowed to sign a release's log entry, ECDSA P-256 first and Ed25519ph as the alternative, and the logs whose checkpoints count. Delorun accepts a log entry only when a key the root lists for its type signed it, in a listed log cosigned by a listed witness, and verifies no release under a root without these lists, so a log that stops accepting one key type, or a new log shard, needs a root rotation by the offline root key and no client release. An earlier log listed after such a rotation verifies only the releases up to its last one, and a locally built 0.x release keeps installing under later roots that follow from root 2 and keep its targets key. Copies on 0.1.0-preview.2.7 or earlier cannot read root 2: reinstall once with `npx delorun@latest`; your home, chats and settings stay."
     },
     {
       "area": "Setup",
@@ -1194,6 +1209,26 @@
     {
       "area": "Studio",
       "section": "Added",
+      "text": "Multiview has a layout picker with a small picture of each layout: Auto, Main and stack, Side by side, Stacked rows, Grid, Main on top, Spiral, Centred main, Activity mosaic and Tabs. Auto is the new default: up to three panes side by side, then rows on a tall window, a centred main chat on a very wide one and the main chat beside a stack of agents otherwise. A pane that would be smaller than the least pane size becomes a tab of its neighbour instead of being hidden, and Auto never rearranges while you drag or type."
+    },
+    {
+      "area": "Studio",
+      "section": "Added",
+      "text": "Main and stack puts the main chat on the left or the right, stacks the agents as rows, columns, a grid or a spiral, and remembers the main chat's share when you drag the divider. Activity mosaic gives working agents the large places and finished ones small places, with a short glide that reduced motion turns off."
+    },
+    {
+      "area": "Studio",
+      "section": "Added",
+      "text": "Arranging the panes yourself saves the arrangement as Yours, which the next Multiview uses with its own agents; a message offers Undo, and Reset to Auto clears it. An approved phone or tablet saves it too, without an unlock; if a save is refused, the message says the arrangement stays with that chat. Choosing a layout in the picker also makes it your default. Settings, Multiview, a new page, chooses whether your arrangement is remembered for the whole studio, one workspace or one chat, whether resizing panes saves it or only moving them does, and holds the other Multiview settings, including the space between panes, from edge to edge up to 32 pixels."
+    },
+    {
+      "area": "Studio",
+      "section": "Added",
+      "text": "New keyboard commands, with no keys until you give them some, choose the next or previous layout, move focus between panes, swap a pane with the main chat, and grow or shrink the main chat."
+    },
+    {
+      "area": "Studio",
+      "section": "Added",
       "text": "The setup guide's plugin cards and the downloads panel show a download's speed and, once its size is known, the time left, measured the same way as the terminal's install display. A download that stands still shows no speed."
     },
     {
@@ -1465,6 +1500,26 @@
       "area": "Studio",
       "section": "Changed",
       "text": "The docs sidebar and phone drawer end in one compact row: the language picker and a theme button that names the current theme. The site is now called Delorun Docs."
+    },
+    {
+      "area": "Studio",
+      "section": "Changed",
+      "text": "Multiview is an icon at the end of the \"N subagents\" button in the chat header instead of a Multiview button with a count and a chevron. The icon has its own drawing (a main pane and two small ones) and stays lit while Multiview shows. The layouts sit at the bottom of the agents list, and right-clicking or holding the icon opens the same choice. The first time Multiview opens, a short note by the icon says where to find them, once. A keyboard command, \"Multiview: show the main chat only / show Multiview\", switches to the main chat alone and back, keeping the pins and the layout. It has no shortcut until you set one in the keyboard settings."
+    },
+    {
+      "area": "Studio",
+      "section": "Changed",
+      "text": "With the Delorun look, the sidebar and side panel toggles have different icons (list lines for the sidebar, a shaded right-hand column for the side panel) instead of the same panel icon; the stock look keeps upstream's."
+    },
+    {
+      "area": "Studio",
+      "section": "Changed",
+      "text": "Alerts, toasts, banners and dialogs share one quiet look: a translucent card with a fine edge and a soft shadow, a small status icon, a title with one muted line and a tinted action button. They slide in gently and leave quickly, hold still when the system asks for reduced motion, and turn opaque when it asks for reduced transparency. The stock look keeps DeepSeek Harness's own styles."
+    },
+    {
+      "area": "Studio",
+      "section": "Changed",
+      "text": "When the studio loses its connection, the reconnecting card counts down to the next attempt (\"Trying again in 4 s\"), says when this device is offline, and keeps Reconnect now as its action."
     },
     {
       "area": "Studio",
@@ -1815,6 +1870,16 @@
       "area": "Safety and privacy",
       "section": "Added",
       "text": "`delorun setup prompts` offers a third answer, **Never ask (dangerous)**, for people who want Claude Code's bypass mode: any chat can then switch to full access with no question. It shows a warning, asks a yes-or-no that starts on No, and then asks you to type `full access everywhere`. A scripted setup needs `--prompts dangerous --accept-dangerous-mode`, `--yes` alone never selects it, and Delorun refuses it when it runs as root. While it is on, `delorun` at start, `delorun status` and `delorun doctor` say so, and choosing another answer turns it off."
+    },
+    {
+      "area": "Safety and privacy",
+      "section": "Added",
+      "text": "The shield at the foot of the sidebar opens a Security panel: five rows say what the agent can do, whether you can undo a change, who can reach the studio, what you added and whether this copy of Delorun is genuine, each green, amber or red with the reason, whether it is your choice, and one button that fixes it. When everything is green it shows one line, \"Protected as Delorun intends\"; Advanced breaks every row down and is remembered."
+    },
+    {
+      "area": "Safety and privacy",
+      "section": "Added",
+      "text": "Shortly after Delorun starts, once no chat has been busy for a moment, it hashes every installed file through the launcher at low priority and stops if a chat starts working, so this copy reads \"Verified\" without pressing Check now. It reads plugins and your changes again after a plugin is added, updated, switched or removed, and each check shows how long ago it ran."
     },
     {
       "area": "Safety and privacy",
@@ -2380,6 +2445,11 @@
       "area": "Reach",
       "section": "Changed",
       "text": "The studio's unlock dialog says how many minutes an unlock lasts (the `elevationMinutes` setting, 15 by default) before you start one, and shows the end time once your computer approves it."
+    },
+    {
+      "area": "Reach",
+      "section": "Changed",
+      "text": "A device that asks to pair opens a pop-up at your computer by default: the device's details and the time left, the box for the 8-digit code with Submit, and **Not you making this request?** to decline it. **Don't show this pop-up again** switches back to the quiet notice, and Settings → Devices offers the pop-up, the notice or nothing."
     },
     {
       "area": "Reach",
@@ -3078,11 +3148,23 @@
           "items": [
             {
               "section": "Changed",
+              "text": "Container images are published at ghcr.io/twickas, and the plugin catalogue lives at github.com/TwickaS/delorun-plugins."
+            },
+            {
+              "section": "Changed",
               "text": "An install, `delorun update`, `delorun repair` and a plugin pack download show a live bar with size, speed and time left, then a checklist with a tick and a time for each step. A log or a pipe gets one plain line per step and one line for each tenth of a download."
             },
             {
               "section": "Changed",
+              "text": "The `delorun` package page on npm says what Delorun is, what the launcher needs, and links to the website, the docs and the issue tracker."
+            },
+            {
+              "section": "Changed",
               "text": "The source code moved to github.com/twickas/delorun; the old address redirects."
+            },
+            {
+              "section": "Security",
+              "text": "Release root 2 lists the keys allowed to sign a release's log entry, ECDSA P-256 first and Ed25519ph as the alternative, and the logs whose checkpoints count. Delorun accepts a log entry only when a key the root lists for its type signed it, in a listed log cosigned by a listed witness, and verifies no release under a root without these lists, so a log that stops accepting one key type, or a new log shard, needs a root rotation by the offline root key and no client release. An earlier log listed after such a rotation verifies only the releases up to its last one, and a locally built 0.x release keeps installing under later roots that follow from root 2 and keep its targets key. Copies on 0.1.0-preview.2.7 or earlier cannot read root 2: reinstall once with `npx delorun@latest`; your home, chats and settings stay."
             }
           ]
         },
@@ -3140,6 +3222,22 @@
           "items": [
             {
               "section": "Added",
+              "text": "Multiview has a layout picker with a small picture of each layout: Auto, Main and stack, Side by side, Stacked rows, Grid, Main on top, Spiral, Centred main, Activity mosaic and Tabs. Auto is the new default: up to three panes side by side, then rows on a tall window, a centred main chat on a very wide one and the main chat beside a stack of agents otherwise. A pane that would be smaller than the least pane size becomes a tab of its neighbour instead of being hidden, and Auto never rearranges while you drag or type."
+            },
+            {
+              "section": "Added",
+              "text": "Main and stack puts the main chat on the left or the right, stacks the agents as rows, columns, a grid or a spiral, and remembers the main chat's share when you drag the divider. Activity mosaic gives working agents the large places and finished ones small places, with a short glide that reduced motion turns off."
+            },
+            {
+              "section": "Added",
+              "text": "Arranging the panes yourself saves the arrangement as Yours, which the next Multiview uses with its own agents; a message offers Undo, and Reset to Auto clears it. An approved phone or tablet saves it too, without an unlock; if a save is refused, the message says the arrangement stays with that chat. Choosing a layout in the picker also makes it your default. Settings, Multiview, a new page, chooses whether your arrangement is remembered for the whole studio, one workspace or one chat, whether resizing panes saves it or only moving them does, and holds the other Multiview settings, including the space between panes, from edge to edge up to 32 pixels."
+            },
+            {
+              "section": "Added",
+              "text": "New keyboard commands, with no keys until you give them some, choose the next or previous layout, move focus between panes, swap a pane with the main chat, and grow or shrink the main chat."
+            },
+            {
+              "section": "Added",
               "text": "The setup guide's plugin cards and the downloads panel show a download's speed and, once its size is known, the time left, measured the same way as the terminal's install display. A download that stands still shows no speed."
             },
             {
@@ -3149,6 +3247,22 @@
             {
               "section": "Changed",
               "text": "The docs sidebar and phone drawer end in one compact row: the language picker and a theme button that names the current theme. The site is now called Delorun Docs."
+            },
+            {
+              "section": "Changed",
+              "text": "Multiview is an icon at the end of the \"N subagents\" button in the chat header instead of a Multiview button with a count and a chevron. The icon has its own drawing (a main pane and two small ones) and stays lit while Multiview shows. The layouts sit at the bottom of the agents list, and right-clicking or holding the icon opens the same choice. The first time Multiview opens, a short note by the icon says where to find them, once. A keyboard command, \"Multiview: show the main chat only / show Multiview\", switches to the main chat alone and back, keeping the pins and the layout. It has no shortcut until you set one in the keyboard settings."
+            },
+            {
+              "section": "Changed",
+              "text": "With the Delorun look, the sidebar and side panel toggles have different icons (list lines for the sidebar, a shaded right-hand column for the side panel) instead of the same panel icon; the stock look keeps upstream's."
+            },
+            {
+              "section": "Changed",
+              "text": "Alerts, toasts, banners and dialogs share one quiet look: a translucent card with a fine edge and a soft shadow, a small status icon, a title with one muted line and a tinted action button. They slide in gently and leave quickly, hold still when the system asks for reduced motion, and turn opaque when it asks for reduced transparency. The stock look keeps DeepSeek Harness's own styles."
+            },
+            {
+              "section": "Changed",
+              "text": "When the studio loses its connection, the reconnecting card counts down to the next attempt (\"Trying again in 4 s\"), says when this device is offline, and keeps Reconnect now as its action."
             }
           ]
         },
@@ -3165,8 +3279,25 @@
           "area": "Safety and privacy",
           "items": [
             {
+              "section": "Added",
+              "text": "The shield at the foot of the sidebar opens a Security panel: five rows say what the agent can do, whether you can undo a change, who can reach the studio, what you added and whether this copy of Delorun is genuine, each green, amber or red with the reason, whether it is your choice, and one button that fixes it. When everything is green it shows one line, \"Protected as Delorun intends\"; Advanced breaks every row down and is remembered."
+            },
+            {
+              "section": "Added",
+              "text": "Shortly after Delorun starts, once no chat has been busy for a moment, it hashes every installed file through the launcher at low priority and stops if a chat starts working, so this copy reads \"Verified\" without pressing Check now. It reads plugins and your changes again after a plugin is added, updated, switched or removed, and each check shows how long ago it ran."
+            },
+            {
               "section": "Changed",
               "text": "The privacy page names the publisher, the footer reads \"Published by Delorun\", and the licence files and the SBOM name Delorun instead of \"Delo Run\"; the first-run notice no longer names a maintainer."
+            }
+          ]
+        },
+        {
+          "area": "Reach",
+          "items": [
+            {
+              "section": "Changed",
+              "text": "A device that asks to pair opens a pop-up at your computer by default: the device's details and the time left, the box for the 8-digit code with Submit, and **Not you making this request?** to decline it. **Don't show this pop-up again** switches back to the quiet notice, and Settings → Devices offers the pop-up, the notice or nothing."
             }
           ]
         }
