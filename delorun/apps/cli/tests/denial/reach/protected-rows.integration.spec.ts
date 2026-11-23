@@ -166,7 +166,8 @@ describe('an unlocked device and the protected plugin rows', () => {
     expect(found.filter(ns => !decided.includes(ns))).toEqual([])
     // The release check's row (`UPDATE_CHECK_SWITCH` in bundle-local) is decided too: a device cannot turn the check off.
     // The external-agent consent's row holds four decided fields (see the next test), so its namespace appears four times.
-    expect([...decided].sort()).toEqual([...Array<string>(4).fill(DELEGATION_CONSENT_ROW), HOME_AUTH_SWITCH.ns, REACH_SWITCH.ns, 'delorun-update-check'].sort())
+    // The MCP consent's row holds two (its switch and which servers ask first), so a device cannot let a server start unasked.
+    expect([...decided].sort()).toEqual([...Array<string>(4).fill(DELEGATION_CONSENT_ROW), ...Array<string>(2).fill('delorun-mcp-consent'), HOME_AUTH_SWITCH.ns, REACH_SWITCH.ns, 'delorun-update-check'].sort())
     // Every computer-only switch names a protected row.
     expect(decided.filter(ns => !protectedRows().some(row => row.rowId === ns))).toEqual([])
   })
