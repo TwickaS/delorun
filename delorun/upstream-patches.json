@@ -282,7 +282,7 @@
       "path": "packages/boot/app-boot/src/index.ts",
       "class": "security",
       "reason": "Code refusal switch: `loadOptionalPatches` and `loadOverlayPatches` take the optional `refuseCode` flag a host passes beside the loader's `refuseCode`, and with it on `parsePatchList` — the parse point that runs at load — refuses `insert` rows with the same typed `RefusedCodeError` naming the patch file and the row's path, before any row is anchored or applied. The flag defaults to false, so every existing caller parses exactly as upstream does. Also exports contract C17's Delorun axis from `./plugin-compatibility.ts`: `DELORUN_VERSION_ENV`, `evaluateDelorunRequirement`, `getDelorunRuntimeVersion` and the `DelorunRequirement` type. `COMSPEC` and `PATHEXT` join `BOOTSTRAP_NAMES`, so a discovered `.env` cannot choose the Windows command shell or the extensions the `PATH` lookup tries. Lead verdict (2026-11-11): kept; COMSPEC and PATHEXT join the bootstrap-only names, so a discovered .env cannot choose the shell or the extension list a Windows start runs with. A discovered `.env` also cannot set NODE_COMPILE_CACHE, NODE_V8_COVERAGE, NODE_ICU_DATA, OPENSSL_CONF, OPENSSL_MODULES, OPENSSL_ENGINES, GCONV_PATH, LOCPATH, or any name starting with `LD_` or `DELORUN_LAUNCHER_`. Lead verdict (2026-11-13): approved; the refusal only widens, and the home `.env` rules are unchanged.",
-      "sha256": "f668f927cb82416cded2141d8f662d0c1003fdffc50744ac446ebd2a0bb3d881"
+      "sha256": "87dac1d76b2121e418793d4708b0d6e49ba5b37f539cfcac60108590d4d8a27c"
     },
     {
       "path": "packages/boot/app-boot/src/plugin-compatibility.ts",
@@ -294,7 +294,7 @@
       "path": "packages/boot/app-boot/tests/app-boot.spec.ts",
       "class": "security",
       "reason": "Proves the Harness-home `.env` refusals: a 0644 file, a symbolic link and a foreign owner each stop boot, a 0600 file loads, and every existing home-layer fixture writes its file at 0600. A `.env` that sets `ComSpec` or `PATHEXT` stops launch. Lead verdict (2026-11-11): kept; the refused-name table gains a mixed-case `ComSpec` line and a `PATHEXT` line, so a discovered `.env` that sets either stops launch before anything is applied. Lead verdict (2026-11-13): kept; the refused-name table gains OpenSSL configuration, `GCONV_PATH`, `NODE_ICU_DATA` and an `LD_` prefix line, each stopping launch.",
-      "sha256": "b74fdefc6bec486859b0ea3c4b1bbba880ddee151dc60becf616a983e910759e"
+      "sha256": "e94681d374926382ce4b8b03125f1e56d66c0fbd41c3aa6d83df8d4081d1623d"
     },
     {
       "path": "packages/boot/config-editor/src/index.ts",
