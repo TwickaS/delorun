@@ -17,7 +17,7 @@ import {
 import type { OverviewHostFacts } from './security-overview-api.ts'
 import {
   overviewHeadline, overviewRows,
-  type OverviewAction, type OverviewFacts, type OverviewRow, type OverviewRowId, type OverviewStatus,
+  type OverviewAction, type OverviewHeadline, type OverviewFacts, type OverviewRow, type OverviewRowId, type OverviewStatus,
 } from './security-overview.ts'
 import type { TrustBill, TrustChecks, TrustRowFreshness } from './trust-bill.ts'
 import { relativeTime } from './trust-time.ts'
@@ -42,6 +42,9 @@ const ICONS: Readonly<Record<OverviewStatus, ReactNode>> = {
   look: <IconWarningOutlineRegular size={14} />,
   red: <IconCloseOutlineRegular size={14} />,
 }
+
+/** The headline's icon: a row status's, or the info glyph while this copy's files are still being checked. */
+const HEADLINE_ICONS: Readonly<Record<OverviewHeadline, ReactNode>> = { ...ICONS, checking: <IconInfoOutlineRegular size={14} /> }
 
 /**
  * The remembered view.
@@ -113,7 +116,7 @@ export function SecurityOverview({ t, bill, checks, facts, loaded, act, trustDet
   return (
     <div className={css.overview}>
       <div className={css.headline} data-status={headline} aria-live="polite">
-        <span className={css.headlineIcon} aria-hidden="true">{ICONS[headline]}</span>
+        <span className={css.headlineIcon} aria-hidden="true">{HEADLINE_ICONS[headline]}</span>
         <div className={css.headlineText}>
           <p className={css.headlineTitle}>{loaded ? t(`overview.headline.${headline}`) : t('overview.loading')}</p>
           {loaded && !calm && <p className={css.headlineDetail}>{t(`overview.headline.${headline}.detail`)}</p>}
@@ -198,8 +201,8 @@ function OverviewRowItem({ t, row, all, view, act, trustDetails }: RowProps) {
             <div className={css.field}>
               <dt>{t('overview.reason')}</dt>
               <dd>
-                {t(`overview.${row.cause}.reason`, wordsOf(t, row))}{' '}
-                {t(row.kind === 'choice' ? 'overview.kind.choice' : 'overview.kind.fault')}
+                {t(`overview.${row.cause}.reason`, wordsOf(t, row))}
+                {row.kind !== undefined && <>{' '}{t(row.kind === 'choice' ? 'overview.kind.choice' : 'overview.kind.fault')}</>}
                 {row.chosenAt !== undefined && <>{' '}{t('overview.chosenAt', { time: exactTime(t, row.chosenAt) })}</>}
               </dd>
             </div>

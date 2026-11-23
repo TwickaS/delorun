@@ -5,7 +5,7 @@
  * service whenever the service is present.
  */
 import { Context } from '@deepseek-ai/cordis'
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { getPriority, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
@@ -235,6 +235,13 @@ describe('Check now through the launcher', () => {
     expect(given).toEqual([{ lowPriority: true, signal }, {}])
   })
 
+  it('refuses a background check no launcher can run, rather than hashing inside the Host', async () => {
+    const { stages: value, contexts } = stages()
+    const source = trustSource({ ...options(logger()), env: {} }, value)
+    await expect(source.check(5_000, { lowPriority: true, signal: new AbortController().signal })).rejects.toThrow('no launcher can run the background full check (no-launcher)')
+    expect(contexts.filter(entry => entry.stage === 'verify')).toEqual([])
+  })
+
   it('c15-check-now-runs-through-launcher: a launcher that refuses to run delorun verify makes a bill whose files failed, with its refusal', async () => {
     const { handoff } = launcherPackage()
     const { stages: value } = stages(undefined, async () => ({ status: 1, stdout: '', stderr: 'Delorun did not run delorun verify: release 0.1.0 failed its start check.\nWhy: RUNTIME_CHANGED: node/bin/node (sha256)\n', timedOut: false }))
@@ -308,6 +315,24 @@ describe.skipIf(process.platform === 'win32')('a child\'s process tree', () => {
     await new Promise(resolve => setTimeout(resolve, 300))
     controller.abort(new Error('a turn started'))
     await expect(run).rejects.toThrow('a turn started')
+  })
+
+  it('kills a group member that ignored SIGTERM as soon as the stopped child exits', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'delorun-trust-group-'))
+    onTestFinished(() => { rmSync(directory, { recursive: true, force: true }) })
+    const file = join(directory, 'grandchild.pid')
+    // The child exits on SIGTERM; its grandchild ignores SIGTERM and holds no output, so only the group kill ends it.
+    const child = `const g = require('node:child_process').spawn(process.execPath, ['-e', 'process.on("SIGTERM", () => {}); setInterval(() => {}, 1000)'], { stdio: 'ignore' }); require('node:fs').writeFileSync(${JSON.stringify(file)}, String(g.pid)); setInterval(() => {}, 1000)`
+    const controller = new AbortController()
+    const run = childRunner({ killMs: 60_000, closeMs: 60_000 })({ command: process.execPath, args: ['-e', child], env: {} }, 30_000, { signal: controller.signal })
+    let grandchild = 0
+    await vi.waitFor(() => {
+      grandchild = Number(readFileSync(file, 'utf8'))
+      expect(grandchild).toBeGreaterThan(0)
+    })
+    controller.abort(new Error('a turn started'))
+    await expect(run).rejects.toThrow('a turn started')
+    await vi.waitFor(() => { expect(alive(grandchild)).toBe(false) }, { timeout: 3_000 })
   })
 
   it('starts nothing for a check stopped before it began', async () => {

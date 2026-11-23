@@ -256,8 +256,8 @@ export class TrustService extends Service {
     this.attached = attached
     for (const agent of this.turns) schedule.turn(agent, true)
     // A start bill that does not read leaves the schedule to the first read that succeeds, from the studio's next poll.
-    void this.bill().catch((error: unknown) => {
-      if (this.attached === attached && !attached.started) attached.full = { state: 'unavailable', reason: 'failed', detail: messageOf(error) }
+    void this.bill().catch((_unread: unknown) => {
+      if (this.attached === attached && !attached.started) attached.full = { state: 'unavailable', reason: 'failed' }
     })
     return this.ctx.effect(() => () => {
       schedule.close()
@@ -412,7 +412,9 @@ export class TrustService extends Service {
 
   /**
    * The background full check: through the launcher at low priority, stopped when a turn starts. A stopped run waits
-   * for the next idle stretch; a failed one leaves the last bill and says why.
+   * for the next idle stretch, and is no longer the run Check now joins, so Check now starts its own; a failed one leaves
+   * the last bill, logs why and serves only the reason, since an approved device reads the freshness too. A check that
+   * already passed, such as a Check now before the first idle wait, is not run again.
    * @param attached - the attachment.
    * @param signal - stops the run.
    * @returns once the run ended.
@@ -422,12 +424,17 @@ export class TrustService extends Service {
       await attached.running.catch(() => undefined)
       return
     }
+    if (attached.full.state === 'done') return
     attached.full = { state: 'running' }
+    const run = this.start(attached, { lowPriority: true, signal })
+    signal.addEventListener('abort', () => { if (attached.running === run) attached.running = undefined }, { once: true })
     try {
-      await this.start(attached, { lowPriority: true, signal })
+      const bill = await run
+      // The source refuses a background check it would run inside the Host; a bill made there anyway is never full.
+      if (this.attached === attached && bill.checkedBy?.via === 'host') attached.full = { state: 'unavailable', reason: bill.checkedBy.reason }
     } catch (error) {
       if (this.attached !== attached) return
-      attached.full = signal.aborted ? { state: 'waiting' } : { state: 'unavailable', reason: 'failed', detail: messageOf(error) }
+      attached.full = signal.aborted ? { state: 'waiting' } : { state: 'unavailable', reason: 'failed' }
       if (!signal.aborted) this.ctx.logger.warn(`${name}: the background full check did not finish: ${messageOf(error)}`)
     }
   }

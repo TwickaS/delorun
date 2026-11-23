@@ -208,16 +208,68 @@ describe('the background full check', () => {
     expect(trustRows(answer.bill, answer.checks)[0]?.state).toBe('verified')
   })
 
-  it('keeps the last bill and says why when the check fails', async () => {
+  it('keeps the last bill when the check fails, logs why, and serves a device only the reason', async () => {
     const { source: value, checks } = source()
-    const { routes } = await mount(value)
+    const { ctx, routes } = await mount(value)
+    const warn = vi.spyOn(ctx.logger, 'warn')
     await vi.advanceTimersByTimeAsync(IDLE_MS)
-    checks[0]?.reject(new Error('the launcher did not finish within 600 s and was stopped'))
+    checks[0]?.reject(new Error('spawn /home/person/.local/lib/node_modules/delorun/dist/bin.js ENOENT'))
     await vi.advanceTimersByTimeAsync(0)
     const answer = await read(routes)
     expect(answer.bill.stage).toBe('start')
-    expect(answer.checks.release.full).toEqual({ state: 'unavailable', reason: 'failed', detail: 'the launcher did not finish within 600 s and was stopped' })
+    expect(answer.checks.release.full).toEqual({ state: 'unavailable', reason: 'failed' })
+    expect(JSON.stringify(answer.checks)).not.toContain('/home/person')
+    expect(warn).toHaveBeenCalledWith('delorun-trust: the background full check did not finish: spawn /home/person/.local/lib/node_modules/delorun/dist/bin.js ENOENT')
     expect(trustRows(answer.bill, answer.checks)[0]?.state).toBe('checked-at-start')
+  })
+
+  it('lets Check now start its own run while a turn is stopping the background one', async () => {
+    // The stopped background run has not ended yet, as while its child is in its kill grace.
+    const runs: (TrustCheckOptions | undefined)[] = []
+    let finish: (value: TrustBill) => void = () => {}
+    const sticky: TrustSource = {
+      read: async () => bill(),
+      refresh: async () => bill(),
+      check: (_timeoutMs, options) => {
+        runs.push(options)
+        return options?.signal === undefined ? new Promise<TrustBill>((resolve) => { finish = resolve }) : new Promise<TrustBill>(() => {})
+      },
+    }
+    const { ctx, routes } = await mount(sticky)
+    await vi.advanceTimersByTimeAsync(IDLE_MS)
+    expect(runs).toHaveLength(1)
+    emit(ctx, 'agent/status', { agent: {}, status: 'running' })
+    expect(runs[0]?.signal?.aborted).toBe(true)
+    const check = routes.get(TRUST_CHECK_PATH)?.fetch(new Request(`http://127.0.0.1${TRUST_CHECK_PATH}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }))
+    await vi.advanceTimersByTimeAsync(0)
+    expect(runs).toHaveLength(2)
+    expect(runs[1]).toEqual({})
+    finish(verified())
+    expect((await check)?.status).toBe(200)
+    expect((await read(routes)).checks.release.full).toEqual({ state: 'done' })
+  })
+
+  it('does not hash again after a Check now that passed before the idle wait ended', async () => {
+    const { source: value, checks } = source()
+    const { routes } = await mount(value)
+    const check = routes.get(TRUST_CHECK_PATH)?.fetch(new Request(`http://127.0.0.1${TRUST_CHECK_PATH}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' }))
+    await vi.advanceTimersByTimeAsync(0)
+    checks[0]?.resolve(verified())
+    expect((await check)?.status).toBe(200)
+    await vi.advanceTimersByTimeAsync(IDLE_MS * 3)
+    expect(checks).toHaveLength(1)
+    expect((await read(routes)).checks.release.full).toEqual({ state: 'done' })
+  })
+
+  it('never counts a bill made inside the Host as the full check', async () => {
+    const { source: value, checks } = source()
+    const { routes } = await mount(value)
+    await vi.advanceTimersByTimeAsync(IDLE_MS)
+    checks[0]?.resolve(bill({ stage: 'verify', checkedBy: { via: 'host', reason: 'launcher-unresolvable', seconds: 30 } }))
+    await vi.advanceTimersByTimeAsync(0)
+    const answer = await read(routes)
+    expect(answer.checks.release.full).toEqual({ state: 'unavailable', reason: 'launcher-unresolvable' })
+    expect(trustRows(answer.bill, answer.checks)[0]?.state).toBe('checked-in-studio')
   })
 })
 

@@ -536,7 +536,7 @@ describe('the release row\'s states', () => {
     [{ state: 'unavailable', reason: 'no-launcher' }, en['full.reason.no-launcher']],
     [{ state: 'unavailable', reason: 'launcher-unresolvable' }, en['full.reason.launcher-unresolvable']],
     [{ state: 'unavailable', reason: 'off' }, en['full.reason.off']],
-    [{ state: 'unavailable', reason: 'failed', detail: 'stopped after 600 s' }, en['full.reason.failed'].replace('{detail}', 'stopped after 600 s')],
+    [{ state: 'unavailable', reason: 'failed' }, en['full.reason.failed']],
   ] as const)('stays "Checked at start" with the honest reason when the full check cannot run (%o)', (full, reason) => {
     renderBadge(storeWith(startBill(), checksWith(full)).store)
     const dialog = openAdvanced()
@@ -596,6 +596,15 @@ describe('the overview', () => {
     expect(within(dialog).getByText(en['overview.addons.reviewed'].replace('{count}', '2'))).toBeTruthy()
   })
 
+  it('waits for the full check before it says protected, and shows the rows meanwhile', () => {
+    renderBadge(storeWith(startBill(), checksWith({ state: 'waiting' })).store)
+    const dialog = openPanel()
+    expect(within(dialog).queryByText(en['overview.headline.green'])).toBeNull()
+    expect(within(dialog).getByText(en['overview.headline.checking'])).toBeTruthy()
+    expect(within(dialog).getByText(en['overview.copy.checking'].replace('{version}', '0.1.0'))).toBeTruthy()
+    expect(within(dialog).queryByRole('button', { name: new RegExp(en['overview.list.show']) })).toBeNull()
+  })
+
   it('opens a row that is not green with what it means, why, whether it was chosen, and its fix', async () => {
     const act$ = vi.fn(async (_action: OverviewAction) => true)
     renderBadge(storeWith(verifiedBill(), checksWith({ state: 'done' })).store, { facts: { ...PROTECTED, protection: 'off' }, act: act$ })
@@ -630,7 +639,7 @@ describe('the overview', () => {
   })
 
   it('runs the full check from this copy\'s row when it could not check every file', () => {
-    const { store, calls } = storeWith(startBill(), checksWith({ state: 'unavailable', reason: 'failed', detail: 'stopped' }))
+    const { store, calls } = storeWith(startBill(), checksWith({ state: 'unavailable', reason: 'failed' }))
     renderBadge(store)
     const dialog = openPanel()
     expect(within(dialog).getByText(en['overview.headline.look'])).toBeTruthy()
@@ -691,7 +700,7 @@ describe('polling', () => {
   })
 
   it('parses the freshness on the wire, and reads none from a Host that sends none', async () => {
-    const checks = checksWith({ state: 'unavailable', reason: 'failed', detail: 'x' })
+    const checks = checksWith({ state: 'unavailable', reason: 'failed' })
     const answer = (body: object) => async (): Promise<Response> => new Response(JSON.stringify(body), { status: 200 })
     await expect(fetchTrustSnapshot(answer({ bill: verifiedBill(), checks }), new AbortController().signal)).resolves.toEqual({ bill: verifiedBill(), checks })
     await expect(fetchTrustSnapshot(answer({ bill: verifiedBill() }), new AbortController().signal)).resolves.toEqual({ bill: verifiedBill(), checks: null })

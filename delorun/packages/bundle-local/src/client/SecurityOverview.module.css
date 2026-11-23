@@ -20,6 +20,10 @@
   --overview-state: var(--dsw-alias-state-warn-primary);
 }
 
+.headline[data-status='checking'] {
+  --overview-state: var(--dsw-alias-label-secondary);
+}
+
 .headline[data-status='red'],
 .row[data-status='red'] {
   --overview-state: var(--dsw-alias-state-error-primary);

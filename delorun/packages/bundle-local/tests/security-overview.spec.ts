@@ -147,6 +147,9 @@ describe('overviewRows', () => {
       releaseLog: { at: null, running: false }, plugins: { at: null, running: false }, changes: { at: null, running: false },
     }
     expect(rowOf(facts({ bill: start, checks: waiting }), 'copy')).toMatchObject({ status: 'green', cause: 'copy.checking' })
+    // "Protected as Delorun intends" waits for the full check.
+    expect(overviewHeadline(overviewRows(facts({ bill: start, checks: waiting })))).toBe('checking')
+    expect(overviewHeadline(overviewRows(facts({ bill: start, checks: waiting, protection: 'off' })))).toBe('red')
     const unavailable: TrustChecks = { ...waiting, release: { ...waiting.release, full: { state: 'unavailable', reason: 'no-launcher' } } }
     expect(rowOf(facts({ bill: start, checks: unavailable }), 'copy')).toMatchObject({ status: 'look', cause: 'copy.not-full', action: { kind: 'check-now' } })
   })
@@ -178,6 +181,26 @@ describe('overviewRows', () => {
   })
 })
 
+describe('a fact that could not be read', () => {
+  it.each([
+    ['the run settings', { run: null }, 'agent', 'agent.unread'],
+    ['dangerous mode', { everywhere: null }, 'agent', 'agent.unread'],
+    ['the workspaces\' access', { workspaces: null }, 'agent', 'agent.unread'],
+    ['change protection', { protection: null }, 'undo', 'undo.unread'],
+    ['the devices, with phone access on', { run: { dangerous: 'off', prompts: 'safer', reach: { on: true } }, devices: null }, 'reach', 'reach.unread'],
+    ['PIN mode, with phone access on', { run: { dangerous: 'off', prompts: 'safer', reach: { on: true } }, pin: null }, 'reach', 'reach.unread'],
+    ['the MCP servers waiting for a decision', { mcpWaiting: null }, 'addons', 'addons.unread'],
+    ['the external agents\' levels', { agentLevels: null }, 'addons', 'addons.unread'],
+  ] as const)('asks for a look when %s did not read', (_name, unread, id, cause) => {
+    expect(rowOf(facts(unread), id)).toMatchObject({ status: 'look', cause, kind: 'fault' })
+  })
+
+  it('keeps a red finding over an unread fact, and phone access off private whatever the devices', () => {
+    expect(rowOf(facts({ everywhere: { on: true }, workspaces: null }), 'agent').status).toBe('red')
+    expect(rowOf(facts({ devices: null, pin: null }), 'reach')).toMatchObject({ status: 'green', cause: 'reach.private' })
+  })
+})
+
 describe('overviewHeadline', () => {
   it('takes the loudest row: red, then a look, then a choice', () => {
     expect(overviewHeadline(overviewRows(facts({ protection: 'off', mcpWaiting: 1 })))).toBe('red')
@@ -193,6 +216,7 @@ describe('the copy', () => {
       ...OVERVIEW_OPEN_CAUSES.flatMap(cause => ['', '.meaning', '.reason', '.action'].map(part => `overview.${cause}${part}`)),
       ...OVERVIEW_ROW_IDS.flatMap(id => [`overview.row.${id}`, `overview.${id}.checked`]),
       ...(['green', 'chosen', 'look', 'red'] as const).flatMap(status => [`overview.status.${status}`, `overview.headline.${status}`, `overview.headline.${status}.detail`]),
+      'overview.headline.checking', 'overview.headline.checking.detail',
     ]
     for (const dictionary of [en, zh]) {
       expect(keys.filter(key => !Object.hasOwn(dictionary, key))).toEqual([])

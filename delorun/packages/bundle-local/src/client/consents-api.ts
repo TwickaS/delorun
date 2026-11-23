@@ -98,6 +98,16 @@ export function readWorkspaces(fetch: HostFetch): Promise<WorkspacesAnswer | und
 export const EVERYWHERE_CHANGED = 'delorun-dangerous-mode-changed'
 
 /**
+ * Read dangerous mode, failing when it cannot be read: the security overview must not take an unread state for off.
+ * @param fetch - the request function.
+ * @returns whether dangerous mode is on, since when, and any problem the Host reports.
+ * @throws {HostRequestError} for a refusal, an unreachable Host or an unreadable answer.
+ */
+export async function readEverywhereStrict(fetch: HostFetch): Promise<EverywhereAnswer> {
+  return call<EverywhereAnswer>(fetch, PERMISSION_ROUTES.everywhere, isEverywhere)
+}
+
+/**
  * Read whether dangerous mode is on. A refusal (a locked device), a profile without the route and an unreachable Host
  * all read as off, the direction that asks.
  * @param fetch - the request function.
@@ -105,7 +115,7 @@ export const EVERYWHERE_CHANGED = 'delorun-dangerous-mode-changed'
  */
 export async function readEverywhere(fetch: HostFetch): Promise<EverywhereAnswer> {
   try {
-    return await call<EverywhereAnswer>(fetch, PERMISSION_ROUTES.everywhere, isEverywhere)
+    return await readEverywhereStrict(fetch)
   } catch (_unreadable) {
     // Any failure leaves dangerous mode off, so every consent asks as it does without it.
     return { on: false }

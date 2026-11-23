@@ -108,7 +108,6 @@ const FullCheckSchema: z.ZodType<TrustFullCheck> = z.discriminatedUnion('state',
   z.object({
     state: z.literal('unavailable'),
     reason: z.enum(['no-launcher', 'launcher-unresolvable', 'failed', 'off']),
-    detail: z.string().exactOptional(),
   }),
 ])
 

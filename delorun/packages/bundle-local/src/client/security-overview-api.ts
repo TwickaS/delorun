@@ -10,7 +10,7 @@
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { UPDATE_NOTICE_PATH } from '@delorun/contract-update-report'
 import { z } from 'zod'
-import { readAgentLevels, readEverywhere, readWaitingServers, readWorkspaces } from './consents-api.ts'
+import { readAgentLevels, readEverywhereStrict, readWaitingServers, readWorkspaces } from './consents-api.ts'
 import { readDevices } from './devices-api.ts'
 import type { HostFetch } from './host-api.ts'
 import { readPinState } from './pin-api.ts'
@@ -69,7 +69,7 @@ export async function readOverviewFacts(fetch: HostFetch): Promise<OverviewHostF
   const [run, everywhere, workspaces, protection, devices, pin, waiting, levels, update] = await Promise.all([
     fact(() => readRunState(fetch)),
     fact(async () => {
-      const answer = await readEverywhere(fetch)
+      const answer = await readEverywhereStrict(fetch)
       return answer.problem === undefined ? answer : undefined
     }),
     fact(() => readWorkspaces(fetch)),

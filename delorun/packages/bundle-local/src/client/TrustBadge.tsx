@@ -405,7 +405,7 @@ export function releaseNote(t: Translate, row: TrustRow, checks: TrustChecks | n
   const full = checks.release.full
   if (row.state === 'checking') return t(full.state === 'running' ? 'full.running' : 'full.waiting')
   if (row.state !== 'checked-at-start' || full.state !== 'unavailable') return undefined
-  return full.reason === 'failed' ? t('full.reason.failed', { detail: full.detail ?? t('value.none') }) : t(`full.reason.${full.reason}`)
+  return t(`full.reason.${full.reason}`)
 }
 
 /**

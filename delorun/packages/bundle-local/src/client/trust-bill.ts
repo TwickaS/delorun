@@ -235,7 +235,7 @@ export type TrustFullCheck =
   | { readonly state: 'waiting' }
   | { readonly state: 'running' }
   | { readonly state: 'done' }
-  | { readonly state: 'unavailable', readonly reason: TrustFullCheckReason, readonly detail?: string }
+  | { readonly state: 'unavailable', readonly reason: TrustFullCheckReason }
 
 /** How fresh one row is: when its check last finished and whether one runs now. */
 export interface TrustRowFreshness {

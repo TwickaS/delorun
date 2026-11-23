@@ -240,7 +240,10 @@ export function childRunner(grace: { readonly killMs: number, readonly closeMs: 
     child.on('exit', (status) => {
       if (settled) return
       settled = true
+      const stopping = kill !== undefined
       stopTimers()
+      // A stopped child's group may outlive its leader: a member that ignored SIGTERM gets SIGKILL now, not never.
+      if (stopping && child.pid !== undefined) signalTree(child.pid, 'SIGKILL')
       const done = (): void => {
         clearTimeout(closing)
         if (aborted && options.signal !== undefined) reject(abortReason(options.signal))
@@ -430,6 +433,8 @@ export function trustSource(options: TrustWatchOptions, stages: TrustStages): Tr
       const began = options.elapsed()
       const seconds = (): number => Math.round((options.elapsed() - began) / 100) / 10
       const command = await launcherVerifyCommand(options)
+      // A background check runs only through the launcher: inside this process it would hash at normal priority and no turn could stop it.
+      if (typeof command === 'string' && checkOptions.signal !== undefined) throw new Error(`no launcher can run the background full check (${command})`)
       if (typeof command === 'string') {
         const { bill, outcome } = await stages.verify(billContext(options), { fetch: options.fetch, logger: options.logger })
         for (const warning of outcome.warnings) options.logger.warn(`delorun-trust: ${printable(warning)}`)

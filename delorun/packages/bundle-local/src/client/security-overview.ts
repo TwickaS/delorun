@@ -133,8 +133,9 @@ function agentRow(facts: OverviewFacts): OverviewRow {
     const grantedAt = facts.everywhere?.grantedAt === undefined ? Number.NaN : Date.parse(facts.everywhere.grantedAt)
     return row('agent', 'red', 'agent.dangerous', { kind: 'choice', action: open, ...Number.isNaN(grantedAt) ? {} : { chosenAt: grantedAt } })
   }
-  if (facts.run === null && facts.everywhere === null) return row('agent', 'look', 'agent.unread', { kind: 'fault', action: open })
-  const full = (facts.workspaces ?? []).filter(entry => entry.preset === FULL_ACCESS)
+  // Dangerous mode is known only from both settings, and Full access only from the workspaces: any of them unread asks for a look.
+  if (facts.run === null || facts.everywhere === null || facts.workspaces === null) return row('agent', 'look', 'agent.unread', { kind: 'fault', action: open })
+  const full = facts.workspaces.filter(entry => entry.preset === FULL_ACCESS)
   if (full.length > 0) {
     const latest = full.reduce((last, entry) => ((entry.grantedAt ?? 0) > (last.grantedAt ?? 0) ? entry : last))
     return row('agent', 'chosen', 'agent.full-access', { kind: 'choice', action: open, ...latest.grantedAt === null ? {} : { chosenAt: latest.grantedAt }, params: { count: full.length, workspace: latest.title ?? latest.workspace } })
@@ -162,6 +163,8 @@ function undoRow(facts: OverviewFacts): OverviewRow {
 function reachRow(facts: OverviewFacts): OverviewRow {
   const open: OverviewAction = { kind: 'open-section', section: OVERVIEW_SECTIONS.devices }
   if (facts.run === null) return row('reach', 'look', 'reach.unread', { kind: 'fault', action: open })
+  // Phone access off keeps every device out, whatever the device list says; on, the devices and PIN mode must read.
+  if (facts.run.reach.on && (facts.devices === null || facts.pin === null)) return row('reach', 'look', 'reach.unread', { kind: 'fault', action: open })
   const devices = facts.devices ?? []
   const unseen = devices.filter(device => facts.now - (device.lastSignInAt ?? device.approvedAt) > DEVICE_UNSEEN_MS)
   const [firstUnseen] = unseen
@@ -169,6 +172,7 @@ function reachRow(facts: OverviewFacts): OverviewRow {
     return row('reach', 'look', 'reach.unseen', { kind: 'fault', action: open, params: { count: unseen.length, device: firstUnseen.label } })
   }
   if (facts.run.reach.on) return row('reach', 'chosen', 'reach.phone', { kind: 'choice', action: open, params: { count: devices.length, pin: facts.pin?.on === true ? 'on' : 'off' } })
+  if (facts.devices === null) return row('reach', 'green', 'reach.private')
   if (devices.length > 0) return row('reach', 'green', 'reach.devices-off', { params: { count: devices.length } })
   return row('reach', 'green', 'reach.private')
 }
@@ -188,12 +192,13 @@ function addonsRow(facts: OverviewFacts): OverviewRow {
   if (advised !== undefined) return row('addons', 'red', 'addons.advisory', { kind: 'fault', action: open, params: { plugin: advised.name } })
   const changed = entries.find(entry => entry.match === 'mismatch')
   if (changed !== undefined) return row('addons', 'red', 'addons.changed', { kind: 'fault', action: open, params: { plugin: changed.name } })
-  if ((facts.mcpWaiting ?? 0) > 0) return row('addons', 'look', 'addons.mcp-waiting', { kind: 'fault', action: open, params: { count: facts.mcpWaiting ?? 0 } })
+  if (facts.mcpWaiting !== null && facts.mcpWaiting > 0) return row('addons', 'look', 'addons.mcp-waiting', { kind: 'fault', action: open, params: { count: facts.mcpWaiting } })
+  if (facts.mcpWaiting === null || facts.agentLevels === null) return row('addons', 'look', 'addons.unread', { kind: 'fault', action: open })
   if (bill.plugins.status === 'unknown') return row('addons', 'look', 'addons.unchecked', { kind: 'fault', action: open })
   const unlisted = entries.filter(entry => entry.match === 'unrecorded')
   const [firstUnlisted] = unlisted
   if (firstUnlisted !== undefined) return row('addons', 'chosen', 'addons.unlisted', { kind: 'choice', action: open, params: { count: unlisted.length, plugin: firstUnlisted.name } })
-  const unrestricted = (facts.agentLevels ?? []).find(entry => entry.level === 'unrestricted')
+  const unrestricted = facts.agentLevels.find(entry => entry.level === 'unrestricted')
   if (unrestricted !== undefined) {
     return row('addons', 'chosen', 'addons.unrestricted', { kind: 'choice', action: { kind: 'open-section', section: OVERVIEW_SECTIONS.externalAgents }, params: { agent: unrestricted.provider } })
   }
@@ -234,11 +239,16 @@ export function overviewRows(facts: OverviewFacts): readonly OverviewRow[] {
   return [agentRow(facts), undoRow(facts), reachRow(facts), addonsRow(facts), copyRow(facts)]
 }
 
+/** The overview's headline: a row's status, or `checking` while every row is green but this copy's files are still to be hashed. */
+export type OverviewHeadline = OverviewStatus | 'checking'
+
 /**
- * The overview's headline: the loudest row's status.
+ * The overview's headline: the loudest row's status. "Protected as Delorun intends" needs every check done, so a
+ * release whose full check still waits or runs reads `checking` instead of `green`.
  * @param rows - the rows.
- * @returns `green` when every row is green, otherwise the loudest status.
+ * @returns the loudest status; `checking` or `green` when every row is green.
  */
-export function overviewHeadline(rows: readonly OverviewRow[]): OverviewStatus {
-  return OVERVIEW_STATUS_ORDER.find(status => rows.some(entry => entry.status === status)) ?? 'green'
+export function overviewHeadline(rows: readonly OverviewRow[]): OverviewHeadline {
+  const loudest = OVERVIEW_STATUS_ORDER.find(status => rows.some(entry => entry.status === status)) ?? 'green'
+  return loudest === 'green' && rows.some(entry => entry.cause === 'copy.checking') ? 'checking' : loudest
 }

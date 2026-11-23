@@ -90,7 +90,7 @@ describe('the trust badge', () => {
     expect(trustRows(start, checks({ state: 'waiting' }))[0]).toEqual({ id: 'release', state: 'checking', tone: 'neutral', ownChanges: 0 })
     expect(trustRows(start, checks({ state: 'running' }))[0]?.state).toBe('checking')
     expect(trustBadge(trustRows(start, checks({ state: 'running' })))).toEqual({ state: 'checking', tone: 'neutral', ownChanges: 0 })
-    for (const full of [{ state: 'unavailable', reason: 'no-launcher' }, { state: 'unavailable', reason: 'failed', detail: 'x' }, { state: 'done' }] as const) {
+    for (const full of [{ state: 'unavailable', reason: 'no-launcher' }, { state: 'unavailable', reason: 'failed' }, { state: 'done' }] as const) {
       expect(trustRows(start, checks(full))[0]?.state).toBe('checked-at-start')
     }
     expect(trustRows(start, null)[0]?.state).toBe('checked-at-start')
