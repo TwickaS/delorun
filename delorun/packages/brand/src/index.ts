@@ -10,7 +10,7 @@ import './tokens.css'
 
 export { BRAND_COLOURS, BRAND_FONTS, BRAND_MOTION, BRAND_RADII, BRAND_SPACE } from './tokens.ts'
 export { MARK, Mark } from './mark.tsx'
-export { Alert, ALERT_CLASSES, ALERT_EXIT_MS, type AlertAction, type AlertKind, type AlertProps, type AlertVariant } from './alert.tsx'
+export { Alert, ALERT_CLASSES, ALERT_EXIT_MS, type AlertAction, type AlertKind, type AlertOwnProps, type AlertProps, type AlertVariant } from './alert.tsx'
 export { Button, type ButtonProps, type ButtonVariant } from './components/Button.tsx'
 export { Card, type CardProps } from './components/Card.tsx'
 export { CodeBlock, COPY_ANSWER_MS, copyText, type CodeBlockProps } from './components/CodeBlock.tsx'

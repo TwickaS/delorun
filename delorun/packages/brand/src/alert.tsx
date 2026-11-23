@@ -43,8 +43,8 @@ export const ALERT_CLASSES = {
 /** How long the leave transition runs, in milliseconds; `@delorun/plugin-theme`'s `--delorun-alert-exit` matches it. */
 export const ALERT_EXIT_MS = 150
 
-/** The props of {@link Alert}. */
-export interface AlertProps {
+/** The props of {@link Alert}, apart from the `data-*` attributes it passes to its root. */
+export interface AlertOwnProps {
   readonly kind: AlertKind
   /** Defaults to `inline`. */
   readonly variant?: AlertVariant
@@ -70,12 +70,15 @@ export interface AlertProps {
   readonly outcome?: string | undefined
 }
 
+/** The props of {@link Alert}: its own, and `data-*` attributes for the root, which a surface's tests and styles select. */
+export type AlertProps = AlertOwnProps & { readonly [attribute: `data-${string}`]: string | undefined }
+
 /**
  * Render an alert.
  * @param props - see {@link AlertProps}.
  * @returns the alert.
  */
-export function Alert({ kind, variant = 'inline', title, line, primary, secondary, close, role, closing = false, onClosed, className, outcome }: AlertProps) {
+export function Alert({ kind, variant = 'inline', title, line, primary, secondary, close, role, closing = false, onClosed, className, outcome, ...data }: AlertProps) {
   const node = useRef<HTMLDivElement>(null)
   const latestOnClosed = useRef(onClosed)
   latestOnClosed.current = onClosed
@@ -100,6 +103,7 @@ export function Alert({ kind, variant = 'inline', title, line, primary, secondar
   const actions = primary !== undefined || secondary !== undefined
   return (
     <div
+      {...data}
       ref={node}
       className={className === undefined ? ALERT_CLASSES.root : `${ALERT_CLASSES.root} ${className}`}
       role={role ?? (kind === 'warning' || kind === 'error' ? 'alert' : 'status')}

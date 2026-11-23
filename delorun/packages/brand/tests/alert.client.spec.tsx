@@ -78,6 +78,13 @@ describe('the anatomy', () => {
     expect(root?.querySelector(`:scope > .${ALERT_CLASSES.actions}`)).not.toBeNull()
   })
 
+  it('passes data attributes to its root, below its own', () => {
+    const { container } = render(<Alert kind="warning" title="Stopped" data-tool-failure-stop="" data-kind="error" />)
+    const root = container.querySelector(`.${ALERT_CLASSES.root}`)
+    expect(root?.hasAttribute('data-tool-failure-stop')).toBe(true)
+    expect(root?.getAttribute('data-kind')).toBe('warning')
+  })
+
   it('leaves out the line and the action row when there are none', () => {
     const { container } = render(<Alert kind="success" title="Saved" />)
     expect(container.querySelector(`.${ALERT_CLASSES.line}`)).toBeNull()
