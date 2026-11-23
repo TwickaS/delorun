@@ -53,7 +53,8 @@ function renderToggle(h: ReturnType<typeof setup>) {
 /** Show tooltips at once in jsdom, which measures nothing. */
 function enableTooltips(): void {
   class Measured implements ResizeObserver {
-    constructor(private readonly callback: ResizeObserverCallback) {}
+    private readonly callback: ResizeObserverCallback
+    constructor(callback: ResizeObserverCallback) { this.callback = callback }
     observe(target: Element): void {
       const size = { inlineSize: 160, blockSize: 30 }
       this.callback([{ target, borderBoxSize: [size], contentBoxSize: [size], devicePixelContentBoxSize: [size], contentRect: new DOMRect() }], this)
