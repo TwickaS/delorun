@@ -1,7 +1,7 @@
 /**
  * The release workflow's logging step against local HTTP stand-ins of the log and the checkpoint distributor: it
  * waits until a listed witness has cosigned a checkpoint that covers the entry, and returns a bundle that verifies;
- * without a cosignature it gives up and the release is not published.
+ * without a cosignature it gives up and the release is not published; a refusal names the log's reason.
  */
 import { createPublicKey, generateKeyPairSync, type KeyObject } from 'node:crypto'
 import { createServer } from 'node:http'
@@ -9,7 +9,7 @@ import type { AddressInfo } from 'node:net'
 import { describe, expect, it, type TestContext } from 'vitest'
 import type { HashedRekordRequest } from '@delorun/contract-release-log'
 import { verifyBundle } from '@delorun/release-formats/log/bundle'
-import { logFirstAccepted, logRelease, type LogEndpoints } from '../../src/log/client.ts'
+import { logFirstAccepted, logRelease, REFUSAL_EXCERPT_CHARACTERS, type LogEndpoints } from '../../src/log/client.ts'
 import { entryRequest, readEntryRequest } from '@delorun/release-formats/log/entry'
 import { rootFile, throwawayKeys } from '../sign/fixture.ts'
 import { LogStandIn, WitnessStandIn } from './standin.ts'
@@ -149,5 +149,47 @@ describe('logging pre-signed entry requests in the root\'s order, as log-release
     const unlisted = entryRequest(MANIFEST, generateKeyPairSync('ec', { namedCurve: 'prime256v1' }).privateKey, ECDSA)
     await expect(logFirstAccepted(endpoints, root, 'delorun-0.1.0.manifest.json', MANIFEST, '0.1.0', [unlisted], 1, async () => {}, 'manifest', () => undefined)).rejects.toThrow('does not verify under root 1, so it was not submitted')
     expect(submitted).toEqual([])
+  })
+})
+
+async function refusing(test: TestContext, status: number, body: string | Buffer): Promise<LogEndpoints> {
+  const server = createServer((request, response) => {
+    request.resume()
+    request.on('end', () => {
+      response.writeHead(status, { 'content-type': 'application/json' })
+      response.end(body)
+    })
+  })
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
+  test.onTestFinished(() => new Promise<void>(resolve => server.close(() => resolve())))
+  const origin = `http://127.0.0.1:${String((server.address() as AddressInfo).port)}`
+  return { submit: `${origin}/api/v2/log/entries`, checkpoint: `${origin}/checkpoint`, tiles: `${origin}/tiles/` }
+}
+
+async function refusalOf(endpoints: LogEndpoints): Promise<string> {
+  const { root, entry } = setup()
+  const error: unknown = await logRelease(endpoints, root, 'delorun-0.1.0.manifest.json', MANIFEST, '0.1.0', entry, 1, async () => {}).then(() => undefined, (failure: unknown) => failure)
+  if (!(error instanceof Error)) throw new Error('the log refused the entry, yet logRelease did not fail')
+  return error.message
+}
+
+describe('logRelease when the log refuses the entry', () => {
+  it('names the status and the reason the log gives in its body', async (test) => {
+    const endpoints = await refusing(test, 400, '{"code":3,"message":"invalid hashedrekord request","details":[]}')
+    expect(await refusalOf(endpoints)).toBe(`${endpoints.submit} answered HTTP 400: {"code":3,"message":"invalid hashedrekord request","details":[]}`)
+  })
+
+  it('quotes at most the first 500 characters, with control and format characters shown as spaces', async (test) => {
+    const endpoints = await refusing(test, 400, `\u001B[31mrefused\r\n\u202Eby\u0007the log ${'x'.repeat(10_000)}`)
+    const message = await refusalOf(endpoints)
+    const excerpt = message.slice(`${endpoints.submit} answered HTTP 400: `.length)
+    expect(excerpt.startsWith('[31mrefused by the log x')).toBe(true)
+    expect([...excerpt]).toHaveLength(REFUSAL_EXCERPT_CHARACTERS)
+    expect(message).not.toMatch(/[\p{Cc}\p{Cf}]/u)
+  })
+
+  it('ends at the status when the body is empty', async (test) => {
+    const endpoints = await refusing(test, 503, '')
+    expect(await refusalOf(endpoints)).toBe(`${endpoints.submit} answered HTTP 503`)
   })
 })
