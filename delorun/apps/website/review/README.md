@@ -30,6 +30,7 @@ Sections are found by landmark (the id, label or first heading), not by a fixed 
 - `capture.ts`, `worst.ts`: the pictures. `audit.ts`: the measurements. `page-tools.ts`: opening pages and finding sections.
 - `naming.ts`, `report.ts`: picture names and the report format, with their specs in `tests/review-format.spec.ts`.
 - `serve.ts`, `browser.ts`, `resources.ts`: the static server (brotli, or gzip, for text types with `Content-Encoding` and `Vary`, as Cloudflare sends them; `report.json` records the encodings under `serverEncoding`), the browser (Playwright from `apps/tools`) and the wait for free memory and disk.
+- `scroll-trace.ts`, `trace-summary.ts`: `node review/scroll-trace.ts` serves a built `out/` and traces two scrolls in headless Chromium, the hero's zoom and the wall with every picture shown, printing per run the frame intervals, dropped frames, long tasks, style, layout, paint, raster and decode time and the layer count. Options: `--out`, `--port` (18681 by default), `--runs`, `--scenario hero|wall|all`, `--width`, `--scheme`, `--cpu` (CPU slow-down) and `--trace-dir` (keeps each trace). It compares two builds on one machine; on the software renderer raster and decode cost more than on a real graphics card. The summary's spec is `tests/trace-summary.spec.ts`.
 
 Every browser context refuses any request that is not to the local server and records it as "blocked, would have left the machine" (the sign-up field would otherwise load Turnstile from Cloudflare). The refused sign-up case runs without Turnstile.
 

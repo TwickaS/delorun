@@ -575,23 +575,20 @@
   height: 260svh;
   color: var(--dl-stage-text);
 }
+/* The zoom sets the stage's opacity and each layer's `--words`, `--field-in`, `--lit` and `--swap` on the layer itself. */
 .revealStage {
-  --words: 1;
-  --field-in: 0;
-  --hero-out: 0;
   position: sticky;
   top: 0;
   height: 100svh;
   min-height: 640px;
   overflow: hidden;
-  opacity: calc(1 - var(--hero-out));
 }
 .reveal + .film { margin-top: -120svh; }
 .revealField {
   position: absolute;
   inset: 0;
   background: var(--dl-stage);
-  opacity: var(--field-in);
+  opacity: var(--field-in, 0);
   pointer-events: none;
 }
 .handover {
@@ -752,21 +749,20 @@
 
 .mosaicPeach { fill: var(--dl-accent); fill-opacity: 0.5; mix-blend-mode: multiply; }
 
-.revealStage::before {
-  content: '';
+.revealTop {
   position: absolute;
   inset: 0 0 auto;
   z-index: 1;
   height: 120px;
   background: linear-gradient(to bottom, color-mix(in oklab, var(--dl-stage) 85%, transparent), transparent);
-  opacity: var(--words);
+  opacity: var(--words, 1);
   pointer-events: none;
 }
 .revealShade {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  opacity: var(--words);
+  opacity: var(--words, 1);
   background: linear-gradient(to right, var(--dl-stage) 0%, color-mix(in oklab, var(--dl-stage) 92%, transparent) 36%, color-mix(in oklab, var(--dl-stage) 40%, transparent) 50%, transparent 60%);
 }
 .revealWords {
@@ -779,8 +775,8 @@
   gap: 24px;
   width: min(44vw, 640px);
   padding-top: 40px;
-  opacity: var(--words);
-  translate: 0 calc((1 - var(--words)) * -40px);
+  opacity: var(--words, 1);
+  translate: 0 calc((1 - var(--words, 1)) * -40px);
   pointer-events: none;
 }
 .revealWords > * { pointer-events: auto; }

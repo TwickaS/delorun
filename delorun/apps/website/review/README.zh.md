@@ -30,6 +30,7 @@ node review/run-pass.ts --pass 1 --build
 - `capture.ts`、`worst.ts`：生成图片。`audit.ts`：测量。`page-tools.ts`：打开页面和查找小节。
 - `naming.ts`、`report.ts`：图片名称和报告格式，其规格在 `tests/review-format.spec.ts` 中。
 - `serve.ts`、`browser.ts`、`resources.ts`：静态服务器（文本类型使用 brotli 或 gzip，并带 `Content-Encoding` 和 `Vary`，与 Cloudflare 的发送方式一致；`report.json` 在 `serverEncoding` 下记录这些编码）、浏览器（来自 `apps/tools` 的 Playwright）以及对空闲内存和磁盘的等待。
+- `scroll-trace.ts`, `trace-summary.ts`: `node review/scroll-trace.ts` serves a built `out/` and traces two scrolls in headless Chromium, the hero's zoom and the wall with every picture shown, printing per run the frame intervals, dropped frames, long tasks, style, layout, paint, raster and decode time and the layer count. Options: `--out`, `--port` (18681 by default), `--runs`, `--scenario hero|wall|all`, `--width`, `--scheme`, `--cpu` (CPU slow-down) and `--trace-dir` (keeps each trace). It compares two builds on one machine; on the software renderer raster and decode cost more than on a real graphics card. The summary's spec is `tests/trace-summary.spec.ts`.
 
 每个浏览器上下文都会拒绝任何不是发往本地服务器的请求，并将其记录为“blocked, would have left the machine”（否则订阅字段会从 Cloudflare 加载 Turnstile）。订阅被拒绝的情形在没有 Turnstile 的条件下运行。
 
