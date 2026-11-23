@@ -123,8 +123,9 @@ describe('delorun plugin new', () => {
     await scaffold([`@you/my-${kind}`, '--kind', kind, '--dir', folder])
     let out = ''
     expect(await runPluginCheck([folder], { env: {}, stdout: (text) => { out += text }, stderr: () => {} }, RUNNING)).toBe(EXIT.ok)
-    expect(out).toContain('engines.dsh "^0.2.2" admits DSH 0.2.2')
-    expect(out).toContain('Delorun axis: engines.delorun admits Delorun 0.1.3.')
+    expect(out).toContain('DSH axis: not checked on Delorun, because engines.delorun decides alone')
+    expect(out).toContain('Delorun axis: engines.delorun admits Delorun 0.1.3, and decides alone')
+    expect(manifestOf(folder)['engines']).toMatchObject({ dsh: '^0.2.2' })
   })
 
   it.each(['0.1.0-preview.1.18', '0.1.0'])('writes a manifest that delorun plugin check admits on Delorun %s', async (delorun) => {
@@ -133,7 +134,7 @@ describe('delorun plugin new', () => {
     await runPluginNew(['@you/preview', '--dir', folder], { env: {}, stdout: () => {}, stderr: () => {} }, running, installation)
     let out = ''
     expect(await runPluginCheck([folder], { env: {}, stdout: (text) => { out += text }, stderr: () => {} }, running)).toBe(EXIT.ok)
-    expect(out).toContain(`Delorun axis: engines.delorun admits Delorun ${delorun}.`)
+    expect(out).toContain(`Delorun axis: engines.delorun admits Delorun ${delorun}, and decides alone`)
     expect(manifestOf(folder)['engines']).toMatchObject({ delorun: '^0.1.0-0' })
   })
 
