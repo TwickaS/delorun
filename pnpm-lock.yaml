@@ -3774,6 +3774,9 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
+      '@delorun/settings-controls':
+        specifier: workspace:*
+        version: link:../settings-controls
       react-resizable-panels:
         specifier: 4.24.1
         version: 4.24.1(@types/react@18.3.31)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
@@ -3793,6 +3796,9 @@ importers:
       '@deepseek-ai/dsh-client-locale':
         specifier: workspace:*
         version: link:../../../packages/client/locale
+      '@deepseek-ai/dsh-client-shortcuts':
+        specifier: workspace:*
+        version: link:../../../packages/client/shortcuts
       '@deepseek-ai/dsh-client-store':
         specifier: workspace:*
         version: link:../../../packages/client/store

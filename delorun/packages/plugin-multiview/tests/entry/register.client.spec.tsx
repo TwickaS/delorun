@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import { DEFAULT_MULTIVIEW_SETTINGS } from '../../src/config.ts'
 import { MULTIVIEW_NS } from '../../src/client/contract.ts'
 import { en, zh } from '../../src/entry/locales.ts'
-import { HEADER_ORDER } from '../../src/entry/register.ts'
 import { MULTIVIEW_ROW_ID } from '../../src/config.ts'
 import { A, B, C, CHAT, sid } from './fixtures.ts'
 import { harness } from './harness.tsx'
@@ -10,16 +9,16 @@ import { harness } from './harness.tsx'
 const OTHER = 'other-chat'
 
 describe('registration', () => {
-  it('registers the copy, the pin button, the popover footer and the header button, and offers the service', async () => {
+  it('registers the copy, the pin button, the popover footer and the toggle at the end of the agents action, and offers the service', async () => {
     const h = harness()
     await h.fiber.await()
     expect(h.dictionaries.get(MULTIVIEW_NS)).toEqual({ en, zh })
     expect([...h.entries.keys()].sort()).toEqual([
-      'conversation.session.header.actions#multiview-button',
+      'conversation.session.header.actions.subagent.end#multiview-toggle',
       'conversation.session.header.actions.subagent.footer#multiview-footer',
       'conversation.session.header.actions.subagent.row.trail#multiview-pin',
     ])
-    expect(h.entries.get('conversation.session.header.actions#multiview-button')?.order).toBe(HEADER_ORDER)
+    expect([...h.entries.keys()].some(key => key.startsWith('conversation.session.header.actions#'))).toBe(false)
     expect(h.ctx.get('multiview')).toBe(h.store)
     expect(h.formIds).toEqual([MULTIVIEW_ROW_ID])
     await h.fiber.dispose()
@@ -39,12 +38,12 @@ describe('registration', () => {
 
 describe('while the Multiview layer is not registered', () => {
   const ENTRY_KEYS = [
-    'conversation.session.header.actions#multiview-button',
+    'conversation.session.header.actions.subagent.end#multiview-toggle',
     'conversation.session.header.actions.subagent.footer#multiview-footer',
     'conversation.session.header.actions.subagent.row.trail#multiview-pin',
   ]
 
-  it('shows no pin button, footer or header button, and still offers the service', async () => {
+  it('shows no pin button, footer or toggle, and still offers the service', async () => {
     const h = harness({ layer: false })
     await h.fiber.await()
     expect(h.entries.size).toBe(0)
@@ -162,6 +161,22 @@ describe('auto-pin on a hand-off', () => {
     expect(h.state(CHAT).pins).toEqual([])
     h.setList({ main: CHAT, catalogs: { [OTHER]: [], [CHAT]: [A, B, C] } })
     expect(h.state(CHAT).pins).toEqual([C])
+  })
+})
+
+describe('an emptied agent catalog', () => {
+  it('closes Multiview when the main chat\'s catalog is loaded and empty, since the toggle hides with it, and keeps the pins', async () => {
+    const h = harness({ initial: { [CHAT]: { pins: [A], layout: null, open: true } }, list: { main: CHAT, catalogs: { [CHAT]: [A] } } })
+    await h.fiber.await()
+    expect(h.state(CHAT).open).toBe(true)
+    h.setList({ main: CHAT, catalogs: { [CHAT]: [] } })
+    expect(h.state(CHAT)).toMatchObject({ open: false, pins: [A] })
+  })
+
+  it('leaves Multiview open while the catalog has not loaded yet', async () => {
+    const h = harness({ initial: { [CHAT]: { pins: [A], layout: null, open: true } }, list: { main: CHAT } })
+    await h.fiber.await()
+    expect(h.state(CHAT).open).toBe(true)
   })
 })
 

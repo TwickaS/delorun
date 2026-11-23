@@ -5,8 +5,11 @@
  */
 import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import type { CapacityRefusal, LayoutArea, LayoutModel, LayoutPreset } from '../layout/index.ts'
-import type { MultiviewSettings } from '../config.ts'
+import type {
+  CapacityRefusal, ChatArrangement, LayoutArea, LayoutChoiceId, LayoutModel, LayoutPreset, LayoutShape, LegacyLayoutPreset, MainSide, PaneActivity,
+  PaneId, StackStyle,
+} from '../layout/index.ts'
+import type { MosaicMotion, MultiviewSettings, RememberScope, SaveTrigger } from '../config.ts'
 
 /** The dictionary namespace of the entry points' copy. */
 export const MULTIVIEW_NS = 'delorunMultiview'
@@ -22,6 +25,15 @@ export interface ChatMultiview {
   readonly layout: LayoutModel | null
   /** Whether the person had Multiview open in this chat. */
   readonly open: boolean
+  /**
+   * What the chat's layout follows: a picker choice, or `custom` for a layout saved before choices were remembered. Absent until the
+   * chat is first written, when it takes the default for new Multiviews; a chat keeps it when that default changes later.
+   */
+  readonly arrangement?: ChatArrangement | undefined
+  /** The panes in slot order, the main slot first, once the person swapped a pane into the main place; absent means the main chat then the pins. */
+  readonly slots?: readonly SessionId[] | undefined
+  /** The chat's own copy of "Yours", taken when it started following `yours`. */
+  readonly shape?: LayoutShape | undefined
 }
 
 /** A chat with nothing pinned and Multiview closed. */
@@ -34,6 +46,51 @@ export type PinRefusal = CapacityRefusal | 'already-pinned' | 'main-chat'
 export type PinResult =
   | { readonly ok: true }
   | { readonly ok: false; readonly reason: PinRefusal }
+
+/** The layout defaults that apply to a chat, and the options the presets share. */
+export interface LayoutDefaults {
+  /** The layout a new Multiview starts with; `yours` only when a shape is saved. */
+  readonly layout: LayoutChoiceId
+  /** "Yours" for the chat's workspace or the studio, when saved. */
+  readonly shape: LayoutShape | undefined
+  /** Where "Yours" comes from. */
+  readonly shapeScope: 'studio' | 'workspace' | undefined
+  /** The side Main and stack keeps the main chat on. */
+  readonly mainSide: MainSide
+  /** How Main and stack tiles the others. */
+  readonly stackStyle: StackStyle
+  /** The main chat's share, in percent. */
+  readonly mainShare: number
+  /** The views Auto puts side by side at most. */
+  readonly autoColumns: number
+  /** Whether the activity mosaic animates. */
+  readonly mosaicMotion: MosaicMotion
+  /** How far an arrangement the person makes applies. */
+  readonly scope: RememberScope
+  /** What makes an arrangement the person's own. */
+  readonly saveOn: SaveTrigger
+  /** Whether the last "Saved as your default layout" can still be undone. */
+  readonly canUndo: boolean
+}
+
+/** A value that changes whenever any chat's defaults may have changed. */
+export interface DefaultsRevision {
+  readonly revision: number
+  /** Whether the last "Saved as your default layout" can still be undone. */
+  readonly canUndo: boolean
+}
+
+/** Why the person's own arrangement is being kept: a drag of a pane or a divider, or a move from a pane's menu. */
+export type AdoptReason = 'move' | 'swap' | 'resize'
+
+/**
+ * Whether a kept arrangement is to become a default, and at which scope, for the "Saved as your default layout" notice. `written`
+ * settles with true once the Host accepted the new default (at once for the chat scope, which writes nothing) and false when it
+ * refused it, for example on a device whose settings are read-only; the notice waits for it.
+ */
+export type AdoptResult =
+  | { readonly saved: false }
+  | { readonly saved: true; readonly scope: RememberScope; readonly written: Promise<boolean> }
 
 /** Where a chat's Multiview state is kept between page loads. */
 export interface MultiviewPersistence {
@@ -111,16 +168,90 @@ export interface MultiviewService {
    */
   setLayout(chat: SessionId, layout: LayoutModel): void
   /**
-   * Rearrange the panes in a preset; nothing opens or closes.
+   * Rearrange the panes in a preset; nothing opens or closes. The same as {@link MultiviewService.chooseLayout}, `main-column` reading as Main and stack.
    * @param chat - the chat that Multiview belongs to.
    * @param preset - the arrangement.
    */
-  applyPreset(chat: SessionId, preset: LayoutPreset): void
+  applyPreset(chat: SessionId, preset: LayoutPreset | LegacyLayoutPreset): void
   /**
-   * Go back to the default arrangement with the same panes.
+   * Go back to the default for new Multiviews with the same panes; the default itself does not change.
    * @param chat - the chat that Multiview belongs to.
    */
   resetLayout(chat: SessionId): void
+  /** Changes whenever any chat's defaults may have changed; subscribe to it and read {@link MultiviewService.defaultsOf}. */
+  readonly defaults: HostObservable<DefaultsRevision>
+  /**
+   * The defaults that apply to a chat: its workspace's own where it has them, else the studio's.
+   * @param chat - the chat.
+   * @returns the defaults; the same object while they do not change.
+   */
+  defaultsOf(chat: SessionId): LayoutDefaults
+  /**
+   * What a chat's layout follows now.
+   * @param chat - the chat.
+   * @returns its arrangement, or the default for a chat that has none yet.
+   */
+  arrangementOf(chat: SessionId): ChatArrangement
+  /**
+   * Show a picker choice in a chat and make it the default for new Multiviews at the person's scope. Nothing opens or closes.
+   * @param chat - the chat that Multiview belongs to.
+   * @param choice - the choice; `yours` without a saved arrangement shows Auto.
+   */
+  chooseLayout(chat: SessionId, choice: LayoutChoiceId): void
+  /**
+   * Keep the person's own arrangement: the chat follows it and, at the person's scope (the studio, the chat's workspace, or the
+   * chat only), it becomes "Yours", the default for new Multiviews. The previous defaults and the chat's previous arrangement are
+   * kept for {@link MultiviewService.undoDefault}.
+   * @param chat - the chat that Multiview belongs to.
+   * @param layout - the arrangement the person made.
+   * @param reason - what the person did; a resize with `saveOn` set to moving only stays with the chat.
+   * @returns whether it became a default, and at which scope.
+   */
+  adoptArrangement(chat: SessionId, layout: LayoutModel, reason: AdoptReason): AdoptResult
+  /** Undo the last {@link MultiviewService.adoptArrangement}: the previous default and that chat's previous arrangement come back. */
+  undoDefault(): void
+  /**
+   * Clear "Yours" for the studio and for the chat's workspace, and make Auto the default for new Multiviews.
+   * @param chat - a chat to show Auto in at once, whose workspace's own defaults are cleared too, if any.
+   */
+  resetToAuto(chat?: SessionId): void
+  /**
+   * Set the main chat's share for the layouts that have one, remembered for every chat.
+   * @param share - percent; kept inside the bounds.
+   */
+  setMainShare(share: number): void
+  /**
+   * Set the Main and stack options, remembered as settings for the studio, or for the chat's workspace with the workspace scope.
+   * @param options - the side and the stack style to change.
+   * @param chat - the chat whose workspace the workspace scope writes, if any.
+   */
+  setStackOptions(options: { readonly mainSide?: MainSide; readonly stackStyle?: StackStyle }, chat?: SessionId): void
+  /**
+   * Show the next or previous picker choice in a chat, for the layout keys.
+   * @param chat - the chat that Multiview belongs to.
+   * @param step - 1 for next, -1 for previous.
+   */
+  cycleLayout(chat: SessionId, step: 1 | -1): void
+  /**
+   * Put a pane in the main place and the pane there in its place.
+   * @param chat - the chat that Multiview belongs to.
+   * @param pane - the pane to bring to the main place.
+   */
+  swapWithMain(chat: SessionId, pane: PaneId): void
+  /**
+   * Grow or shrink the main place by one step.
+   * @param chat - the chat that Multiview belongs to.
+   * @param step - 1 to grow, -1 to shrink.
+   */
+  resizeMain(chat: SessionId, step: 1 | -1): void
+  /**
+   * The layout a chat shows: its arrangement for its panes, the area and the activity, panes under the least size as tabs.
+   * @param chat - the chat.
+   * @param area - the rectangle the layout fills, if measured.
+   * @param activity - each pane's activity, for the activity mosaic.
+   * @returns the layout.
+   */
+  layoutFor(chat: SessionId, area?: LayoutArea, activity?: ReadonlyMap<PaneId, PaneActivity>): LayoutModel
   /**
    * Report the rectangle the layout fills, so the pin button can say the screen is full.
    * @param area - the size, or undefined when Multiview is closed, which falls back to the window.
@@ -139,5 +270,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
   interface LocaleNamespaceMap {
     /** The Multiview entry points' copy. */
     'delorunMultiview': import('../entry/locales.ts').MultiviewLocaleKey
+    /** The layout picker's, the layout keys' and the Multiview settings section's copy. */
+    'delorunMultiviewLayouts': import('../layout/locales.ts').LayoutsLocaleKey
   }
 }

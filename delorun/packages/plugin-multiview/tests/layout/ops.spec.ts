@@ -108,9 +108,9 @@ describe('presets and reset', () => {
     expect(panesOf(grid)[0]).toBe(MAIN)
   })
 
-  it('resets to the default arrangement', () => {
+  it('resets to the default arrangement, Auto: up to three panes side by side', () => {
     const moved = ok(movePane(columnAB(), B, { kind: 'edge', edge: 'bottom' }))
-    expect(show(resetLayout(moved, context))).toBe('H(main:56, V(a:50, b:50):44):100')
+    expect(show(resetLayout(moved, context))).toBe('H(main:33.3, a:33.3, b:33.3):100')
   })
 })
 
@@ -119,8 +119,8 @@ describe('reconciling with the panes that exist', () => {
     expect(show(reconcileLayout(columnAB(), MAIN, [B, C]))).toBe('H(main:56, V(b:50, c:50):44):100')
   })
 
-  it('builds the default layout when nothing was saved', () => {
-    expect(show(reconcileLayout(undefined, MAIN, [A, B]))).toBe('H(main:56, V(a:50, b:50):44):100')
+  it('builds the default layout, Auto, when nothing was saved', () => {
+    expect(show(reconcileLayout(undefined, MAIN, [A, B]))).toBe('H(main:33.3, a:33.3, b:33.3):100')
   })
 
   it('keeps the main chat when a saved layout lacks it', () => {

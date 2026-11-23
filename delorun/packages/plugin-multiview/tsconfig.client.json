@@ -27,6 +27,9 @@
       "path": "../../../packages/client/locale/tsconfig.client.json"
     },
     {
+      "path": "../../../packages/client/shortcuts/tsconfig.client.json"
+    },
+    {
       "path": "../../../packages/client/store"
     },
     {

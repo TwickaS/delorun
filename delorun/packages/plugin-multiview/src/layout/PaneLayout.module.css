@@ -1,6 +1,12 @@
-/* The layout fills its parent: no padding, no gaps, so the panes use the whole screen. Hashed class names are the library's styling hooks. */
+/* The layout fills its parent. `--mv-pane-gap` (the paneGap setting, 0 by default) spaces the panes from the edge and, through the
+   dividers below, from each other; at 0 the panes meet edge to edge and use the whole screen. Hashed class names are the library's
+   styling hooks. */
 .root {
+  --mv-pane-gap: 0px;
+  --mv-divider-hit: 12px;
   position: relative;
+  box-sizing: border-box;
+  padding: var(--mv-pane-gap);
   display: flex;
   flex: 1 1 auto;
   min-width: 0;
@@ -35,6 +41,8 @@
 
 .header {
   display: flex;
+  /* A leaf with tabs puts its tab strip on a row of its own above the pane header, so neither squeezes the other. */
+  flex-wrap: wrap;
   align-items: stretch;
   min-width: 0;
   background: var(--dsw-alias-bg-layer-1);
@@ -43,6 +51,7 @@
 
 .toolbar {
   display: flex;
+  /* An automatic basis (its content's width) moves it below a full-width tab strip instead of squeezing it to nothing beside it. */
   flex: 1 1 auto;
   align-items: center;
   min-width: 0;
@@ -75,7 +84,9 @@
 
 .tab {
   display: inline-flex;
+  flex: none;
   align-items: center;
+  white-space: nowrap;
   min-height: 32px;
   padding: 0 var(--delorun-space-3, 8px);
   color: var(--dsw-alias-label-secondary);
@@ -116,7 +127,8 @@
   display: none;
 }
 
-/* The divider is a thin line with a wider hit area: 12 px under a mouse, 24 px under a finger. */
+/* The divider takes exactly the gap's space between two panes, and its hit area stays at least 12 px under a mouse and 24 px under a
+   finger: a hit area wider than the gap spills over the panes' edges by negative margins. */
 .separator {
   position: relative;
   flex: none;
@@ -125,15 +137,15 @@
 }
 
 .separator[aria-orientation='vertical'] {
-  width: 12px;
-  margin: 0 -6px;
+  width: max(var(--mv-divider-hit), var(--mv-pane-gap));
+  margin: 0 calc((var(--mv-pane-gap) - max(var(--mv-divider-hit), var(--mv-pane-gap))) / 2);
   z-index: 1;
   cursor: col-resize;
 }
 
 .separator[aria-orientation='horizontal'] {
-  height: 12px;
-  margin: -6px 0;
+  height: max(var(--mv-divider-hit), var(--mv-pane-gap));
+  margin: calc((var(--mv-pane-gap) - max(var(--mv-divider-hit), var(--mv-pane-gap))) / 2) 0;
   z-index: 1;
   cursor: row-resize;
 }
@@ -171,14 +183,8 @@
 }
 
 @media (pointer: coarse) {
-  .separator[aria-orientation='vertical'] {
-    width: 24px;
-    margin: 0 -12px;
-  }
-
-  .separator[aria-orientation='horizontal'] {
-    height: 24px;
-    margin: -12px 0;
+  .root {
+    --mv-divider-hit: 24px;
   }
 
   .grip {
@@ -202,4 +208,12 @@
   border: 1px solid var(--dsw-alias-border-l3);
   border-radius: var(--dsw-radius-md);
   pointer-events: none;
+}
+
+/* The pane header's wrapper, which names the pane for the layout glide; it fills the toolbar as the header did. */
+.toolbarFill {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  min-width: 0;
 }

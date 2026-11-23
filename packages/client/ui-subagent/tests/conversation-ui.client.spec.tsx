@@ -268,6 +268,32 @@ describe('SubagentHeaderLineage', () => {
     expect(header.textContent).toBe('Subagents1 completed\u2002·\u20021 in progress\u2002·\u20021 not running\u2002·\u20021 external')
   })
 
+  it('renders end controls after the root trigger inside the same control, and hides them with it', () => {
+    const renderSlot = vi.fn((key: string) => key === 'conversation.session.header.actions.subagent.end'
+      ? <button type="button">end control</button>
+      : null)
+    const input = { ...props(catalog()), renderSlot } as HeaderCatalogProps
+    const view = render(<HeaderCatalog {...input} />)
+    const trigger = screen.getByRole('button', { name: '2 个子智能体' })
+    const end = screen.getByRole('button', { name: 'end control' })
+    expect(trigger.contains(end)).toBe(false)
+    expect(end.closest('[data-subagent-action]')).toBe(trigger.closest('[data-subagent-action]'))
+    expect(end.parentElement?.hasAttribute('data-subagent-end')).toBe(true)
+    expect(trigger.compareDocumentPosition(end) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    view.rerender(<HeaderCatalog {...{ ...props(catalog({ entries: [] })), renderSlot } as HeaderCatalogProps} />)
+    expect(screen.queryByRole('button', { name: 'end control' })).toBeNull()
+  })
+
+  it('gives a child session\'s own count no end controls', () => {
+    const renderSlot = vi.fn(() => <button type="button">end control</button>)
+    const child = props(catalog(), {
+      [CHILD]: catalog({ entries: [{ id: GRANDCHILD, mode: 'continuable', label: 'nested', activity: 'running' }] }),
+    })
+    render(<SubagentHeaderLineage {...{ ...child, renderSlot, lineageSessionId: CHILD } as HeaderCatalogProps} />)
+    expect(screen.queryByRole('button', { name: 'end control' })).toBeNull()
+    expect(document.querySelector('[data-subagent-end]')).toBeNull()
+  })
+
   it('omits zero progress counts from a completed-only catalog header', () => {
     const input = props(catalog({
       team: sharedTeam, entries: [{ id: CHILD, mode: 'continuable', label: 'finished', activity: 'inactive' }],
@@ -364,7 +390,7 @@ describe('SubagentHeaderLineage', () => {
       useSessions: <T,>(select: (snapshot: SessionListState) => T): T => select({
         ...initial, projectionsBySession: { [PARENT]: { state: 'ready', error: null, values } },
       }),
-      renderSlot: () => mode.tasks.some(task => task.status !== 'deleted')
+      renderSlot: (key: string) => key !== 'conversation.session.header.actions.subagent.footer' ? null : mode.tasks.some(task => task.status !== 'deleted')
         ? <section aria-label="Shared tasks">Tasks</section>
         : mode.failure === undefined ? null : <div role="alert">{mode.failure}</div>,
     }
@@ -432,7 +458,7 @@ describe('SubagentHeaderLineage', () => {
   it('leaves task-board keys alone and dismisses the shared panel from outside focus', () => {
     const input = props(catalog())
     render(<><textarea aria-label="Composer" /><HeaderCatalog {...input}
-      renderSlot={() => <button type="button">Expand task</button>}
+      renderSlot={(key: string) => key === 'conversation.session.header.actions.subagent.footer' ? <button type="button">Expand task</button> : null}
     /></>)
     fireEvent.click(screen.getByRole('button', { name: /\d+ 个子智能体$/ }))
     const expand = screen.getByRole('button', { name: 'Expand task' })

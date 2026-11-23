@@ -53,15 +53,15 @@ try {
     { name: 'agents-list-pins-1440-light', width: 1440, height: 560, query: 'pins=3' },
     { name: 'agents-list-pins-390-light', width: 390, height: 640, query: 'pins=3' },
     { name: 'agents-list-limit-1440-light', width: 1440, height: 560, query: 'pins=5&max=6' },
-    { name: 'multiview-open-menu-1440-light', width: 1440, height: 360, query: 'pins=3&open=1&popover=0', menu: true },
+    { name: 'multiview-open-layouts-1440-light', width: 1440, height: 480, query: 'pins=3&open=1&popover=0', menu: true },
   ]
   for (const view of views) {
     const page = await browser.newPage({ viewport: { width: view.width, height: view.height }, colorScheme: 'light' })
     await page.goto(`http://127.0.0.1:${PORT}/?${view.query}`)
     await page.waitForSelector('header button')
     if (view.menu === true) {
-      await page.getByRole('button', { name: 'Layout' }).click()
-      await page.waitForSelector('[role="menu"]')
+      await page.getByRole('button', { name: 'Multiview' }).click({ button: 'right' })
+      await page.waitForSelector('[role="dialog"]')
     }
     await page.waitForTimeout(150)
     await page.screenshot({ path: join(shots, `${view.name}.png`) })

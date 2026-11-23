@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createContext, useContext, useSyncExternalStore, type ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { layoutOf, leafOf, splitOf } from '../../src/layout/index.ts'
+import { layoutOf, layoutsEn, leafOf, splitOf } from '../../src/layout/index.ts'
+import { createLayerRegistry } from '../../src/panel/keys.ts'
 import { MultiviewLayer, type LayerProps } from '../../src/panel/Layer.tsx'
 import { createPhoneDots } from '../../src/panel/dots.tsx'
 import { en } from '../../src/panes/locales.ts'
@@ -65,7 +66,7 @@ function setup(options: { settings?: { compactComposer?: boolean; maxPanes?: num
     useSessionStatus: <S,>(selector: (state: ReturnType<typeof statuses.getSnapshot>) => S): S => useSyncExternalStore(statuses.subscribe, () => selector(statuses.getSnapshot())),
     SessionProvider: ({ session, children }: { session: FakeReference; children: ReactNode }) => <ChatContext.Provider value={session}>{children}</ChatContext.Provider>,
     renderSlot,
-    multiview: made.store, sessions, openFull, clock: String, dots: createPhoneDots(), t,
+    multiview: made.store, sessions, openFull, clock: String, dots: createPhoneDots(), t, layoutsT: makeTranslate(layoutsEn), layers: createLayerRegistry(),
   }
   const view = render(<MultiviewLayer {...(props as never as LayerProps)} />)
   const live = (chat: string): number => (refs.get(chat) ?? []).filter(reference => reference.release.mock.calls.length === 0).length
@@ -168,17 +169,32 @@ describe('the multiview layer', () => {
 
   it('marks the tab of a waiting pane that shares a leaf with another', () => {
     const h = setup({ waiting: [B] })
-    act(() => { h.store.setLayout(CHAT, layoutOf(splitOf('horizontal', [leafOf([CHAT]), leafOf([A, B], 100, A)]))) })
+    act(() => { h.store.adoptArrangement(CHAT, layoutOf(splitOf('horizontal', [leafOf([CHAT]), leafOf([A, B], 100, A)])), 'move') })
     expect(screen.getAllByRole('tab').map(tab => tab.querySelector('[data-attention-dot]') !== null)).toEqual([false, true])
   })
 
-  it('says in the hidden notice that a hidden pane waits', () => {
-    // Room for two panes only (two columns of one row): the last pane in reading order, which waits, is left out.
+  it('turns panes that do not fit into tabs instead of hiding them, and marks a waiting one', () => {
+    // Room for two columns of the least width: Auto's three columns become the main chat beside the two agents as tabs.
     Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get: () => 700 })
     Object.defineProperty(HTMLElement.prototype, 'clientHeight', { configurable: true, get: () => 300 })
     setup({ waiting: [B], pins: [A, B] })
-    expect(screen.getByRole('status').textContent).toContain('It waits for you.')
-    expect(screen.getByRole('status').hasAttribute('data-waiting')).toBe(true)
+    expect(screen.queryByRole('status')).toBeNull()
+    expect(screen.getAllByRole('tab').map(tab => tab.querySelector('[data-attention-dot]') !== null)).toEqual([false, true])
+  })
+
+  it('says "Saved as your default layout" with Undo once the Host accepts a swap as the default, and a refusal when it refuses', async () => {
+    const accepted = setup()
+    accepted.store.attachHost({ write: async (patch) => { accepted.change(patch); return true } })
+    act(() => { accepted.owners.header.get(A)!.controls.actions.swap(A, B) })
+    await waitFor(() => { expect(screen.getByRole('alert').textContent).toContain(layoutsEn['saved.studio']) })
+    expect(screen.getByRole('button', { name: layoutsEn['saved.undo'] })).toBeTruthy()
+    cleanup()
+    const refused = setup()
+    refused.store.attachHost({ write: async () => false })
+    act(() => { refused.owners.header.get(A)!.controls.actions.swap(A, B) })
+    await waitFor(() => { expect(screen.getByRole('alert').textContent).toContain(layoutsEn['saved.refused']) })
+    expect(screen.getByRole('alert').textContent).not.toContain(layoutsEn['saved.studio'])
+    expect(screen.queryByRole('button', { name: layoutsEn['saved.undo'] })).toBeNull()
   })
 
   it('returns to the normal chat when the last pinned pane is closed', () => {

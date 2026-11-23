@@ -30,6 +30,18 @@
   gap: 4px;
 }
 
+/* Contributed controls after the trigger sit close to it so the two read as one control; an empty end takes no room. */
+.end {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  margin-inline-start: -6px;
+}
+
+.end:empty {
+  display: none;
+}
+
 .switcherTrigger {
   gap: 4px;
   min-width: 0;
