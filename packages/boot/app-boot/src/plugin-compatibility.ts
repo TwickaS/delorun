@@ -1,4 +1,7 @@
-/** Evaluate plugin dsh requirements (`engines.dsh`, else dsh peers) without importing plugin code. */
+/**
+ * Evaluate plugin version requirements without importing plugin code: `engines.delorun` alone when the plugin declares it and
+ * Delorun's version is known, otherwise `engines.dsh`, else the dsh peers.
+ */
 
 import fs from 'node:fs'
 import { fileURLToPath } from 'node:url'
@@ -9,10 +12,16 @@ export interface PluginCompatibility {
   name: string
   version: string
   runtimeVersion: string
-  /** Only requirements the running dsh version does not satisfy: `engines.dsh`, or dsh peer package names. */
+  /**
+   * Only requirements the running dsh version does not satisfy: `engines.dsh`, or dsh peer package names. Empty for a plugin
+   * decided on `engines.delorun` (see `delorun`), whose dsh ranges are not read.
+   */
   requirements: Record<string, string>
   exempted: boolean
-  /** The plugin's `engines.delorun` requirement, present only when Delorun's version is known and the plugin declares one. */
+  /**
+   * The plugin's `engines.delorun` requirement, present only when Delorun's version is known and the plugin declares one;
+   * it then decides alone.
+   */
   delorun?: DelorunRequirement
 }
 
@@ -142,9 +151,11 @@ function unmetRequirements(fields: Record<string, unknown>, runtimeVersion: stri
  * peerDependencies are ignored; otherwise every @deepseek-ai/dsh or @deepseek-ai/dsh-* peer must match.
  * Prereleases participate in ranges. For peers only, workspace:^, workspace:~, and workspace:* refer to
  * the current runtime; other empty or invalid ranges, including any workspace: `engines.dsh`, are unmet.
- * A plugin that declares `engines.delorun` is also checked on Delorun's axis, when the process knows Delorun's
- * version ({@link DELORUN_VERSION_ENV}); an unmet or unreadable Delorun requirement is a mismatch of its own, and
- * the dsh exact-version exemption does not admit it, because an exemption covers one axis only.
+ * A plugin that declares `engines.delorun` is checked on that range alone, when the process knows Delorun's
+ * version ({@link DELORUN_VERSION_ENV}): its `engines.dsh` and dsh peers are not read, so a malformed one is not an
+ * error either. An unmet or unreadable Delorun requirement is a mismatch of its own, and the dsh exact-version
+ * exemption does not admit it. A plugin without `engines.delorun`, or any plugin when Delorun's version is unknown
+ * (stock DSH), is decided on the dsh requirements as above.
  * @param manifest - parsed plugin package.json; inherited fields are ignored.
  * @param exemptions - exact plugin name@version keys mapped to exact runtime versions.
  * @param versions - the running dsh version, then the running Delorun version. Each omitted is read from its own
@@ -164,8 +175,9 @@ export function evaluatePluginCompatibility(
   const delorunVersion = versions.length < 2 ? getDelorunRuntimeVersion() : versions[1]
   runtimeVersionOf(runtimeVersion)
   const fields = objectOf(manifest, 'Plugin manifest')
-  const requirements = unmetRequirements(fields, runtimeVersion)
   const delorun = evaluateDelorunRequirement(fields, delorunVersion)
+  // A plugin that declares `engines.delorun` is decided on that range alone: its dsh ranges are not read on Delorun.
+  const requirements = delorun === undefined ? unmetRequirements(fields, runtimeVersion) : {}
   const delorunMismatch = delorun !== undefined && delorun.status !== 'met'
   if (Object.keys(requirements).length === 0 && !delorunMismatch) return undefined
   const name = identityField(fields, 'name')
