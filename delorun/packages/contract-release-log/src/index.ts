@@ -56,7 +56,11 @@ export interface HashedRekordSignature {
   }
 }
 
-/** `delorun-<version>.manifest.entry.json`: the request the release workflow submits to Rekor v2's `/api/v2/log/entries`. */
+/**
+ * `delorun-<version>.manifest.entry.json`: the request the release workflow submits to Rekor v2's `/api/v2/log/entries`.
+ * The signing command writes one per log-entry key it may sign with, in the root's order, the n-th as
+ * `delorun-<version>.manifest.entry.<n>.json`; once logged, the first file holds the request the log accepted.
+ */
 export interface HashedRekordRequest {
   readonly hashedRekordRequestV002: {
     /** Base64 digest of the manifest file's bytes, by the entry key type's digest algorithm. */

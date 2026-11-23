@@ -46,7 +46,7 @@ describe('the root schema', () => {
   it('reads a root without either field, and one with both', () => {
     expect(issue({})).toBeUndefined()
     const log = rootFile(throwawayKeys()).metadata.log
-    expect(issue({ logEntryKeys: [active('PKIX_ED25519_PH', ED), active('PKIX_ECDSA_P256_SHA_256', EC)], logs: [log, { origin: 'earlier.example.test', vkey: 'earlier.example.test+00000000+AQ==' }] })).toBeUndefined()
+    expect(issue({ logEntryKeys: [active('PKIX_ED25519_PH', ED), active('PKIX_ECDSA_P256_SHA_256', EC)], logs: [log, { origin: 'earlier.example.test', vkey: 'earlier.example.test+00000000+AQ==', lastRelease: '0.1.0' }] })).toBeUndefined()
   })
 
   it('stays strict: refuses any other new field', () => {
@@ -76,10 +76,18 @@ describe('the root schema', () => {
 
   it('refuses logs that leave out the root\'s log, or list one origin twice', () => {
     const log = rootFile(throwawayKeys()).metadata.log
-    expect(issue({ logs: [{ origin: 'earlier.example.test', vkey: 'earlier.example.test+00000000+AQ==' }] })).toContain('does not list the root\'s log')
+    expect(issue({ logs: [{ origin: 'earlier.example.test', vkey: 'earlier.example.test+00000000+AQ==', lastRelease: '0.1.0' }] })).toContain('does not list the root\'s log')
     expect(issue({ logs: [{ origin: log.origin, vkey: 'other+00000000+AQ==' }] })).toContain('does not list the root\'s log')
     expect(issue({ logs: [log, { origin: log.origin, vkey: 'other+00000000+AQ==' }] })).toContain('one origin more than once')
     expect(issue({ logs: [] })).not.toBeUndefined()
+  })
+
+  it('c02-earlier-log-needs-last-release: refuses an earlier log without lastRelease, and the current log with one', () => {
+    const log = rootFile(throwawayKeys()).metadata.log
+    const earlier = { origin: 'earlier.example.test', vkey: 'earlier.example.test+00000000+AQ==' }
+    expect(issue({ logs: [log, earlier] })).toContain('carries lastRelease')
+    expect(issue({ logs: [{ ...log, lastRelease: '0.1.0' }] })).toContain('carries lastRelease')
+    expect(issue({ logs: [log, { ...earlier, lastRelease: 'v0.1' }] })).not.toBeUndefined()
   })
 })
 
@@ -127,10 +135,11 @@ describe('draft-root', () => {
     const ecdsa = join(directory, 'log-entry-ecdsa.pub.pem')
     writeFileSync(ecdsa, EC.export({ format: 'pem', type: 'spki' }))
     const earlier = verifierKey('log2025-1.example.test', NOTE_ED25519, generateKeyPairSync('ed25519').privateKey)
-    const draft = draftRoot([...base, '--log-entry-key', `PKIX_ECDSA_P256_SHA_256=${ecdsa}`, '--earlier-log', earlier], Math.floor(Date.now() / 1000))
+    const draft = draftRoot([...base, '--log-entry-key', `PKIX_ECDSA_P256_SHA_256=${ecdsa}`, '--earlier-log', `0.1.0=${earlier}`], Math.floor(Date.now() / 1000))
     expect(draft.logEntryKeys?.map(key => [key.keyDetails, key.status])).toEqual([['PKIX_ED25519_PH', 'active'], ['PKIX_ECDSA_P256_SHA_256', 'active']])
     expect(draft.logEntryKeys?.[1]?.public).toBe(der(EC))
-    expect(draft.logs).toEqual([{ origin: 'log2026-1.example.test', vkey: logVkey }, { origin: 'log2025-1.example.test', vkey: earlier }])
+    expect(draft.logs).toEqual([{ origin: 'log2026-1.example.test', vkey: logVkey }, { origin: 'log2025-1.example.test', vkey: earlier, lastRelease: '0.1.0' }])
+    expect(() => draftRoot([...base, '--earlier-log', earlier], Math.floor(Date.now() / 1000))).toThrow('is not <last release>=<vkey>')
   })
 
   it('refuses a private key, a key of another kind and a type it does not implement', (test) => {

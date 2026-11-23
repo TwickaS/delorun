@@ -4,10 +4,11 @@
  *
  * 1. the bundle covers the manifest file the client verified under contract C2, by SHA-256;
  * 2. the entry body is a Rekor v2 `hashedrekord` `0.0.2` over the manifest file signed by a key the root trusts for
- *    the release's log entry: a listed log-entry key of a listed type under a root with `logEntryKeys`, an Ed25519ph
- *    signature by a targets key valid for the release under a root without it;
+ *    the release's log entry: a log-entry key of a listed type that the root lists in `logEntryKeys` and that is valid
+ *    for the release; a root without `logEntryKeys` trusts no entry;
  * 3. the leaf hash, the inclusion proof and the tree size reproduce the bundle's root hash;
- * 4. the checkpoint names a log the root trusts (its `logs`, or `log` alone) with the proof's size and root hash, and
+ * 4. the checkpoint names a log the root lists in `logs`, which takes the release's version, with the proof's size and
+ *    root hash, and
  *    its log signature verifies with the key the root lists for that log;
  * 5. at least the root's threshold of distinct listed witnesses cosigned that checkpoint.
  *
@@ -36,7 +37,7 @@ import { readEntryBody, requireReleaseVersion, verifyEntryIdentity } from './ent
 import { parseStrictJson } from './json.ts'
 import { leafHash, rootFromInclusionProof } from './merkle.ts'
 import { parseCheckpoint, splitNote, trustedLogKeys, verifySignature, type Checkpoint } from './note.ts'
-import { trustedLog } from '@delorun/release-formats/log/entry-keys'
+import { logRefusesRelease, trustedLog } from '@delorun/release-formats/log/entry-keys'
 
 /** A lowercase hex SHA-256 digest. */
 const hex = z.string().regex(/^[0-9a-f]{64}$/u)
@@ -123,6 +124,8 @@ export function verifyBundle(root: RootMetadata, version: string, manifest: Uint
   const checkpoint = parseCheckpoint(note.body)
   const log = trustedLog(root, checkpoint.origin)
   if (log === undefined) throw refuse('log-origin-untrusted', `the checkpoint is for ${JSON.stringify(checkpoint.origin)}, which is no log the trusted root lists (its log is ${JSON.stringify(root.log.origin)})`)
+  const closed = logRefusesRelease(log, version)
+  if (closed !== undefined) throw refuse('log-origin-untrusted', closed)
   if (checkpoint.size !== bundle.inclusion.treeSize || checkpoint.rootHash.toString('hex') !== bundle.inclusion.rootHash) {
     throw refuse('log-origin-untrusted', 'the checkpoint names another tree than the inclusion proof')
   }

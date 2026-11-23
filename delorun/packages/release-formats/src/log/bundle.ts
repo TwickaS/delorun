@@ -15,7 +15,7 @@ import semver from 'semver'
 import { z } from 'zod'
 import { parseStrictJson } from '../sign/json.ts'
 import { EntryBodySchema, type ParsedEntryBody } from './entry.ts'
-import { entryDigest, entryDigestAlgorithm, listedEntryKey, trustedLog, verifyLogEntry } from './entry-keys.ts'
+import { entryDigest, entryDigestAlgorithm, listedEntryKey, logRefusesRelease, trustedLog, verifyLogEntry } from './entry-keys.ts'
 import { leafHash, rootFromInclusionProof } from './merkle.ts'
 import { parseCheckpoint, parseVerifier, splitNote, verifySignature } from './note.ts'
 
@@ -49,11 +49,14 @@ export const BundleSchema = z.strictObject({
 
 /**
  * The name of the file that carries a manifest's log entry request from the signing machine to the release workflow.
+ * The signing command writes one request per log-entry key it may sign with, in the order the logging step tries them.
  * @param version - the release.
- * @returns `delorun-<version>.manifest.entry.json`.
+ * @param position - the request's position in that order, from 0.
+ * @returns `delorun-<version>.manifest.entry.json` for the first, `delorun-<version>.manifest.entry.<position + 1>.json`
+ *   for each later one.
  */
-export function logEntryName(version: string): string {
-  return `delorun-${version}.manifest.entry.json`
+export function logEntryName(version: string, position = 0): string {
+  return `delorun-${version}.manifest.entry${position === 0 ? '' : `.${String(position + 1)}`}.json`
 }
 
 /**
@@ -66,12 +69,15 @@ export function packsName(version: string): string {
 }
 
 /**
- * The name of the file that carries the packs file's log entry request to the release workflow.
+ * The name of the file that carries the packs file's log entry request to the release workflow, one per log-entry key
+ * as {@link logEntryName} names the manifest's.
  * @param version - the release.
- * @returns `delorun-<version>.packs.entry.json`.
+ * @param position - the request's position in the order the logging step tries them, from 0.
+ * @returns `delorun-<version>.packs.entry.json` for the first, `delorun-<version>.packs.entry.<position + 1>.json` for
+ *   each later one.
  */
-export function packsEntryName(version: string): string {
-  return `delorun-${version}.packs.entry.json`
+export function packsEntryName(version: string, position = 0): string {
+  return `delorun-${version}.packs.entry${position === 0 ? '' : `.${String(position + 1)}`}.json`
 }
 
 /**
@@ -200,6 +206,8 @@ export function verifyBundle(root: RootMetadata, manifest: Uint8Array, version: 
   if (trusted === undefined || checkpoint.size !== bundle.inclusion.treeSize || checkpoint.rootHash.toString('hex') !== bundle.inclusion.rootHash) {
     throw new LogVerificationError('log-signature-invalid', 'the checkpoint does not name a log the root trusts, the proof\'s tree size and its root hash')
   }
+  const closed = logRefusesRelease(trusted, version)
+  if (closed !== undefined) throw new LogVerificationError('log-signature-invalid', closed)
   const log = parseVerifier(trusted.vkey)
   if (!note.signatures.some(line => verifySignature(log, note.body, line) === true)) throw new LogVerificationError('log-signature-invalid', 'the checkpoint has no valid signature from the log\'s key')
   const cosigned = new Map<string, number>()

@@ -1,8 +1,8 @@
 /**
  * The release log entry of contract C18: a Rekor v2 `hashedrekord` v0.0.2 whose signature is a log-entry key's
- * signature over the signed file's bytes, with the digest the entry key type carries and the public key in DER. Under a
- * root without `logEntryKeys` that key is the targets key, signing with Ed25519ph (RFC 8032, empty context) and a SHA-512
- * digest; a root's list may add ECDSA P-256 with SHA-256 ({@link module:@delorun/release-formats/log/entry-keys}). The
+ * signature over the signed file's bytes, with the digest the entry key type carries and the public key in DER: ECDSA
+ * P-256 with SHA-256, or Ed25519ph (RFC 8032, empty context) with SHA-512, by a key the trusted root lists in
+ * `logEntryKeys` ({@link module:@delorun/release-formats/log/entry-keys}); a root without the list trusts no entry. The
  * signing machine writes the request; Rekor v2 builds the entry body from it, and the log's leaf is the body's RFC 8785
  * serialization. Node's crypto has no Ed25519ph, so Ed25519ph signing and verifying use `@noble/curves`.
  *

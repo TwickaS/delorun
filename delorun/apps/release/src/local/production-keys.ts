@@ -1,11 +1,13 @@
 /**
  * The registry of Delorun's production trust material, `delorun/release/production-keys.json` (`delorun.production-keys/1`):
- * the SHA-256 of every production root file and the key id of every production root, targets and timestamp key. A
- * local release refuses any root, key or root role that the registry lists, so production keys never sign a release
+ * the SHA-256 of every production root file, the key id of every production root, targets and timestamp key, and the id
+ * of every production log-entry key (the SHA-256 of its DER public key, `entryKeyId` of `log/entry-keys`). A local
+ * release refuses any root, key, root role or listed log-entry key that the registry lists, so production keys never sign a release
  * that no second builder rebuilt. The owner fills the registry after the key ceremony; the package README states how.
  *
  * @module @delorun/release/local/production-keys
  */
+import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { KeyId, RootMetadata, Sha256Hex } from '@delorun/contract-release-manifest'
@@ -34,7 +36,7 @@ const RegistrySchema = z.strictObject({
 export interface ProductionKeys {
   /** The SHA-256 of each production root file's bytes. */
   readonly rootDigests: ReadonlySet<Sha256Hex>
-  /** The key id of each production root, targets and timestamp key, as root metadata lists it. */
+  /** The key id of each production root, targets and timestamp key, as root metadata lists it, and of each production log-entry key. */
   readonly keyids: ReadonlySet<KeyId>
 }
 
@@ -72,7 +74,8 @@ export function readProductionKeysFile(path: string): ProductionKeys {
 }
 
 /**
- * Every key id a root lists: in each role, whatever the role's name, then in its `keys`.
+ * Every key id a root lists: in each role, whatever the role's name, then in its `keys`, then each log-entry key's id
+ * (the SHA-256 of its DER public key) in its `logEntryKeys`.
  * @param root - the root metadata.
  * @returns the key ids, each with where the root lists it.
  */
@@ -83,5 +86,8 @@ export function rootKeyIds(root: RootMetadata): Array<{ readonly keyid: KeyId, r
     for (const keyid of ids) listed.push({ keyid, where: `roles.${role}` })
   }
   for (const keyid of Object.keys(root.keys)) listed.push({ keyid: brandString<KeyId>(keyid), where: 'keys' })
+  for (const [position, key] of (root.logEntryKeys ?? []).entries()) {
+    listed.push({ keyid: brandString<KeyId>(createHash('sha256').update(Buffer.from(key.public, 'base64')).digest('hex')), where: `logEntryKeys[${String(position)}]` })
+  }
   return listed
 }

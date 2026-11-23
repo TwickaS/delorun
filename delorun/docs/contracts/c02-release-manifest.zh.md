@@ -122,7 +122,7 @@ description: "约定 C2：Delorun 发布的文件、已签名的发布 manifest 
 | `roles.root`、`roles.timestamp`、`roles.catalogue` | `{ "keyids": [...], "threshold": n }` | 该角色的当前密钥。 |
 | `roles.targets` | `{ "keys": [{ "keyid", "status", "lastRelease"? }], "threshold": n }` | `status` 为 `active`、`retired` 或 `revoked`；`retired` 密钥携带 `lastRelease`，即它签名的最后一个 Delorun 版本。 |
 | `log` | `{ "origin", "vkey" }` | The release log's checkpoint origin line and verifier key ([C18](c18-release-log.zh.md)): the log new releases are logged in and the online check reads. |
-| `logs` | `[{ "origin", "vkey" }]` | Every log whose checkpoints verify a bundle, `log` among it with the same verifier key, each origin once; an earlier log, such as a previous shard, keeps the releases logged there verifying. A checkpoint of a listed log still needs the witnesses' cosignatures. |
+| `logs` | `[{ "origin", "vkey" }]` | Every log whose checkpoints verify a bundle, `log` among it with the same verifier key, each origin once; an earlier log, such as a previous shard, keeps the releases logged there verifying. A checkpoint of a listed log still needs the witnesses' cosignatures. Every listed log but the current one carries `lastRelease`, the last release a bundle in it may be for, so only the current log takes new releases. |
 | `logEntryKeys` | `[{ "keyDetails", "public", "status", "lastRelease"? }]` | The keys trusted to sign release log entries, in the order the signing tool tries them ([C18](c18-release-log.zh.md#log-entry)). `keyDetails` is the entry key type, upper-case letters, digits and `_` (`PKIX_ED25519_PH` and `PKIX_ECDSA_P256_SHA_256` are defined; a client ignores a type it does not implement); `public` is the base64 DER (PKIX SubjectPublicKeyInfo) public key, a key of the type's kind for a defined type; `status` is `active`, `retired` (with `lastRelease`, the last version whose entry it signed, compared with the version of the signed manifest) or `revoked`, which verifies no release whatever `lastRelease` says. Each key is listed once and at least one key of a defined type is `active`. A listed key is not in `keys` and signs no metadata; a targets key signs log entries only when it is listed here. |
 | `witnesses` | `{ "keys": [{ "name", "vkey" }], "threshold": n }` | 见证者的验证密钥，以及必须联署的见证者数量（[C18](c18-release-log.zh.md)）。 |
 
@@ -394,10 +394,12 @@ acceptances:
 | `sign-release-refuses-commit-off-release-branch` | release-chain | 签名拒绝不是发布分支祖先的发布提交，并在分支包含它之后签名。 |
 | `sign-release-refuses-install-script` | release-chain | 签名拒绝 `install.sh` 或 `install.ps1` 不是零长度占位文件的草稿。 |
 | `sign-release-refuses-unlisted-production-key` | release-chain | 签名拒绝发布分支的 `production-keys.json` 未列出的 targets 密钥，并在其不列出任何密钥时拒绝所有密钥。 |
+| `sign-release-refuses-unlisted-log-entry-key` | release-chain | Signing refuses a log-entry key, such as the ECDSA P-256 one, that the release branch's production-keys registry does not list, by the SHA-256 of its DER public key, before it writes anything. |
 | `sign-timestamp-refuses-unlisted-production-key` | release-chain | 时间戳命令拒绝发布分支的 `production-keys.json` 未列出的 timestamp 密钥，并在其不列出任何密钥时拒绝所有密钥。 |
 | `sign-release-reads-allowed-signers-from-the-release-branch` | release-chain | 只加入工作树 `allowed-signers`、未在发布分支上提交的签名者不能验证标签。 |
 | `sign-release-refuses-npm-integrity-mismatch` | release-chain | 签名拒绝其打包 tarball 的 integrity 与条目不同的 `npm` 条目。 |
 | `local-release-refuses-production-keys` | release-chain | 本地发布拒绝 `production-keys.json` 所列的根文件或根、targets、时间戳密钥 id，且不写入任何内容。 |
+| `local-release-refuses-production-log-entry-key` | release-chain | A local release refuses a `--log-entry-key` that the production-keys registry lists, and a root that lists such a key in `logEntryKeys`, before it builds or writes anything. |
 | `c02-start-anchors-on-newest-shipped-root` | release-chain | 由携带的最新根所撤销的 targets 密钥签名的运行时无法通过启动检查，即使已存储的根是列出该密钥的较旧根，且不会启动任何进程。 |
 | `c02-production-refuses-local-release` | release-chain | A channel that fetches from the production publication refuses a manifest whose builder is `local release (no independent rebuild)`, on install and on the update check, unless the release is a 0.x release verified under the pinned preview root; `1.0.0`, `1.0.0-rc.1` and every other root file refuse, and a bad signature or digest refuses whatever the builder. A channel of its own installs it. |
 | `c02-setup-installs-pinned-launcher` | release-chain | Setup 按启动器在 `DELORUN_LAUNCHER_VERSION` 中指定的版本安装 `delorun@<version>`，启动器未指定版本时不提供安装。 |
@@ -432,7 +434,13 @@ acceptances:
 | `c02-rotation-adds-log-entry-key` | `install` | A release logged with an ECDSA P-256 key, refused under a root without `logEntryKeys`, installs once the home adopts a root 2, signed by root 1's threshold and its own, that lists the key; the home then keeps root 2. |
 | `c02-log-entry-keys-unverified-root-refused` | `install`, `release` | A root 2 listing a log-entry key that root 1's keys did not sign is refused, and its list is never read. |
 | `c02-replayed-root-cannot-restore-type` | `install` | After a root 3 revokes a log-entry key, an entry by that key is refused, and a timestamp naming root 2, which listed it, is refused as older than the trusted root. |
-| `local-builder-pins-root-digest` | `install` | A locally built 0.x release from the production channel installs under the root 2 the launcher pins by digest, and is refused under the same root 2 when the pin names root 1. |
+| `local-builder-pins-root-chain` | `install` | A locally built 0.x release from the production channel installs under the pinned root 2 and under a root 3 that chains from it, and is refused under a root 2 that root 1 signs but that is not the pinned file. |
+| `local-builder-accepts-later-root` | `install` | The allowance holds under a root 3 chained from the pinned root 2 that keeps its active targets key, also once the home stored that root. |
+| `local-builder-refuses-other-root-2` | `install` | A root 2 that chains from root 1 with another digest, or a chain that never reaches the pinned file, gives no allowance. |
+| `local-builder-refuses-unchained-root-3` | `install` | A root 3 that root 2's root keys did not sign forms no chain, so nothing verifies under it. |
+| `local-builder-ends-with-new-targets-key` | `install` | A root that names another active targets key, as the 1.0 ceremony's does, ends the allowance. |
+| `local-builder-refuses-1x` | `install` | A 1.x release, or a version that is not a normalised semantic version, gets no allowance under the pinned chain. |
+| `c02-earlier-log-needs-last-release` | `release` | A root schema refuses an earlier listed log without `lastRelease`, and the current log with one. |
 | `c02-summary-lone-surrogate-refused` | update-notice | 含有孤立的高位或低位 UTF-16 代理的摘要会被 manifest 读取方与签名拒绝；代理对可以读取。 |
 
 <a id="what-this-does-not-prove"></a>

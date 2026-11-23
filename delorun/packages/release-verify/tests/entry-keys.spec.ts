@@ -9,6 +9,7 @@ import { createHash, createPublicKey, generateKeyPairSync, sign, type KeyObject 
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { describe, expect, it } from 'vitest'
 import type { LogEntryKey, RootMetadata, SemanticVersion } from '@delorun/contract-release-manifest'
+import { verifyBundle as verifyBundleAtSigner } from '@delorun/release-formats/log/bundle'
 import { verifyBundle } from '../src/bundle.ts'
 import { ReleaseLogRefusalError, type ReleaseLogRefusal } from '../src/errors.ts'
 import { checkOnline } from '../src/online.ts'
@@ -47,6 +48,10 @@ interface EcdsaEntry {
   readonly algorithm?: string
   /** The key details; ECDSA P-256 by default. */
   readonly keyDetails?: string
+  /** The signature; the signer's DER ECDSA signature over the manifest bytes by default. */
+  readonly signature?: Uint8Array
+  /** The entry's DER public key, when it is not the signer's or verifier's SPKI as Node exports it. */
+  readonly publicKey?: Uint8Array
 }
 
 /**
@@ -63,7 +68,8 @@ function ecdsaBundle(fixture: Scenario, entry: EcdsaEntry): ReturnType<FixtureLo
     algorithm: entry.algorithm ?? 'SHA2_256',
     digest: createHash(entry.algorithm === 'SHA2_512' ? 'sha512' : 'sha256').update(MANIFEST).digest('base64'),
     keyDetails: entry.keyDetails ?? 'PKIX_ECDSA_P256_SHA_256',
-    signature: sign('sha256', MANIFEST, { key: entry.signer, dsaEncoding: 'der' }),
+    signature: entry.signature ?? sign('sha256', MANIFEST, { key: entry.signer, dsaEncoding: 'der' }),
+    ...entry.publicKey === undefined ? {} : { publicKey: entry.publicKey },
   }))
   return fixture.log.bundle(index, NAME, SHA256, fixture.witness.cosign(fixture.log.checkpoint(), COSIGNED_AT))
 }
@@ -128,6 +134,18 @@ describe('a root with logEntryKeys', () => {
     const ecdsa = ecdsaKey()
     const root = { ...fixture.root, logEntryKeys: [listed('PKIX_ED25519_PH', fixture.keys.targets), listed('PKIX_FUTURE_TYPE', ecdsa)] }
     expect(refusal(root, ecdsaBundle(fixture, { signer: ecdsa, keyDetails: 'PKIX_FUTURE_TYPE' }))).toBe('entry-type-refused')
+  })
+
+  it('c18-ecdsa-strict-encodings: refuses a raw r || s signature, a signature over SHA-256(manifest) and the compressed-point SPKI of the listed key', () => {
+    const fixture = scenario()
+    const ecdsa = ecdsaKey()
+    const root = { ...fixture.root, logEntryKeys: [listed('PKIX_ECDSA_P256_SHA_256', ecdsa), listed('PKIX_ED25519_PH', fixture.keys.targets)] }
+    expect(refusal(root, ecdsaBundle(fixture, { signer: ecdsa }))).toBeUndefined()
+    expect(refusal(root, ecdsaBundle(fixture, { signer: ecdsa, signature: sign('sha256', MANIFEST, { key: ecdsa, dsaEncoding: 'ieee-p1363' }) }))).toBe('entry-signature-invalid')
+    expect(refusal(root, ecdsaBundle(fixture, { signer: ecdsa, signature: sign('sha256', createHash('sha256').update(MANIFEST).digest(), { key: ecdsa, dsaEncoding: 'der' }) }))).toBe('entry-signature-invalid')
+    const jwk = createPublicKey(ecdsa).export({ format: 'jwk' })
+    const compressed = Buffer.concat([Buffer.from('3039301306072a8648ce3d020106082a8648ce3d030107032200', 'hex'), Buffer.from([0x02 | (Buffer.from(jwk.y!, 'base64url')[31]! & 1)]), Buffer.from(jwk.x!, 'base64url')])
+    expect(refusal(root, ecdsaBundle(fixture, { signer: ecdsa, publicKey: compressed }))).toBe('entry-key-untrusted')
   })
 
   it('c18-listed-type-other-key-refused: refuses an entry of a listed type by a key the root does not list', () => {
@@ -205,16 +223,27 @@ describe('the logs a root lists', () => {
 
   it('verifies a bundle of an earlier log the root lists, with that log\'s key and not another\'s', () => {
     const { fixture, earlier, bundle } = earlierShard()
-    const root = { ...fixture.root, logs: [fixture.root.log, { origin: earlier.origin, vkey: earlier.vkey }] }
+    const root = { ...fixture.root, logs: [fixture.root.log, { origin: earlier.origin, vkey: earlier.vkey, lastRelease: brandString<SemanticVersion>(VERSION) }] }
     expect(refusal(root, bundle)).toBeUndefined()
     expect(refusal(root, fixture.bundle)).toBeUndefined()
-    const wrongKey = { ...fixture.root, logs: [fixture.root.log, { origin: earlier.origin, vkey: fixture.log.vkey }] }
+    const wrongKey = { ...fixture.root, logs: [fixture.root.log, { origin: earlier.origin, vkey: fixture.log.vkey, lastRelease: brandString<SemanticVersion>(VERSION) }] }
     expect(refusal(wrongKey, bundle)).not.toBeUndefined()
+  })
+
+  it('c18-earlier-log-closed-after-last-release: refuses a release newer than an earlier log\'s lastRelease in that log, in both verifiers', () => {
+    const { fixture, earlier } = earlierShard()
+    const root = { ...fixture.root, logs: [fixture.root.log, { origin: earlier.origin, vkey: earlier.vkey, lastRelease: brandString<SemanticVersion>('0.0.9') }] }
+    const index = earlier.submit(MANIFEST, fixture.keys.targets)
+    const bundle = earlier.bundle(index, NAME, SHA256, fixture.witness.cosign(earlier.checkpoint(), COSIGNED_AT))
+    expect(refusal(root, bundle)).toBe('log-origin-untrusted')
+    expect(() => verifyBundleAtSigner(root, MANIFEST, VERSION, bundle)).toThrow('lists only for releases up to 0.0.9')
+    // The current log carries no lastRelease and takes the release.
+    expect(refusal(root, fixture.bundle)).toBeUndefined()
   })
 
   it('c18-listed-log-needs-witness: refuses a checkpoint of a listed log that no listed witness cosigned', () => {
     const { fixture, earlier } = earlierShard()
-    const root = { ...fixture.root, logs: [fixture.root.log, { origin: earlier.origin, vkey: earlier.vkey }] }
+    const root = { ...fixture.root, logs: [fixture.root.log, { origin: earlier.origin, vkey: earlier.vkey, lastRelease: brandString<SemanticVersion>(VERSION) }] }
     const index = earlier.submit(MANIFEST, fixture.keys.targets)
     expect(refusal(root, earlier.bundle(index, NAME, SHA256, earlier.checkpoint()))).toBe('witness-cosignature-missing')
     const stranger = new FixtureWitness(fixture.witness.name)
@@ -223,7 +252,7 @@ describe('the logs a root lists', () => {
 
   it('leaves a release of an earlier log unchecked online, without asking the current log for a proof', async () => {
     const { fixture, earlier, bundle } = earlierShard()
-    const root = { ...fixture.root, logs: [fixture.root.log, { origin: earlier.origin, vkey: earlier.vkey }] }
+    const root = { ...fixture.root, logs: [fixture.root.log, { origin: earlier.origin, vkey: earlier.vkey, lastRelease: brandString<SemanticVersion>(VERSION) }] }
     const verified = verifyBundle(root, VERSION, MANIFEST, bundle)
     const transport = new FixtureTransport()
     transport.note = fixture.witness.cosign(fixture.log.checkpoint(), COSIGNED_AT)

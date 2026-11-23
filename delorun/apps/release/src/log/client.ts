@@ -173,24 +173,60 @@ export async function logRelease(endpoints: LogEndpoints, root: RootMetadata, ma
   throw new Error(`no checkpoint cosigned by a listed witness covered log index ${String(logged.logIndex)} after ${String(attempts)} attempts; the release is not published`)
 }
 
-/** A release file logged by {@link logWithFallback}. */
+/** A release file logged by {@link logFirstAccepted} or {@link logWithFallback}. */
 export interface LoggedFile {
   /** The verified bundle. */
   readonly bundle: ReleaseLogBundle
   /** The request the log accepted. */
   readonly entry: HashedRekordRequest
-  /** The position in the signers of the one whose entry the log accepted. */
+  /** The position in the requests, or the signers, of the one the log accepted. */
   readonly signer: number
 }
 
 /**
- * Log a signed release file with the first of the signers whose entry key type the log accepts.
+ * Log a signed release file with the first of its signed entry requests whose key type the log accepts.
  *
- * Each signer's request is verified first as a client would verify its entry under the root ({@link verifyEntryBody}),
- * so a request of ours that is wrong never reaches the log. The next signer is tried only when the log refuses the entry
- * with one of {@link ENTRY_TYPE_REFUSALS} ({@link isEntryTypeRefusal}); any other status, an unreachable log, a timeout,
- * a checkpoint that never covers the entry and a bundle that does not verify end the attempt. The log accepting an
- * entry proves nothing by itself: {@link logRelease} returns only a bundle that verified under the root.
+ * Each request is verified first as a client would verify its entry under the root ({@link verifyEntryBody}), so a
+ * request that is wrong never reaches the log. The next request is tried only when the log refuses the entry with one
+ * of {@link ENTRY_TYPE_REFUSALS} ({@link isEntryTypeRefusal}); any other status, an unreachable log, a timeout, a
+ * checkpoint that never covers the entry and a bundle that does not verify end the attempt. The log accepting an entry
+ * proves nothing by itself: {@link logRelease} returns only a bundle that verified under the root.
+ * @param endpoints - the log's and the distributor's URLs.
+ * @param root - the trusted root the release verifies under.
+ * @param name - the signed file's name.
+ * @param bytes - the signed file's bytes.
+ * @param version - the release version, read from the signed file.
+ * @param entries - the signed entry requests, in the order to try them.
+ * @param attempts - how many times to ask for a witnessed checkpoint that covers the entry.
+ * @param wait - waits between attempts.
+ * @param document - which signed release file is logged.
+ * @param warn - reports each refused key type.
+ * @returns the bundle, the accepted request and its position.
+ * @throws Error when no request is given, a request does not verify locally, the last request's type is refused, or
+ *   any other failure of {@link logRelease}.
+ */
+export async function logFirstAccepted(endpoints: LogEndpoints, root: RootMetadata, name: string, bytes: Uint8Array, version: string, entries: readonly HashedRekordRequest[], attempts: number, wait: () => Promise<void>, document: 'manifest' | 'packs', warn: (line: string) => void): Promise<LoggedFile> {
+  if (entries.length === 0) throw new Error(`no key this machine holds may sign the log entry of ${name} under root ${String(root.version)}`)
+  const typeOf = (entry: HashedRekordRequest): string => entry.hashedRekordRequestV002.signature.verifier.keyDetails
+  for (const [position, entry] of entries.entries()) {
+    try {
+      verifyEntryBody(root, bytes, version, entryBody(entry))
+    } catch (error) {
+      throw new Error(`the ${typeOf(entry)} log entry of ${name} does not verify under root ${String(root.version)}, so it was not submitted: ${(error as Error).message}`, { cause: error })
+    }
+    try {
+      return { bundle: await logRelease(endpoints, root, name, bytes, version, entry, attempts, wait, document), entry, signer: position }
+    } catch (error) {
+      if (!isEntryTypeRefusal(error) || position === entries.length - 1) throw error
+      warn(`the log refused the ${typeOf(entry)} entry of ${name} (${(error as Error).message}); trying ${typeOf(entries[position + 1]!)}`)
+    }
+  }
+  // The loop returns or throws at its last request.
+  throw new Error(`no entry request logged ${name}`)
+}
+
+/**
+ * Sign a release file's entry request with each signer, in order, and log it as {@link logFirstAccepted} does.
  * @param endpoints - the log's and the distributor's URLs.
  * @param root - the trusted root the release verifies under.
  * @param name - the signed file's name.
@@ -202,25 +238,8 @@ export interface LoggedFile {
  * @param document - which signed release file is logged.
  * @param warn - reports each refused key type.
  * @returns the bundle, the accepted request and its signer's position.
- * @throws Error when no signer is given, a request does not verify locally, the last signer's type is refused, or any
- *   other failure of {@link logRelease}.
+ * @throws Error as {@link logFirstAccepted} throws.
  */
 export async function logWithFallback(endpoints: LogEndpoints, root: RootMetadata, name: string, bytes: Uint8Array, version: string, signers: readonly LogEntrySigner[], attempts: number, wait: () => Promise<void>, document: 'manifest' | 'packs', warn: (line: string) => void): Promise<LoggedFile> {
-  if (signers.length === 0) throw new Error(`no key this machine holds may sign the log entry of ${name} under root ${String(root.version)}`)
-  for (const [position, signer] of signers.entries()) {
-    const entry = entryRequest(bytes, signer.key, signer.keyDetails)
-    try {
-      verifyEntryBody(root, bytes, version, entryBody(entry))
-    } catch (error) {
-      throw new Error(`the ${signer.keyDetails} log entry of ${name} does not verify under root ${String(root.version)}, so it was not submitted: ${(error as Error).message}`, { cause: error })
-    }
-    try {
-      return { bundle: await logRelease(endpoints, root, name, bytes, version, entry, attempts, wait, document), entry, signer: position }
-    } catch (error) {
-      if (!isEntryTypeRefusal(error) || position === signers.length - 1) throw error
-      warn(`the log refused the ${signer.keyDetails} entry of ${name} (${(error as Error).message}); trying ${signers[position + 1]!.keyDetails}`)
-    }
-  }
-  // The loop returns or throws at its last signer.
-  throw new Error(`no signer logged ${name}`)
+  return logFirstAccepted(endpoints, root, name, bytes, version, signers.map(signer => entryRequest(bytes, signer.key, signer.keyDetails)), attempts, wait, document, warn)
 }

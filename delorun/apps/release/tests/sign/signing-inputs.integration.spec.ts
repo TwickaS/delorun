@@ -4,19 +4,22 @@
  * placeholders, and each npm package's packed tarball against the draft's integrity, name and version. Every key is a
  * throwaway key generated in the test, and every repository a temporary one.
  */
-import { createHash } from 'node:crypto'
+import { createHash, generateKeyPairSync, type KeyObject } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { gzipSync } from 'node:zlib'
 import { describe, expect, it } from 'vitest'
 import { tarStream } from '@delorun/release-formats/archive/tar'
+import { logEntryName, verifyEntryBody } from '@delorun/release-formats/log/bundle'
+import { entryBody, readEntryRequest } from '@delorun/release-formats/log/entry'
+import { entryKeyId } from '@delorun/release-formats/log/entry-keys'
 import { publicKeyEntry } from '@delorun/release-formats/sign/envelope'
 import { INSTALL_SCRIPT_REFUSAL } from '../../src/sign/release.ts'
 import { npmIntegrity, npmTarballName, packedManifest } from '../../src/sign/npm-package.ts'
 import { ALLOWED_SIGNERS_PATH, signerLines } from '../../src/sign/source.ts'
 import { REPO, scratch } from '../support.ts'
-import { packedPackage, releaseFixture, RELEASE_BRANCH, tagSigner, VERSION, type ReleaseFixture } from './fixture.ts'
+import { listedEntryKey, packedPackage, releaseFixture, RELEASE_BRANCH, rootFile, tagSigner, VERSION, type ReleaseFixture } from './fixture.ts'
 
 const MANIFEST = `delorun-${VERSION}.manifest.json`
 const TAG = `v${VERSION}`
@@ -135,6 +138,54 @@ describe('signing checks the targets key against the production-keys registry', 
     refusedWithoutWriting(fixture, before, await fixture.sign(), `signing refuses: delorun/release/production-keys.json on the release branch ${RELEASE_BRANCH} lists no production key`)
     fixture.commitReleaseFile('production-keys.json', `${JSON.stringify({ schema: 'delorun.production-keys/1', roots: [], keyids: ['0'.repeat(64)] })}\n`)
     refusedWithoutWriting(fixture, before, await fixture.sign(), `signing refuses: the targets key ${keyid} is not a production key`)
+  })
+})
+
+describe('signing writes a log entry request per listed log-entry key', FIXTURE_TIMEOUT, () => {
+  const ECDSA = 'PKIX_ECDSA_P256_SHA_256'
+
+  /**
+   * A root that lists an ECDSA P-256 key first and the targets key as Ed25519ph second, and a registry listing both.
+   * @param fixture - the release fixture.
+   * @param registered - whether the registry lists the ECDSA key.
+   * @returns the ECDSA key and the root file.
+   */
+  function rotated(fixture: ReleaseFixture, registered: boolean): { ecdsa: KeyObject, root: ReturnType<typeof rootFile> } {
+    const ecdsa = generateKeyPairSync('ec', { namedCurve: 'prime256v1' }).privateKey
+    const root = rootFile(fixture.keys, { logEntryKeys: [listedEntryKey(ECDSA, ecdsa), listedEntryKey('PKIX_ED25519_PH', fixture.keys.targets)] })
+    const keyids = [publicKeyEntry(fixture.keys.targets).keyid, ...registered ? [entryKeyId(ecdsa)] : []]
+    fixture.commitReleaseFile('production-keys.json', `${JSON.stringify({ schema: 'delorun.production-keys/1', roots: [], keyids })}\n`)
+    return { ecdsa, root }
+  }
+
+  it('sign-release-entry-per-listed-key: writes the ECDSA request first and the Ed25519ph one second, in the root\'s order, each verifying under the root', async (test) => {
+    const fixture = await releaseFixture(test)
+    expect(fixture.record().status).toBe(0)
+    const { ecdsa, root } = rotated(fixture, true)
+    expect((await fixture.sign(undefined, { roots: [root.bytes], logEntryKeys: [{ keyDetails: ECDSA, key: ecdsa }] })).status).toBe(0)
+    const manifest = readFileSync(join(fixture.release, MANIFEST))
+    const requests = [logEntryName(VERSION), logEntryName(VERSION, 1)].map(name => readEntryRequest(readFileSync(join(fixture.release, name))))
+    expect(requests.map(request => request.hashedRekordRequestV002.signature.verifier.keyDetails)).toEqual([ECDSA, 'PKIX_ED25519_PH'])
+    for (const request of requests) verifyEntryBody(root.metadata, manifest, VERSION, entryBody(request))
+    expect(existsSync(join(fixture.release, logEntryName(VERSION, 2)))).toBe(false)
+  })
+
+  it('sign-release-refuses-unlisted-log-entry-key: refuses an ECDSA log-entry key the production-keys registry does not list, before writing anything', async (test) => {
+    const fixture = await releaseFixture(test)
+    expect(fixture.record().status).toBe(0)
+    const before = readdirSync(fixture.release).sort()
+    const { ecdsa, root } = rotated(fixture, false)
+    refusedWithoutWriting(fixture, before, await fixture.sign(undefined, { roots: [root.bytes], logEntryKeys: [{ keyDetails: ECDSA, key: ecdsa }] }), `signing refuses: the ${ECDSA} log-entry key ${entryKeyId(ecdsa)} is not a production key`)
+  })
+
+  it('refuses a root that lists none of the keys it holds, and roots that do not verify', async (test) => {
+    const fixture = await releaseFixture(test)
+    expect(fixture.record().status).toBe(0)
+    const before = readdirSync(fixture.release).sort()
+    const ecdsa = generateKeyPairSync('ec', { namedCurve: 'prime256v1' }).privateKey
+    const onlyEcdsa = rootFile(fixture.keys, { logEntryKeys: [listedEntryKey(ECDSA, ecdsa)] })
+    refusedWithoutWriting(fixture, before, await fixture.sign(undefined, { roots: [onlyEcdsa.bytes] }), 'signing refuses: root 1 lists neither a --log-entry-key nor the targets key as an active log-entry key')
+    refusedWithoutWriting(fixture, before, await fixture.sign(undefined, { roots: [rootFile(fixture.keys, {}, [generateKeyPairSync('ed25519').privateKey]).bytes] }), 'signing refuses: the --root files do not verify')
   })
 })
 

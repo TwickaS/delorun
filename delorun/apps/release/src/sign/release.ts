@@ -24,8 +24,10 @@ import {
   RUNTIME_PLATFORMS,
   isValidNotes,
   type FileRef,
+  type KeyId,
   type ReleaseManifest,
   type RebuildRecord,
+  type RootMetadata,
   type RuntimeArtifacts,
   type RuntimePlatform,
   type SignedEnvelope,
@@ -42,10 +44,12 @@ import { sbomName } from '../sbom/release-sbom.ts'
 import { attestationProblem } from '../rebuild/attestation.ts'
 import { logEntryName } from '@delorun/release-formats/log/bundle'
 import { entryRequest } from '@delorun/release-formats/log/entry'
+import { entryKeyId, entrySigners, type LogEntrySigner } from '@delorun/release-formats/log/entry-keys'
 import { compareOutputs, type Comparison } from '../rebuild/compare.ts'
 import { ciMarkers, commitOf, isWithin, outputRefs, packOutputs, rebuildRecordName, recipeAt, recipeDigest, recordToolchain, REQUIRED_SOURCE, requiredOutputs, type CommittedRecipe } from '../rebuild/record.ts'
 import { publicKeyEntry, signEnvelope } from '@delorun/release-formats/sign/envelope'
 import { canonicalJson, parseStrictJson, toJsonValue, type JsonValue } from '@delorun/release-formats/sign/json'
+import { trustRootChain } from '@delorun/release-formats/sign/verify'
 import { DesktopSchema, ImagesSchema, InstallSchema, ManifestSchema, readEnvelope, readRebuildRecord, ReleaseSummarySchema, StrictRuntimeSchema } from '@delorun/release-formats/sign/schemas'
 import { patchRuleProblem } from './patch-rule.ts'
 import { npmPackageProblem } from './npm-package.ts'
@@ -86,6 +90,14 @@ export interface SigningRequest {
   readonly attestationKey: Buffer
   /** The targets private key. */
   readonly key: KeyObject
+  /** The trusted root files, oldest first; the newest's `logEntryKeys` name the log-entry keys and their order. */
+  readonly roots: readonly Uint8Array[]
+  /**
+   * Log-entry private keys besides the targets key, each with its entry key type, such as the ECDSA P-256 key the newest
+   * root lists first. Signing writes one entry request per `active` listed key it holds, the targets key included, in
+   * the root's order.
+   */
+  readonly logEntryKeys: readonly LogEntrySigner[]
   /** The process environment, checked for CI markers. */
   readonly env: NodeJS.ProcessEnv
   /** The signing time. */
@@ -102,7 +114,7 @@ export interface SigningRequest {
   readonly releaseBranch: string
 }
 
-/** What signing wrote: besides the signed files, the release-log entry body of the manifest, which the release workflow submits. */
+/** What signing wrote: besides the signed files, the manifest's release-log entry requests, one per log-entry key in the order the release workflow submits them. */
 export interface SignedRelease {
   /** The signed manifest. */
   readonly manifest: ReleaseManifest
@@ -110,6 +122,28 @@ export interface SignedRelease {
   readonly manifestName: string
   /** The rebuild comparison signing ran. */
   readonly comparison: Comparison
+}
+
+/**
+ * The keys that sign the release's log entry requests: the newest trusted root's `active` log-entry keys that the
+ * request holds, the targets key included, in the root's order.
+ * @param request - the roots and keys.
+ * @returns the signers.
+ * @throws SigningRefusal when the roots do not verify, or the newest root lists no such key.
+ */
+function entrySignersFor(request: SigningRequest): readonly LogEntrySigner[] {
+  let root: RootMetadata
+  try {
+    root = trustRootChain(request.roots, Math.floor(request.now.getTime() / 1000)).at(-1)!.metadata
+  } catch (error) {
+    throw new SigningRefusal(`signing refuses: the --root files do not verify: ${(error as Error).message}`, { cause: error })
+  }
+  const signers = entrySigners(root, [...request.logEntryKeys, { keyDetails: 'PKIX_ED25519_PH', key: request.key }])
+  if (signers.length === 0) {
+    const what = root.logEntryKeys === undefined ? 'lists no logEntryKeys' : 'lists neither a --log-entry-key nor the targets key as an active log-entry key'
+    throw new SigningRefusal(`signing refuses: root ${String(root.version)} ${what}, so no log entry of this release could verify`)
+  }
+  return signers
 }
 
 function refuse(reason: string): never {
@@ -315,6 +349,11 @@ export async function signRelease(request: SigningRequest): Promise<SignedReleas
   if (offBranch !== undefined) throw new SigningRefusal(`signing refuses: ${offBranch}`)
   const unlisted = await productionKeyProblem(request.repository, request.releaseBranch, publicKeyEntry(request.key).keyid, 'targets')
   if (unlisted !== undefined) throw new SigningRefusal(`signing refuses: ${unlisted}`)
+  for (const signer of request.logEntryKeys) {
+    const unlistedEntryKey = await productionKeyProblem(request.repository, request.releaseBranch, brandString<KeyId>(entryKeyId(signer.key)), `${signer.keyDetails} log-entry`)
+    if (unlistedEntryKey !== undefined) throw new SigningRefusal(`signing refuses: ${unlistedEntryKey}`)
+  }
+  const signers = entrySignersFor(request)
   const unsigned = await tagSignatureProblem(request.repository, draft.source.tag, request.releaseBranch)
   if (unsigned !== undefined) throw new SigningRefusal(`signing refuses: ${unsigned}`)
   const { record, recordBytes, comparison } = await checkRebuild(request, draft, tagged)
@@ -387,11 +426,11 @@ export async function signRelease(request: SigningRequest): Promise<SignedReleas
   if (existsSync(manifestPath)) throw new SigningRefusal(`signing refuses: ${manifestName} already exists`)
   const envelope = signEnvelope({ signed: toJsonValue(manifest), signatures: [] }, [request.key])
   const manifestBytes = Buffer.from(`${JSON.stringify(envelope, undefined, 2)}\n`)
-  const entryBytes = Buffer.from(`${JSON.stringify(entryRequest(manifestBytes, request.key), undefined, 2)}\n`)
-  const packFiles = await signPacks(request.release, draft.version, manifestBytes, request.key).catch((error: unknown) => {
+  const entries = signers.map((signer, position) => [logEntryName(draft.version, position), Buffer.from(`${JSON.stringify(entryRequest(manifestBytes, signer.key, signer.keyDetails), undefined, 2)}\n`)] as const)
+  const packFiles = await signPacks(request.release, draft.version, manifestBytes, request.key, signers).catch((error: unknown) => {
     throw new SigningRefusal(`signing refuses: the packs file: ${(error as Error).message}`, { cause: error })
   })
-  const outputs: Array<readonly [string, string | Buffer]> = [...signedLists, [recordName, recordBytes], [logEntryName(draft.version), entryBytes], ...packFiles, [manifestName, manifestBytes]]
+  const outputs: Array<readonly [string, string | Buffer]> = [...signedLists, [recordName, recordBytes], ...entries, ...packFiles, [manifestName, manifestBytes]]
   await writeAll(request.release, outputs)
   return { manifest, manifestName, comparison }
 }

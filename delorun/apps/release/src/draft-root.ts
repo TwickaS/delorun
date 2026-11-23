@@ -4,7 +4,7 @@
  *
  * `node_modules/.bin/tsx delorun/apps/release/src/draft-root.ts --version <n> --root-key <root.pub.pem>...
  * --targets-key <targets.pub.pem> --timestamp-key <timestamp.pub.pem> --catalogue-key <catalogue.pub.pem>
- * --log-origin <origin> --log-vkey <vkey> [--earlier-log <vkey>]... --log-entry-key <type>=<public.pem>...
+ * --log-origin <origin> --log-vkey <vkey> [--earlier-log <last release>=<vkey>]... --log-entry-key <type>=<public.pem>...
  * --witness <vkey>... [--witness-threshold <n>] [--root-threshold <n>] [--issued <YYYY-MM-DDTHH:MM:SSZ>] [--days <n>]
  * --out <draft.json>`
  *
@@ -19,7 +19,8 @@
  * `PKIX_ECDSA_P256_SHA_256`), as an `active` entry of `logEntryKeys` in the order given, which is the order the signing
  * tool tries them in; at least one is required, because a root without the list verifies no release. `logs` lists the
  * current log first, then each `--earlier-log`: a log whose checkpoints still verify the bundles of releases logged
- * there, such as a previous Rekor shard, under the name its key carries.
+ * there, such as a previous Rekor shard, under the name its key carries, with the last release it may hold as its
+ * `lastRelease`, so only the current log takes new releases.
  * A rotation's draft repeats every key of the root before it that it keeps.
  *
  * @module @delorun/release/draft-root
@@ -29,13 +30,14 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
-import { RELEASE_SCHEMAS, ROOT_MAX_LIFETIME_DAYS, type LogEntryKey, type RootMetadata, type UtcTimestamp } from '@delorun/contract-release-manifest'
+import { RELEASE_SCHEMAS, ROOT_MAX_LIFETIME_DAYS, type ListedLog, type LogEntryKey, type RootMetadata, type SemanticVersion, type UtcTimestamp } from '@delorun/contract-release-manifest'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { entryPublicKey, isLogEntryKeyDetails } from '@delorun/release-formats/log/entry-keys'
 import { parseVerifier } from '@delorun/release-formats/log/note'
 import { publicKeyEntry } from '@delorun/release-formats/sign/envelope'
 import { toJsonValue } from '@delorun/release-formats/sign/json'
 import { RootSchema } from '@delorun/release-formats/sign/schemas'
+import semver from 'semver'
 
 /** The command's options. */
 const OPTIONS = {
@@ -68,6 +70,20 @@ function publicKeyFile(path: string): ReturnType<typeof publicKeyEntry> {
   const text = readFileSync(resolve(path), 'utf8')
   if (text.includes('PRIVATE KEY')) throw new Error(`${path} holds a private key; pass the public key (openssl pkey -in <key> -pubout)`)
   return publicKeyEntry(createPublicKey(text))
+}
+
+/**
+ * Read an `--earlier-log` value: the last release the log may hold and its verifier key.
+ * @param value - `<last release>=<vkey>`.
+ * @returns the listed log.
+ * @throws Error when the value has no `=` or its last release is not a semantic version written as `semver` writes it.
+ */
+function earlierLog(value: string): ListedLog {
+  const split = value.indexOf('=')
+  const lastRelease = split < 0 ? '' : value.slice(0, split)
+  if (semver.valid(lastRelease) !== lastRelease) throw new Error(`--earlier-log ${JSON.stringify(value)} is not <last release>=<vkey> with a semantic version as the last release`)
+  const vkey = value.slice(split + 1)
+  return { origin: parseVerifier(vkey).name, vkey, lastRelease: brandString<SemanticVersion>(lastRelease) }
 }
 
 /**
@@ -133,7 +149,7 @@ export function draftRoot(argv: readonly string[], now: number): RootMetadata {
       catalogue: { keyids: [catalogue!.keyid], threshold: 1 },
     },
     log: { origin: logOrigin, vkey: values['log-vkey']! },
-    logs: [{ origin: logOrigin, vkey: values['log-vkey']! }, ...(values['earlier-log'] ?? []).map(vkey => ({ origin: parseVerifier(vkey).name, vkey }))],
+    logs: [{ origin: logOrigin, vkey: values['log-vkey']! }, ...(values['earlier-log'] ?? []).map(earlierLog)],
     logEntryKeys: values['log-entry-key'].map(logEntryKeyFile),
     witnesses: { keys: values.witness!.map(vkey => ({ name: parseVerifier(vkey).name, vkey })), threshold: positiveInteger('witness-threshold', values['witness-threshold']) },
   }

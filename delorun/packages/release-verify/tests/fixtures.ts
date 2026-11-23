@@ -246,6 +246,8 @@ export interface EntryBodyOptions {
   readonly keyDetails?: string
   /** The signature's bytes; the signer's Ed25519ph signature over the manifest by default. */
   readonly signature?: Uint8Array
+  /** The verifier's DER public key bytes as the entry carries them; the verifier's SPKI as Node exports it by default. */
+  readonly publicKey?: Uint8Array
 }
 
 /**
@@ -255,7 +257,7 @@ export interface EntryBodyOptions {
  */
 export function entryBody(options: EntryBodyOptions): Buffer {
   const signer = options.verifier ?? options.signer
-  const der = createPublicKey(signer).export({ format: 'der', type: 'spki' }).toString('base64')
+  const der = Buffer.from(options.publicKey ?? createPublicKey(signer).export({ format: 'der', type: 'spki' })).toString('base64')
   return Buffer.from(JSON.stringify({
     apiVersion: options.apiVersion ?? RELEASE_LOG_ENTRY_API_VERSION,
     kind: options.kind ?? RELEASE_LOG_ENTRY_TYPE,

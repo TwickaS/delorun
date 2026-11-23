@@ -67,7 +67,7 @@ export const RootSchema = z.strictObject({
     catalogue: roleKeys,
   }),
   log: logIdentity,
-  logs: z.array(logIdentity).min(1).optional(),
+  logs: z.array(logIdentity.extend({ lastRelease: version.optional() })).min(1).optional(),
   logEntryKeys: z.array(z.strictObject({
     keyDetails: z.string().regex(/^[A-Z][A-Z0-9_]{0,63}$/u),
     public: canonicalBase64,
@@ -96,6 +96,10 @@ export const RootSchema = z.strictObject({
     if (!root.logs.some(log => log.origin === root.log.origin && log.vkey === root.log.vkey)) context.addIssue({ code: 'custom', path: ['logs'], message: 'logs does not list the root\'s log with its verifier key' })
     const origins = new Set(root.logs.map(log => log.origin))
     if (origins.size !== root.logs.length) context.addIssue({ code: 'custom', path: ['logs'], message: 'logs lists one origin more than once' })
+    for (const [position, log] of root.logs.entries()) {
+      const current = log.origin === root.log.origin
+      if (current === (log.lastRelease !== undefined)) context.addIssue({ code: 'custom', path: ['logs', position], message: 'every listed log but the root\'s current log carries lastRelease, and the current log carries none' })
+    }
   }
   if (root.logEntryKeys !== undefined) {
     const seen = new Set<string>()

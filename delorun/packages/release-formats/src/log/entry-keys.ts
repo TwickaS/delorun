@@ -16,7 +16,7 @@
  */
 import { createHash, createPublicKey, sign, verify, type KeyObject } from 'node:crypto'
 import { LOG_ENTRY_KEY_TYPES, type LogEntryDigestAlgorithm, type LogEntryKeyDetails } from '@delorun/contract-release-log'
-import type { LogEntryKey, LogIdentity, RootMetadata } from '@delorun/contract-release-manifest'
+import type { ListedLog, LogEntryKey, RootMetadata } from '@delorun/contract-release-manifest'
 import { ed25519ph } from '@noble/curves/ed25519.js'
 import semver from 'semver'
 
@@ -48,14 +48,29 @@ export function entryDigest(keyDetails: LogEntryKeyDetails, message: Uint8Array)
   return createHash(entryDigestAlgorithm(keyDetails) === 'SHA2_512' ? 'sha512' : 'sha256').update(message).digest('base64')
 }
 
+/** The DER SubjectPublicKeyInfo header of an Ed25519 key, before its 32 raw bytes. */
+const ED25519_SPKI_HEADER = Buffer.from('302a300506032b6570032100', 'hex')
+
+/** The DER SubjectPublicKeyInfo header of a P-256 key with an uncompressed point, through the point's `04` byte. */
+const P256_UNCOMPRESSED_SPKI_HEADER = Buffer.from('3059301306072a8648ce3d020106082a8648ce3d03010703420004', 'hex')
+
+/** The order of the P-256 group: an ECDSA P-256 signature's `r` and `s` lie in [1, n - 1]. */
+const P256_ORDER = BigInt('0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551')
+
 /**
- * A DER public key read as the key kind an entry key type needs.
+ * A DER public key read as the key kind an entry key type needs, in its one canonical encoding.
  * @param keyDetails - the entry key type.
  * @param der - the PKIX SubjectPublicKeyInfo bytes.
- * @returns the key, or `undefined` when the bytes are not a public key of that kind: an Ed25519 key for Ed25519ph, a
- *   P-256 (`prime256v1`) EC key for ECDSA P-256.
+ * @returns the key, or `undefined` when the bytes are not a public key of that kind in that encoding: an Ed25519 key
+ *   of 44 bytes for Ed25519ph; for ECDSA P-256, a P-256 (`prime256v1`) EC key of 91 bytes whose point is uncompressed,
+ *   so the compressed-point encoding of a listed key is not that key's bytes and is refused. The bytes must also be
+ *   exactly what the key exports again.
  */
 export function entryPublicKey(keyDetails: LogEntryKeyDetails, der: Uint8Array): KeyObject | undefined {
+  const bytes = Buffer.from(der)
+  const header = keyDetails === 'PKIX_ED25519_PH' ? ED25519_SPKI_HEADER : P256_UNCOMPRESSED_SPKI_HEADER
+  const length = keyDetails === 'PKIX_ED25519_PH' ? ED25519_SPKI_HEADER.length + 32 : P256_UNCOMPRESSED_SPKI_HEADER.length + 64
+  if (bytes.length !== length || !bytes.subarray(0, header.length).equals(header)) return undefined
   let key: KeyObject
   try {
     key = createPublicKey({ key: Buffer.from(der), format: 'der', type: 'spki' })
@@ -63,8 +78,45 @@ export function entryPublicKey(keyDetails: LogEntryKeyDetails, der: Uint8Array):
     // Bytes that are not a DER public key match no type.
     return undefined
   }
+  if (!key.export({ format: 'der', type: 'spki' }).equals(bytes)) return undefined
   if (keyDetails === 'PKIX_ED25519_PH') return key.asymmetricKeyType === 'ed25519' ? key : undefined
   return key.asymmetricKeyType === 'ec' && key.asymmetricKeyDetails?.namedCurve === 'prime256v1' ? key : undefined
+}
+
+/**
+ * One DER INTEGER of an ECDSA signature, in its minimal encoding.
+ * @param bytes - the signature.
+ * @param at - where the INTEGER's tag is.
+ * @returns its value and where it ends, or `undefined` when it is not a minimal, non-negative DER INTEGER of at most
+ *   33 content bytes.
+ */
+function derInteger(bytes: Uint8Array, at: number): { readonly value: bigint, readonly end: number } | undefined {
+  const length = bytes[at + 1]
+  if (bytes[at] !== 0x02 || length === undefined || length < 1 || length > 33) return undefined
+  const start = at + 2
+  const end = start + length
+  if (end > bytes.length) return undefined
+  const first = bytes[start]!
+  // A negative value, or a leading zero byte that the next byte does not need, is not the minimal encoding.
+  if ((first & 0x80) !== 0 || (first === 0 && length > 1 && (bytes[start + 1]! & 0x80) === 0)) return undefined
+  return { value: BigInt(`0x${Buffer.from(bytes.subarray(start, end)).toString('hex')}`), end }
+}
+
+/**
+ * Whether a signature is an ECDSA P-256 signature in strict ASN.1 DER: a SEQUENCE with a one-byte length that covers
+ * exactly the rest of the bytes, holding exactly two minimal INTEGERs `r` and `s`, each in [1, n - 1]. A raw 64-byte
+ * `r || s` signature, BER, trailing bytes and out-of-range values are refused here, whatever the crypto library would
+ * accept.
+ * @param signature - the entry's signature.
+ * @returns whether it is in that form.
+ */
+export function isStrictEcdsaP256Signature(signature: Uint8Array): boolean {
+  if (signature.length < 8 || signature.length > 72 || signature[0] !== 0x30 || signature[1] !== signature.length - 2) return false
+  const r = derInteger(signature, 2)
+  if (r === undefined) return false
+  const s = derInteger(signature, r.end)
+  if (s === undefined || s.end !== signature.length) return false
+  return r.value > 0n && r.value < P256_ORDER && s.value > 0n && s.value < P256_ORDER
 }
 
 /**
@@ -105,11 +157,14 @@ export function signLogEntry(keyDetails: LogEntryKeyDetails, key: KeyObject, mes
  * @param message - the signed file's bytes.
  * @param signature - the entry's signature.
  * @returns whether it verifies: Ed25519ph with canonical encodings and the cofactorless equation (not ZIP-215), or
- *   ECDSA P-256 over SHA-256 in ASN.1 DER. A signature that does not decode does not verify.
+ *   ECDSA P-256 in strict DER ({@link isStrictEcdsaP256Signature}) over SHA-256 of the file's bytes, which this
+ *   function hashes itself, so a signature over a digest of the file, such as one over its SHA-256 as the message, does
+ *   not verify. A signature that does not decode does not verify.
  */
 export function verifyLogEntry(keyDetails: LogEntryKeyDetails, key: KeyObject, message: Uint8Array, signature: Uint8Array): boolean {
   try {
     if (keyDetails === 'PKIX_ED25519_PH') return ed25519ph.verify(signature, message, rawEd25519(key), { zip215: false })
+    if (!isStrictEcdsaP256Signature(signature)) return false
     return verify('sha256', message, { key, dsaEncoding: 'der' }, signature)
   } catch (_undecodable) {
     // A signature that does not decode is one that does not verify.
@@ -132,6 +187,17 @@ function validFor(key: LogEntryKey, version: string): boolean {
   if (key.status === 'active') return true
   if (key.status !== 'retired' || key.lastRelease === undefined || semver.valid(key.lastRelease) === null) return false
   return semver.lte(version, key.lastRelease)
+}
+
+/**
+ * A log-entry key's id: the lowercase hex SHA-256 of its DER public key, as refusals name it and as the
+ * production-keys registry lists a production log-entry key.
+ * @param key - the key, private or public.
+ * @returns the id.
+ */
+export function entryKeyId(key: KeyObject): string {
+  const publicKey = key.type === 'private' ? createPublicKey(key) : key
+  return createHash('sha256').update(publicKey.export({ format: 'der', type: 'spki' })).digest('hex')
 }
 
 /**
@@ -162,7 +228,7 @@ export function listedEntryKey(keys: readonly LogEntryKey[], version: string, ke
  * @param root - the trusted root.
  * @returns the root's `logs`; none when it carries no `logs`.
  */
-export function trustedLogs(root: Pick<RootMetadata, 'logs'>): readonly LogIdentity[] {
+export function trustedLogs(root: Pick<RootMetadata, 'logs'>): readonly ListedLog[] {
   return root.logs ?? []
 }
 
@@ -172,8 +238,20 @@ export function trustedLogs(root: Pick<RootMetadata, 'logs'>): readonly LogIdent
  * @param origin - the checkpoint's origin line.
  * @returns the log, or `undefined` when the root trusts no log of that origin.
  */
-export function trustedLog(root: Pick<RootMetadata, 'logs'>, origin: string): LogIdentity | undefined {
+export function trustedLog(root: Pick<RootMetadata, 'logs'>, origin: string): ListedLog | undefined {
   return trustedLogs(root).find(log => log.origin === origin)
+}
+
+/**
+ * Why a listed log may not hold a release's bundle, if it may not: a log with a `lastRelease` takes no later release,
+ * so only the root's current log takes new releases.
+ * @param log - the listed log.
+ * @param version - the release's version, a semantic version read from the signed manifest.
+ * @returns the reason, or `undefined` when the log may hold the release.
+ */
+export function logRefusesRelease(log: ListedLog, version: string): string | undefined {
+  if (log.lastRelease === undefined || semver.lte(version, log.lastRelease)) return undefined
+  return `the checkpoint is for ${JSON.stringify(log.origin)}, which the trusted root lists only for releases up to ${log.lastRelease}, and this release is ${version}`
 }
 
 /** A private key that signs log entries, with the entry key type it signs under. */

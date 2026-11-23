@@ -27,6 +27,7 @@ import { writeReleaseSbom } from '../../src/sbom/release-sbom.ts'
 import { archiveClosure } from '../../src/closure/archive-closure.ts'
 import { publicKeyEntry, readSigningKey, signEnvelope } from '@delorun/release-formats/sign/envelope'
 import { toJsonValue } from '@delorun/release-formats/sign/json'
+import type { LogEntrySigner } from '@delorun/release-formats/log/entry-keys'
 import { signRelease, SigningRefusal } from '../../src/sign/release.ts'
 import { DesktopSchema, ImagesSchema, InstallSchema, ManifestSchema } from '@delorun/release-formats/sign/schemas'
 import { PERSISTENCE_SCHEMA_PATH } from '../../src/closure/data-formats.ts'
@@ -258,7 +259,7 @@ export interface ReleaseFixture {
    * another rebuild output, record or attestation, with `firstOfLine` when given, and with another release branch than
    * the fixture's.
    */
-  readonly sign: (env?: NodeJS.ProcessEnv, args?: { readonly rebuild?: string, readonly record?: string, readonly attestation?: string, readonly advisories?: object, readonly firstOfLine?: boolean, readonly releaseBranch?: string }) => Promise<RunResult>
+  readonly sign: (env?: NodeJS.ProcessEnv, args?: { readonly rebuild?: string, readonly record?: string, readonly attestation?: string, readonly advisories?: object, readonly firstOfLine?: boolean, readonly releaseBranch?: string, readonly roots?: readonly Uint8Array[], readonly logEntryKeys?: readonly LogEntrySigner[] }) => Promise<RunResult>
 }
 
 /**
@@ -404,6 +405,8 @@ export async function releaseFixture(test: TestContext, options: FixtureOptions 
           attestation: args.attestation ?? attestationPath,
           attestationKey,
           key: readSigningKey(keyPath),
+          roots: args.roots ?? [rootFile(keys).bytes],
+          logEntryKeys: args.logEntryKeys ?? [],
           env: { ...signEnv },
           now: new Date('2026-11-06T12:00:00Z'),
           feed: feed.url,

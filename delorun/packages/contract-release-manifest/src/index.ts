@@ -154,6 +154,16 @@ export interface LogIdentity {
   readonly vkey: string
 }
 
+/** A log a root lists in `logs` (contract C18). */
+export interface ListedLog extends LogIdentity {
+  /**
+   * For a log other than the root's current `log`, the last Delorun version whose bundle may be in it: a bundle of a
+   * later release in that log is refused, so only the current log takes new releases. Every other listed log carries
+   * it; the current log carries none.
+   */
+  readonly lastRelease?: SemanticVersion
+}
+
 /** One witness verifier key (contract C18). */
 export interface WitnessKey {
   /** The witness's name, as its verifier key names it. */
@@ -214,10 +224,10 @@ export interface RootMetadata {
   readonly log: LogIdentity
   /**
    * Every log whose checkpoints verify a release's bundle, `log` among them, so a release logged in an earlier log
-   * (such as a previous Rekor shard) still verifies after a rotation moves `log`. A root without it trusts no log; it is
-   * optional only so that the root chain can read `1.root.json`, which predates it.
+   * (such as a previous Rekor shard) still verifies after a rotation moves `log`, up to that log's `lastRelease`. A root
+   * without it trusts no log; it is optional only so that the root chain can read `1.root.json`, which predates it.
    */
-  readonly logs?: readonly LogIdentity[]
+  readonly logs?: readonly ListedLog[]
   /**
    * The keys trusted to sign release log entries, each with its entry key type, in the order the signing tool tries
    * them. A root without it verifies no release; it is optional only so that the root chain can read `1.root.json`.

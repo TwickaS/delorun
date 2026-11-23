@@ -31,6 +31,7 @@ import {
   RELEASE_SCHEMAS,
   RELEASE_SUMMARY_MAX_LENGTH,
   type FileRef,
+  type KeyId,
   type ReleaseManifest,
   type RootMetadata,
   type RuntimePlatform,
@@ -44,7 +45,7 @@ import { closureFileNames } from '../closure/tree.ts'
 import { homePathProblems, refuseHomePaths, type BuilderIdentity } from '@delorun/release-formats/gate/home-paths'
 import { logEntryName, packsEntryName, packsLogName, packsName } from '@delorun/release-formats/log/bundle'
 import { logWithFallback, type LogEndpoints } from '../log/client.ts'
-import { entrySigners, type LogEntrySigner } from '@delorun/release-formats/log/entry-keys'
+import { entryKeyId, entrySigners, type LogEntrySigner } from '@delorun/release-formats/log/entry-keys'
 import { publicKeyEntry, signEnvelope } from '@delorun/release-formats/sign/envelope'
 import { toJsonValue } from '@delorun/release-formats/sign/json'
 import { LOCAL_RELEASE_BUILDER, ManifestSchema, readEnvelope, ReleaseSummarySchema } from '@delorun/release-formats/sign/schemas'
@@ -206,7 +207,7 @@ function refuseProductionRoots(request: LocalReleaseRequest): void {
 }
 
 /**
- * Refuse a root that lists a production key, and a targets or timestamp key that is one.
+ * Refuse a root that lists a production key, and a targets, timestamp or log-entry key that is one.
  * @param request - the keys and the registry.
  * @param roots - the request's roots, read.
  * @throws Error naming the first production key found and where.
@@ -215,6 +216,10 @@ function refuseProductionKeys(request: LocalReleaseRequest, roots: readonly Root
   for (const [role, key] of [['targets', request.targetsKey], ['timestamp', request.timestampKey]] as const) {
     const keyid = publicKeyEntry(key).keyid
     if (request.productionKeys.keyids.has(keyid)) throw new Error(`${PRODUCTION_REFUSAL}: the ${role} key ${keyid} is a production key`)
+  }
+  for (const signer of request.logEntryKeys ?? []) {
+    const keyid = brandString<KeyId>(entryKeyId(signer.key))
+    if (request.productionKeys.keyids.has(keyid)) throw new Error(`${PRODUCTION_REFUSAL}: the ${signer.keyDetails} log-entry key ${keyid} is a production key`)
   }
   for (const root of roots) {
     for (const { keyid, where } of rootKeyIds(root)) {
