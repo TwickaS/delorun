@@ -14,6 +14,7 @@
  */
 import { chmodSync, lstatSync, readdirSync, writeFileSync } from 'node:fs'
 import { basename, join } from 'node:path'
+import { DELORUN_HOME_FILES } from '@delorun/contract-home-layout'
 import { applyDshHomeImport, isDshImportError, planDshHomeImport, recoverDshImport, type DshHomeImportPlan } from '@delorun/archive/dsh-import'
 import { CliError, EXIT } from '../exit.ts'
 import { withHomeExclusive } from '../home-exclusion.ts'
@@ -67,7 +68,7 @@ export function homeHasChats(home: string): boolean {
 const PREVIEW = { credentials: 'setup does not copy them', categories: false } as const
 
 /** The file in the Delorun home that holds the full preview text. */
-export const IMPORT_PREVIEW_FILE = 'import-preview.txt'
+export const IMPORT_PREVIEW_FILE = DELORUN_HOME_FILES.importPreview
 
 /**
  * The summary the question shows.
