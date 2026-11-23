@@ -33,7 +33,7 @@
 
 /* The toggle's popovers, under it and aligned to its end: the layouts (right-click or long press) and the one-time hint. */
 .pickerPopover, .hint { position: fixed; z-index: 100; box-sizing: border-box; margin: 0; top: calc(anchor(bottom) + 6px); left: clamp(8px, calc(anchor(left) - 8px), calc(100vw - var(--multiview-popover-width) - 8px)); width: var(--multiview-popover-width); animation: multiview-popover-in 160ms cubic-bezier(.23, 1, .32, 1); transform-origin: top left; }
-.pickerPopover { --multiview-popover-width: min(264px, calc(100vw - 16px)); padding: 8px; }
+.pickerPopover { --multiview-popover-width: min(344px, calc(100vw - 16px)); padding: 8px; }
 .hint { --multiview-popover-width: min(372px, calc(100vw - 16px)); display: flex; align-items: flex-start; gap: 8px; padding: 10px 6px 10px 12px; }
 .hintText { position: relative; flex: 1 1 auto; min-width: 0; font-size: 12px; line-height: 18px; color: var(--dsw-alias-label-primary); }
 .hintDismiss { position: relative; flex: none; display: inline-grid; place-items: center; width: 24px; height: 24px; margin-block: -3px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--dsw-alias-label-secondary); cursor: pointer; }
@@ -54,7 +54,7 @@
    primary action across the rows' full width. Text lines up with the rows' text (9 px in); the action's edges line up with the
    rows' edges. The action is the A630 tinted text button: the link colour on 10% of itself, 14% in dark. */
 .footer { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 8px; row-gap: 4px; margin-top: 4px; padding-top: 6px; border-top: 1px solid var(--dsw-alias-border-primary, rgba(0, 0, 0, .1)); }
-.footer > .picker { grid-column: 1 / -1; padding-inline-start: 9px; }
+.footer > .picker { grid-column: 1 / -1; padding-inline: 9px; }
 .status { min-width: 0; padding-inline-start: 9px; font-size: 12px; line-height: 16px; color: var(--dsw-alias-label-secondary); }
 .footerButton { height: 28px; padding: 0 9px; border: 0; border-radius: var(--dsw-radius-sm, 6px); background: transparent; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 12px; font-weight: 500; cursor: pointer; transition: background-color 150ms ease, color 150ms ease, transform 160ms cubic-bezier(.23, 1, .32, 1); }
 .footerPrimary { --multiview-primary-tint: 10%; grid-column: 1 / -1; width: 100%; height: 36px; margin-top: 2px; background: color-mix(in srgb, var(--dsw-alias-link, #3b82f6) var(--multiview-primary-tint), transparent); color: var(--dsw-alias-link, #3b82f6); font-size: 13px; }
