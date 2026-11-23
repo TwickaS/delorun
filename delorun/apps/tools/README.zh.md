@@ -103,6 +103,7 @@ node_modules/.bin/tsx delorun/apps/tools/src/rehearse-upstream.ts --ref <ref>
 
 以下情况它以 1 退出，每个失败一行：条目或差异块的总增长超过其上限；冲突的差异块超过台账在合并后提交处差异块的 15 %；以及每个冲突的 `security` 类文件，因为台账没有记录维护者的决定。除非恰好给出一个非空的 `--tag` 或 `--ref`，否则它以 2 退出并打印用法行；引用在克隆中没有指名任何提交时，以及获取或合并失败时，也以 2 退出并给出 git 的错误。
 
+<a id="the-gates"></a>
 ## 门禁
 
 [`src/checks/gates/index.ts`](src/checks/gates/index.ts) 把每个门禁列为运行器从仓库根目录执行的一条命令。命令以 0 退出时门禁通过。暂存门禁接受路径作为尾随参数，运行器在提交前追加它们。范围门禁比较从 `origin/main` 到 HEAD 的提交，除非给出 `--base <rev>`，并且排除 `delorun/upstream-patches.json` 所锁定的上游提交可以到达的那些提交，因为上游自己为其提交签名和措辞。`DELORUN_RANGE_BASE=<rev>` 会取代 `origin/main`，成为每个范围门禁和树通过记录的基准，适用于 `origin/main` 是旧分支的克隆，以及向空仓库的首次推送。指名不到任何提交的基准会在任何检查开始前停止运行，运行标题会指明覆盖。除非门禁指名了较轻的层级，否则它在每个门禁层级中运行：`gates:docs` 与耗时超过约十秒的上游门禁跳过 lane 层级，耗时超过约一分钟、构建站点或读取上游构建产物的上游门禁只在合并层级运行（[本地检查](#local-checks)）。
@@ -147,6 +148,7 @@ node_modules/.bin/tsx delorun/apps/tools/src/rehearse-upstream.ts --ref <ref>
 - 它需要模型密钥，只有负责人运行它，lane agent 绝不运行。
 - 在它运行过且其列表为空之后，从 [`docs.ts`](src/checks/gates/docs.ts) 的双语配对条目中移除 `reportOnly`，使配对检查再次让变更失败。
 
+<a id="workflows"></a>
 ## 工作流
 
 This repository keeps three workflows in [`.github/workflows`](../../../.github/workflows) and removes every other workflow upstream wrote: each needs DeepSeek's secrets, runners or accounts, builds or publishes a release, or deploys a site. [`src/opening/workflows.ts`](src/opening/workflows.ts) lists each kept and removed workflow with its reason, and a workflow in neither list fails the check until someone classifies it. `node delorun/apps/tools/src/opening/workflows.ts --repo <checkout> --apply` deletes the removed files and drops every job of `ci.yml` except `node-24`, `node-24-lint` and `all-checks-passed`. Nothing here enables a workflow: GitHub runs one only when the repository's Actions settings allow it, and that setting is the owner's.
