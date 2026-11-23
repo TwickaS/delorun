@@ -270,6 +270,7 @@
     "tests/delorun-reach-listener.e2e.ts",
     "tests/delorun-dangerous-mode.e2e.ts",
     "tests/delorun-pairing.e2e.ts",
+    "tests/delorun-security-overview.e2e.ts",
     "tests/delorun-create-plugin.e2e.ts",
     "tests/delorun-setup-versions.e2e.ts",
     "tests/delorun-multiview-restore.e2e.ts",
