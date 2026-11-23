@@ -1,5 +1,6 @@
 import { Context } from '@deepseek-ai/cordis'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
+import type { ShortcutCatalogEntry, ShortcutCommand } from '@deepseek-ai/dsh-client-shortcuts/client'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { vi } from 'vitest'
 import { DEFAULT_MULTIVIEW_SETTINGS, type MultiviewSettings } from '../../src/config.ts'
@@ -42,7 +43,7 @@ export function listOf(spec: ListSpec) {
 }
 
 /** The browser services the entry points use, recording what they are asked. */
-export function harness(options: { settings?: Partial<MultiviewSettings> | undefined; layer?: boolean; initial?: Record<string, ChatMultiview>; list?: ListSpec } = {}) {
+export function harness(options: { settings?: Partial<MultiviewSettings> | undefined; layer?: boolean; initial?: Record<string, ChatMultiview>; list?: ListSpec; shortcuts?: boolean } = {}) {
   const ctx = new Context()
   const dictionaries = new Map<string, unknown>()
   ctx.provide('locale', {
@@ -81,6 +82,19 @@ export function harness(options: { settings?: Partial<MultiviewSettings> | undef
       }
     },
   } as never)
+  // The studio's keyboard registry, when the spec asks for one: the registered commands and a catalog the spec sets.
+  const commands = new Map<string, ShortcutCommand>()
+  const catalog = createSnapshotStore<readonly ShortcutCatalogEntry[]>([])
+  if (options.shortcuts === true) {
+    ctx.provide('shortcuts', {
+      catalog,
+      register: (command: ShortcutCommand) => {
+        if (commands.has(command.id)) throw new Error(`duplicate command ${command.id}`)
+        commands.set(command.id, command)
+        return () => { commands.delete(command.id) }
+      },
+    } as never)
+  }
   const persisted = memoryPersistence(options.initial)
   const warn = vi.fn()
   let store!: MultiviewStore
@@ -92,7 +106,7 @@ export function harness(options: { settings?: Partial<MultiviewSettings> | undef
     },
   })
   return {
-    ctx, fiber, dictionaries, entries, list, formIds, warn, ...persisted,
+    ctx, fiber, dictionaries, entries, list, formIds, warn, commands, catalog, ...persisted,
     get store(): MultiviewStore { return store },
     get service(): MultiviewService { return store },
     setList: (spec: ListSpec) => { list.set(listOf(spec)) },

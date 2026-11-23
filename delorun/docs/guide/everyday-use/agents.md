@@ -106,9 +106,9 @@ Delorun's Codex runs never change your own Codex settings file, so a folder you 
 Multiview puts the agents a chat works with beside the chat, so you can follow them together instead of opening each one. It needs no setup: it does nothing until an agent is pinned or a chat hands work to one.
 
 1. Open the agents list in the chat header (the "N subagents" button) and press the pin beside an agent. A chat opens Multiview by itself when it hands work to a new agent, and pins that agent.
-2. Press **Multiview** in the header. The main chat stays on the left and the pinned agents stack on the right. Press it again to go back to the normal chat.
+2. Press the Multiview icon (a main pane and two small ones) at the end of the "N subagents" button. The main chat stays on the left and the pinned agents stack on the right, and the icon stays lit while they show. Press it again to go back to the normal chat; the pins and the layout stay. To switch with the keyboard, give **Multiview: show the main chat only / show Multiview** a shortcut in the keyboard settings; it has none until you set one, and the icon's tooltip then shows it.
 3. Each pane shows the agent's name, whether it is working, waiting for you or done, and, for Claude Code and Codex, the plan and how much of its limits it has used. You can approve or reject what an agent asks, reply to it or stop it right there. **Open full chat** moves it into the main view and **Close** removes the pane.
-4. To arrange the panes, drag one by its handle onto the edge of another to split it, or onto the middle to share its tabs. The **Layout** menu offers Main and column, Side by side, Grid and Main on top, and **Reset to default**. Nothing here closes a pane.
+4. To arrange the panes, drag one by its handle onto the edge of another to split it, or onto the middle to share its tabs. The bottom of the agents list has the layouts, and right-clicking or holding the Multiview icon opens the same choice. Nothing here closes a pane. The first time Multiview opens, a small note by the icon points there; it shows once.
 
 Each chat remembers its panes and layout, and shows them again when you come back to it. On a phone, or in a window narrower than 768 pixels, the panes become pages you swipe sideways, with a strip of names at the top and an amber dot on an agent that is waiting for you.
 

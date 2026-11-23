@@ -3786,6 +3786,9 @@ importers:
       '@deepseek-ai/dsh-client-locale':
         specifier: workspace:*
         version: link:../../../packages/client/locale
+      '@deepseek-ai/dsh-client-shortcuts':
+        specifier: workspace:*
+        version: link:../../../packages/client/shortcuts
       '@deepseek-ai/dsh-client-store':
         specifier: workspace:*
         version: link:../../../packages/client/store
