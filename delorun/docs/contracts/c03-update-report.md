@@ -113,6 +113,8 @@ The report is stored in the snapshot's history version, so the history shows wha
 
 ## Reasons
 
+The report judges the target's plugins with the running release's rule, because the running release builds it: a plugin that declares `engines.delorun` is judged on that range alone ([C17](c17-plugin-versions.md)). This holds for a rollback's report too, which judges the release rolled back to by the release that rolls back.
+
 | Reason | Kind | Effect | Message |
 | --- | --- | --- | --- |
 | `dsh-requirement-unmet` | plugin | disabled | `<plugin> requires DSH <range>; Delorun <to.delorun> runs DSH <to.dsh>.` |

@@ -129,6 +129,8 @@ Host 还以 `{ "host": <字符串或 null> }` 回答 `GET /api/delorunUpdateChec
 
 ## 原因
 
+The report judges the target's plugins with the running release's rule, because the running release builds it: a plugin that declares `engines.delorun` is judged on that range alone ([C17](c17-plugin-versions.zh.md)). This holds for a rollback's report too, which judges the release rolled back to by the release that rolls back.
+
 | 原因 | 种类 | 效果 | 消息 |
 | --- | --- | --- | --- |
 | `dsh-requirement-unmet` | plugin | disabled | `<plugin> requires DSH <range>; Delorun <to.delorun> runs DSH <to.dsh>.` |

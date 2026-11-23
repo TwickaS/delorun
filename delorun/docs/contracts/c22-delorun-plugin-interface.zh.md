@@ -102,7 +102,7 @@ With `--json` it prints one JSON object on one line, and no other output, for to
 | `verdict` | `admitted` or `refused`. |
 | `readable` | `false` when a declaration is in a form Delorun cannot read. |
 
-The exit code is the same as without `--json`. The record is the return value of `decidePluginVersion` in `@delorun/update`, a pure function of a parsed manifest, a Delorun version and a DSH version.
+A declaration Delorun cannot read is refused with `readable` false: a `peerDependencies` that is not an object gives `decidedBy` `none`, `range` `null`, `checkedAgainst` `null` and `verdict` `refused`; a DSH peer whose range is not a string gives `decidedBy` `peer`, `verdict` `refused`, and the peer as `<name> <value>` in `range`. The exit code is the same as without `--json`. The record is the return value of `decidePluginVersion` in `@delorun/update`, a pure function of a parsed manifest, a Delorun version and a DSH version.
 
 <a id="the-patch-rule"></a>
 

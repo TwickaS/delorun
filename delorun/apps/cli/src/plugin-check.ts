@@ -174,9 +174,10 @@ export async function runPluginCheck(args: readonly string[], context: CommandCo
   const name = typeof manifest['name'] === 'string' ? manifest['name'] : '(no name)'
   const version = typeof manifest['version'] === 'string' ? manifest['version'] : '(no version)'
   if (json) {
-    // One object of stable fields for tools: the decision, never English text. The exit code is the installer's verdict.
+    // One object of stable fields for tools: the decision, never English text. The range is the manifest's own string, so
+    // every control, bidirectional and invisible character is written as \uXXXX, which JSON reads back as the same string.
     const decision = decidePluginVersion(manifest, running.delorun, running.dsh)
-    context.stdout(`${JSON.stringify(decision)}\n`)
+    context.stdout(`${printable(JSON.stringify(decision))}\n`)
     return decision.verdict === 'admitted' ? EXIT.ok : EXIT.failed
   }
   const lines = [
