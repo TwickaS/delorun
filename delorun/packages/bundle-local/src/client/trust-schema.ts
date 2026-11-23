@@ -7,7 +7,7 @@
 import { z } from 'zod'
 import {
   TRUST_BILL_SCHEMA,
-  type TrustBill, type TrustChanges, type TrustMcp, type TrustPatches, type TrustPlugin, type TrustPlugins, type TrustRelease, type TrustReleaseLog,
+  type TrustBill, type TrustChanges, type TrustChecks, type TrustFullCheck, type TrustRowFreshness, type TrustMcp, type TrustPatches, type TrustPlugin, type TrustPlugins, type TrustRelease, type TrustReleaseLog,
 } from './trust-bill.ts'
 
 const result = z.enum(['pass', 'fail', 'unknown'])
@@ -95,4 +95,27 @@ export const TrustBillSchema: z.ZodType<TrustBill> = z.object({
     z.object({ via: z.literal('launcher') }),
     z.object({ via: z.literal('host'), reason: z.enum(['no-launcher', 'launcher-unresolvable']) }),
   ]).exactOptional(),
+})
+
+const FreshnessShape = { at: nullableString, running: z.boolean() }
+
+const FreshnessSchema: z.ZodType<TrustRowFreshness> = z.object(FreshnessShape)
+
+const FullCheckSchema: z.ZodType<TrustFullCheck> = z.discriminatedUnion('state', [
+  z.object({ state: z.literal('waiting') }),
+  z.object({ state: z.literal('running') }),
+  z.object({ state: z.literal('done') }),
+  z.object({
+    state: z.literal('unavailable'),
+    reason: z.enum(['no-launcher', 'launcher-unresolvable', 'failed', 'off']),
+    detail: z.string().exactOptional(),
+  }),
+])
+
+/** How fresh each row is, as the Host serves it beside the bill. Unknown fields are dropped. */
+export const TrustChecksSchema: z.ZodType<TrustChecks> = z.object({
+  release: z.object({ ...FreshnessShape, full: FullCheckSchema }),
+  releaseLog: FreshnessSchema,
+  plugins: FreshnessSchema,
+  changes: FreshnessSchema,
 })

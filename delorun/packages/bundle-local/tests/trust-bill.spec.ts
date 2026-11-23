@@ -4,7 +4,7 @@
  * a neutral count.
  */
 import { describe, expect, it } from 'vitest'
-import { TRUST_BILL_SCHEMA, trustBadge, trustRows, type TrustBill, type TrustPlugin } from '../src/client/trust-bill.ts'
+import { TRUST_BILL_SCHEMA, trustBadge, trustRows, type TrustBill, type TrustChecks, type TrustPlugin } from '../src/client/trust-bill.ts'
 
 const PLUGIN: TrustPlugin = { name: 'delorun-plugin-x', source: 'registry', version: '1.0.0', integrity: 'sha512-x', commit: null, match: 'match', warnings: [], criticalAdvisories: [] }
 
@@ -78,6 +78,25 @@ describe('the trust badge', () => {
     expect(trustRows({ ...VERIFIED, checkedBy: { via: 'host', reason: 'launcher-unresolvable', seconds: 9 } })[0]).toEqual({ id: 'release', state: 'checked-in-studio', tone: 'neutral', ownChanges: 0 })
     expect(trustRows({ ...VERIFIED, checkedBy: { via: 'launcher', seconds: 19 } })[0]?.state).toBe('verified')
     expect(badge({ ...VERIFIED, stage: 'start', release: { ...VERIFIED.release, startCheck } })).toEqual({ state: 'checked-at-start', tone: 'neutral', ownChanges: 0 })
+  })
+
+  it('reads checking while the background full check waits or runs, and checked at start with any other state', () => {
+    const startCheck = { at: '2026-11-11T10:00:00Z', full: false, hashed: 160, files: 35_287 }
+    const start: TrustBill = { ...VERIFIED, stage: 'start', release: { ...VERIFIED.release, startCheck } }
+    const checks = (full: TrustChecks['release']['full']): TrustChecks => ({
+      release: { at: startCheck.at, running: false, full },
+      releaseLog: { at: null, running: false }, plugins: { at: null, running: false }, changes: { at: null, running: false },
+    })
+    expect(trustRows(start, checks({ state: 'waiting' }))[0]).toEqual({ id: 'release', state: 'checking', tone: 'neutral', ownChanges: 0 })
+    expect(trustRows(start, checks({ state: 'running' }))[0]?.state).toBe('checking')
+    expect(trustBadge(trustRows(start, checks({ state: 'running' })))).toEqual({ state: 'checking', tone: 'neutral', ownChanges: 0 })
+    for (const full of [{ state: 'unavailable', reason: 'no-launcher' }, { state: 'unavailable', reason: 'failed', detail: 'x' }, { state: 'done' }] as const) {
+      expect(trustRows(start, checks(full))[0]?.state).toBe('checked-at-start')
+    }
+    expect(trustRows(start, null)[0]?.state).toBe('checked-at-start')
+    // A full check never makes a check run inside the studio verified, and a failure stays red.
+    expect(trustRows({ ...VERIFIED, checkedBy: { via: 'host', reason: 'no-launcher', seconds: 9 } }, checks({ state: 'waiting' }))[0]?.state).toBe('checked-in-studio')
+    expect(trustRows({ ...start, release: { ...start.release, files: 'fail' } }, checks({ state: 'running' }))[0]?.state).toBe('failed')
   })
 
   it('takes the loudest tone and the first state in order of severity', () => {

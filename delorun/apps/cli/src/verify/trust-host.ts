@@ -10,7 +10,8 @@
  * start-check record in `DELORUN_START_CHECK` names for the running release; its package's `bin` is resolved inside its
  * directory, and the child gets `--release <running>` and this process's environment without the variables that load
  * code into a Node (`DROPPED_LAUNCH_ENV`). A bill of another release is refused. The child leads its own process
- * group, which a check that outlasts its deadline stops whole. When this
+ * group, which a check that outlasts its deadline, or a background check a turn stops, ends whole; the background check
+ * runs it at low priority (`nice` 10 and the lowest best-effort I/O class on Linux, below normal on Windows). When this
  * runtime was not started by a launcher, or the launcher's entry cannot be resolved (a source launch), the `verify`
  * stage runs in this process instead, and the bill's `checkedBy` says so and why, because a changed runtime file that a
  * rewritten identity record vouches for could then run unhashed. A launcher that refuses to run `delorun verify`, such as for a changed runtime
@@ -19,12 +20,13 @@
  * @module @delorun/cli/verify/trust-host
  */
 import { spawn } from 'node:child_process'
-import { constants } from 'node:fs'
+import { constants, existsSync } from 'node:fs'
 import { open } from 'node:fs/promises'
+import { constants as osConstants, setPriority } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { DELORUN_HOME_ENV, DELORUN_LAUNCHER_ROOTS_ENV, DELORUN_PROFILE_ENV, DELORUN_START_CHECK_ENV, inheritableEnvironment } from '@delorun/contract-home-layout'
-import type { TrustSource } from '@delorun/bundle-local/trust'
+import type { TrustCheckOptions, TrustSource } from '@delorun/bundle-local/trust'
 import { TrustBillSchema } from '@delorun/bundle-local/trust-schema'
 import type { TrustBill, TrustCheckRoute, TrustHostCheckReason } from '@delorun/bundle-local/trust-bill'
 import type { DelorunLogger } from '@delorun/logs'
@@ -96,9 +98,10 @@ export interface ChildRun {
  * Run a child process to its end.
  * @param command - the command.
  * @param timeoutMs - how long it may run before it is stopped.
+ * @param options - low priority, and the signal that stops the child.
  * @returns how it ended.
  */
-export type RunChild = (command: LauncherVerify, timeoutMs: number) => Promise<ChildRun>
+export type RunChild = (command: LauncherVerify, timeoutMs: number, options?: TrustCheckOptions) => Promise<ChildRun>
 
 /** The ways a bill is produced. */
 export interface TrustStages {
@@ -124,6 +127,32 @@ const KILL_GRACE_MS = 5_000
  * can hold its standard output and error open for good.
  */
 const CLOSE_GRACE_MS = 2_000
+
+/** The `nice` value of a background check: low, but above the idle class, so it still finishes on a busy computer. */
+export const BACKGROUND_NICE = 10
+
+/** Where Linux distributions install `ionice`; it is run by absolute path, never looked up on `PATH`. */
+const IONICE_PATHS: readonly string[] = ['/usr/bin/ionice', '/bin/ionice']
+
+/**
+ * Lower a child's priority as soon as it starts, before it reads a runtime file: `nice` {@link BACKGROUND_NICE}
+ * (below normal on Windows) and, on Linux, the lowest best-effort I/O class through `ionice`; the child's own children
+ * inherit both. A priority that cannot be set is no failure: the check runs at normal priority.
+ * @param pid - the child's process id.
+ */
+function lowerPriority(pid: number): void {
+  try {
+    setPriority(pid, process.platform === 'win32' ? osConstants.priority.PRIORITY_BELOW_NORMAL : BACKGROUND_NICE)
+  } catch {
+    // Not permitted or the child has already ended; the check runs at normal priority.
+  }
+  if (process.platform !== 'linux') return
+  const ionice = IONICE_PATHS.find(path => existsSync(path))
+  if (ionice === undefined) return
+  spawn(ionice, ['-c', '2', '-n', '7', '-p', String(pid)], { stdio: 'ignore' }).on('error', () => {
+    // ionice could not start; on Linux the I/O priority then follows the nice value.
+  })
+}
 
 /** This process's fetch, which the in-process `verify` stage sends its online release-log check through. */
 export const PROCESS_FETCH: Fetch = globalThis.fetch.bind(globalThis)
@@ -160,8 +189,13 @@ function signalTree(pid: number, signal: 'SIGTERM' | 'SIGKILL'): void {
  * @returns the runner.
  */
 export function childRunner(grace: { readonly killMs: number, readonly closeMs: number }): RunChild {
-  return (command, timeoutMs) => new Promise((resolvePromise, reject) => {
+  return (command, timeoutMs, options = {}) => new Promise((resolvePromise, reject) => {
+    if (options.signal?.aborted === true) {
+      reject(abortReason(options.signal))
+      return
+    }
     const child = spawn(command.command, [...command.args], { env: command.env, stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32', windowsHide: true })
+    if (options.lowPriority === true && child.pid !== undefined) lowerPriority(child.pid)
     const collect = (stream: NodeJS.ReadableStream): (() => string) => {
       const chunks: Buffer[] = []
       let length = 0
@@ -177,14 +211,25 @@ export function childRunner(grace: { readonly killMs: number, readonly closeMs: 
     let timedOut = false
     let kill: ReturnType<typeof setTimeout> | undefined
     let settled = false
-    const timer = setTimeout(() => {
-      timedOut = true
+    let aborted = false
+    const stop = (): void => {
+      if (kill !== undefined) return
       if (child.pid !== undefined) signalTree(child.pid, 'SIGTERM')
       kill = setTimeout(() => { if (child.pid !== undefined) signalTree(child.pid, 'SIGKILL') }, grace.killMs)
+    }
+    const timer = setTimeout(() => {
+      timedOut = true
+      stop()
     }, timeoutMs)
+    const onAbort = (): void => {
+      aborted = true
+      stop()
+    }
+    options.signal?.addEventListener('abort', onAbort, { once: true })
     const stopTimers = (): void => {
       clearTimeout(timer)
       if (kill !== undefined) clearTimeout(kill)
+      options.signal?.removeEventListener('abort', onAbort)
     }
     child.on('error', (error) => {
       if (settled) return
@@ -198,7 +243,8 @@ export function childRunner(grace: { readonly killMs: number, readonly closeMs: 
       stopTimers()
       const done = (): void => {
         clearTimeout(closing)
-        resolvePromise({ status, stdout: stdout(), stderr: stderr(), timedOut })
+        if (aborted && options.signal !== undefined) reject(abortReason(options.signal))
+        else resolvePromise({ status, stdout: stdout(), stderr: stderr(), timedOut })
       }
       const closing = setTimeout(() => {
         // Something the child left behind still holds its output: end the group and stop reading.
@@ -211,6 +257,16 @@ export function childRunner(grace: { readonly killMs: number, readonly closeMs: 
       else child.once('close', done)
     })
   })
+}
+
+/**
+ * The error a stopped run rejects with.
+ * @param signal - the signal that stopped it.
+ * @returns its reason when that is an error, otherwise an error naming the stop.
+ */
+function abortReason(signal: AbortSignal): Error {
+  const reason: unknown = signal.reason
+  return reason instanceof Error ? reason : new Error('the check was stopped')
 }
 
 /** Runs a child with the Host's graces. */
@@ -353,14 +409,15 @@ export function hostTrustOptions(base: Omit<TrustWatchOptions, 'plugins' | 'chan
  * @param options - the home, the profile, the platform, the running version, the environment, the log and the clocks.
  * @param stages - how a bill is produced.
  * @returns the source: `read` produces the start bill once and answers it after, and a read that failed is produced
- *   again on the next call; `check` runs `delorun verify --json` through the launcher, or the `verify` stage in this
+ *   again on the next call; `refresh` produces a new start bill each time; `check` runs `delorun verify --json` through the launcher, or the `verify` stage in this
  *   process when no launcher can be run, and logs what the check warned about.
  */
 export function trustSource(options: TrustWatchOptions, stages: TrustStages): TrustSource {
   let start: Promise<TrustBill> | undefined
+  const fresh = (): Promise<TrustBill> => Promise.all([stages.start(billContext(options)), launcherVerifyCommand(options)]).then(([bill, command]) => ({ ...bill, checkNow: routeOf(command) }))
   return {
     read: async () => {
-      start ??= Promise.all([stages.start(billContext(options)), launcherVerifyCommand(options)]).then(([bill, command]) => ({ ...bill, checkNow: routeOf(command) }))
+      start ??= fresh()
       try {
         return await start
       } catch (error) {
@@ -368,7 +425,8 @@ export function trustSource(options: TrustWatchOptions, stages: TrustStages): Tr
         throw error
       }
     },
-    check: async (timeoutMs) => {
+    refresh: fresh,
+    check: async (timeoutMs, checkOptions = {}) => {
       const began = options.elapsed()
       const seconds = (): number => Math.round((options.elapsed() - began) / 100) / 10
       const command = await launcherVerifyCommand(options)
@@ -378,7 +436,7 @@ export function trustSource(options: TrustWatchOptions, stages: TrustStages): Tr
         for (const notice of outcome.notices) options.logger.info(`delorun-trust: ${printable(notice)}`)
         return { ...bill, checkedBy: { via: 'host', reason: command, seconds: seconds() }, checkNow: routeOf(command) }
       }
-      const run = await stages.launcher(command, timeoutMs)
+      const run = await stages.launcher(command, timeoutMs, checkOptions)
       for (const line of run.stderr.split('\n')) if (line.trim() !== '') options.logger.info(`delorun-trust: delorun verify: ${printable(line)}`)
       if (run.timedOut) throw new Error(`delorun verify through the launcher did not finish within ${String(Math.round(timeoutMs / 1000))} s and was stopped`)
       const checked = billOfVerifyOutput(run.stdout)

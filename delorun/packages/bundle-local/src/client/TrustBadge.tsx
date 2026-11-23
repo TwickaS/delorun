@@ -14,12 +14,17 @@ import {
 import type { HostObservable, InjectFace, OwnerOf, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: the 'sidebar.footer.action' SlotMap entry.
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
+import { SecurityOverview, type OverviewTranslate } from './SecurityOverview.tsx'
+import type { OverviewHostFacts } from './security-overview-api.ts'
+import type { OverviewAction } from './security-overview.ts'
 import type { TrustCheckState } from './trust-api.ts'
 import {
   trustBadge, trustRows,
-  type TrustBadge as TrustBadgeValue, type TrustBill, type TrustCheckResult, type TrustPlugin, type TrustPluginMatch, type TrustPluginSource,
-  type TrustRow, type TrustRowId, type TrustState, type TrustTone,
+  type TrustBadge as TrustBadgeValue, type TrustBill, type TrustCheckResult, type TrustChecks, type TrustPlugin, type TrustPluginMatch, type TrustPluginSource,
+  type TrustRow, type TrustRowFreshness, type TrustRowId, type TrustState, type TrustTone,
 } from './trust-bill.ts'
+import { en as trustCopy, type TrustLocaleKey } from './trust-locales.ts'
+import { relativeTime, TRUST_TICK_MS } from './trust-time.ts'
 import css from './TrustBadge.module.css'
 
 /** The command the panel points to for the full report. */
@@ -30,11 +35,28 @@ export interface TrustBadgeInjected {
   readonly hooks: {
     /** The last bill, or `null` while none could be read. */
     readonly bill: HostObservable<TrustBill | null>
+    /** How fresh each row is, or `null` while the Host reports none. */
+    readonly checks: HostObservable<TrustChecks | null>
     /** The state of Check now. */
     readonly checking: HostObservable<TrustCheckState>
+    /** The security overview's facts from the Host's other routes. */
+    readonly overview: HostObservable<OverviewHostFacts>
+    /** Whether the overview's first read has finished. */
+    readonly overviewLoaded: HostObservable<boolean>
   }
   /** Run Check now; `null` on a remote session, where the Host refuses it. */
   readonly check: (() => void) | null
+  /**
+   * Read the overview's facts while the panel is open.
+   * @returns the disposer, which stops reading.
+   */
+  readonly watchOverview: () => () => void
+  /**
+   * Run an overview row's action other than Check now: open a settings section, or turn change protection on.
+   * @param action - the action.
+   * @returns whether it succeeded; opening a section always does.
+   */
+  readonly act: (action: Exclude<OverviewAction, { readonly kind: 'check-now' }>) => Promise<boolean>
 }
 
 /** The badge's props: the foot's width, the trust copy and the bill. */
@@ -42,6 +64,25 @@ export type TrustBadgeProps = OwnerOf<'sidebar.footer.action'> & PropsLocale<'de
 
 /** The trust copy's translate function. */
 type Translate = TrustBadgeProps['t']
+
+/**
+ * Whether a key is in the trust copy, which holds the overview's copy too.
+ * @param key - the key.
+ * @returns whether the trust dictionary defines it.
+ */
+function isTrustKey(key: string): key is TrustLocaleKey {
+  return Object.hasOwn(trustCopy, key)
+}
+
+/**
+ * The overview's translate function over the trust copy: the overview builds its keys from a row's cause, so a key
+ * the dictionary lacks shows as itself, which the copy's spec rules out.
+ * @param t - the trust copy's translate function.
+ * @returns the overview's translate function.
+ */
+function overviewTranslate(t: Translate): OverviewTranslate {
+  return (key, params) => isTrustKey(key) ? t(key, params) : key
+}
 
 /** The dot each tone shows: the theme's success, warn, error and neutral idle roles. */
 const DOTS: Readonly<Record<TrustTone, StateDotState>> = {
@@ -96,6 +137,7 @@ function badgeStateLabel(t: Translate, state: TrustState): string {
     case 'failed': return t('badge.failed')
     case 'unchecked': return t('badge.unchecked')
     case 'unknown': return t('badge.unknown')
+    case 'checking': return t('badge.checking')
     case 'checked-at-start': return t('badge.checked-at-start')
     case 'checked-in-studio': return t('badge.checked-in-studio')
     case 'waiting': return t('badge.waiting')
@@ -126,6 +168,7 @@ export function rowStateLabel(t: Translate, row: TrustRow): string {
       case 'failed': return t('state.failed')
       case 'unchecked': return t('state.unchecked')
       case 'unknown': return t('state.unknown')
+      case 'checking': return t('state.checking')
       case 'checked-at-start': return t('state.checked-at-start')
       case 'checked-in-studio': return t('state.checked-in-studio')
       case 'waiting': return t('state.waiting')
@@ -150,10 +193,11 @@ export function formatTime(t: Translate, at: string): string {
  * @param props - the foot's width, the copy, the bill and Check now.
  * @returns the badge, and the panel while open.
  */
-export function TrustBadge({ wide, t, useBill, useChecking, check }: TrustBadgeProps) {
+export function TrustBadge({ wide, t, useBill, useChecks, useChecking, useOverview, useOverviewLoaded, check, watchOverview, act }: TrustBadgeProps) {
   const bill = useBill(current => current)
+  const checks = useChecks(current => current)
   const [open, setOpen] = useState(false)
-  const rows = bill === null ? null : trustRows(bill)
+  const rows = bill === null ? null : trustRows(bill, checks)
   const badge = trustBadge(rows)
   const label = badgeLabel(t, badge)
   const button = (
@@ -172,7 +216,12 @@ export function TrustBadge({ wide, t, useBill, useChecking, check }: TrustBadgeP
   return (
     <>
       <Tooltip label={label} side={wide ? 'top' : 'right'} align="end" portal delayMs={500}>{button}</Tooltip>
-      {open && <TrustPanel t={t} bill={bill} rows={rows} useChecking={useChecking} check={check} onClose={() => { setOpen(false) }} />}
+      {open && (
+        <TrustPanel
+          t={t} bill={bill} checks={checks} rows={rows} useChecking={useChecking} useOverview={useOverview} useOverviewLoaded={useOverviewLoaded}
+          check={check} watchOverview={watchOverview} act={act} onClose={() => { setOpen(false) }}
+        />
+      )}
     </>
   )
 }
@@ -181,39 +230,52 @@ export function TrustBadge({ wide, t, useBill, useChecking, check }: TrustBadgeP
 interface TrustPanelProps {
   readonly t: Translate
   readonly bill: TrustBill | null
+  readonly checks: TrustChecks | null
   readonly rows: readonly TrustRow[] | null
   readonly useChecking: TrustBadgeProps['useChecking']
+  readonly useOverview: TrustBadgeProps['useOverview']
+  readonly useOverviewLoaded: TrustBadgeProps['useOverviewLoaded']
   readonly check: (() => void) | null
+  readonly watchOverview: TrustBadgeProps['watchOverview']
+  readonly act: TrustBadgeProps['act']
   readonly onClose: () => void
 }
 
 /**
- * The panel: the rows, Check now, the pointer to the full report and the checks' limit.
- * @param props - the copy, the bill, its rows, Check now and the close action.
+ * The panel: the security overview, whose "This copy of Delorun" row breaks down into the trust bill's four rows in the
+ * advanced view, Check now, the pointer to the full report and the checks' limit.
+ * @param props - the copy, the bill, its rows, the overview's facts, Check now, the rows' actions and the close action.
  * @returns the dialog.
  */
-function TrustPanel({ t, bill, rows, useChecking, check, onClose }: TrustPanelProps) {
+function TrustPanel({ t, bill, checks, rows, useChecking, useOverview, useOverviewLoaded, check, watchOverview, act, onClose }: TrustPanelProps) {
   const checking = useChecking(current => current)
+  const facts = useOverview(current => current)
+  const loaded = useOverviewLoaded(current => current)
+  const [message, setMessage] = useState<string | undefined>(undefined)
   const noteId = useId()
   const running = checking.kind === 'running'
-  const description = bill === null
-    ? t('panel.noBill')
-    : t(bill.stage === 'verify' ? 'panel.stage.verify' : 'panel.stage.start', { time: formatTime(t, bill.generatedAt) })
-  return (
-    <Modal
-      open
-      onClose={onClose}
-      title={t('panel.title')}
-      closeLabel={t('panel.close')}
-      description={description}
-      className={css.dialog ?? ''}
-      contentClassName={css.content ?? ''}
-    >
-      {bill !== null && rows !== null && (
-        <ul className={css.rows}>
-          {rows.map(row => <TrustRowItem key={row.id} t={t} bill={bill} row={row} />)}
-        </ul>
-      )}
+  useEffect(() => watchOverview(), [watchOverview])
+  const run = (action: OverviewAction): void => {
+    setMessage(undefined)
+    if (action.kind === 'check-now') {
+      check?.()
+      return
+    }
+    if (action.kind === 'open-section') onClose()
+    void act(action).then((done) => { if (!done) setMessage(t('overview.protectionFailed')) })
+  }
+  const trustDetails = bill !== null && rows !== null && (
+    <>
+      <ul className={css.rows}>
+        {rows.map(row => <TrustRowItem key={row.id} t={t} bill={bill} checks={checks} row={row} />)}
+      </ul>
+      <p className={css.note}>
+        {t('panel.report')} <CommandText className={css.command} text={VERIFY_COMMAND} label={t('panel.command')} />
+      </p>
+    </>
+  )
+  const checkBlock = (
+    <>
       <div className={css.check}>
         <Button
           variant="outline"
@@ -233,10 +295,30 @@ function TrustPanel({ t, bill, rows, useChecking, check, onClose }: TrustPanelPr
           <p id={noteId} className={css.error} role="alert">{checking.reason === 'refused' ? t('check.refused') : t('check.failed')}</p>
         )}
       </div>
-      <p className={css.note}>
-        {t('panel.report')} <CommandText className={css.command} text={VERIFY_COMMAND} label={t('panel.command')} />
-      </p>
       <p className={css.notice}>{t('panel.notice')}</p>
+    </>
+  )
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={t('overview.title')}
+      closeLabel={t('panel.close')}
+      {...(bill === null ? { description: t('panel.noBill') } : {})}
+      className={css.dialog ?? ''}
+      contentClassName={css.content ?? ''}
+    >
+      <SecurityOverview
+        t={overviewTranslate(t)}
+        bill={bill}
+        checks={checks}
+        facts={facts}
+        loaded={loaded}
+        act={run}
+        trustDetails={trustDetails}
+        checkBlock={checkBlock}
+        message={message}
+      />
     </Modal>
   )
 }
@@ -283,9 +365,10 @@ function CheckProgress({ t, startedAt, launcher }: { readonly t: Translate, read
  * @param props.row - the row.
  * @returns the row.
  */
-function TrustRowItem({ t, bill, row }: { readonly t: Translate, readonly bill: TrustBill, readonly row: TrustRow }) {
+function TrustRowItem({ t, bill, checks, row }: { readonly t: Translate, readonly bill: TrustBill, readonly checks: TrustChecks | null, readonly row: TrustRow }) {
   const [open, setOpen] = useState(false)
   const detailsId = useId()
+  const note = releaseNote(t, row, checks)
   return (
     <li className={css.row} data-state={row.state} data-tone={row.tone}>
       <button type="button" className={css.rowButton} aria-expanded={open} aria-controls={detailsId} onClick={() => { setOpen(!open) }}>
@@ -296,10 +379,57 @@ function TrustRowItem({ t, bill, row }: { readonly t: Translate, readonly bill: 
         </span>
         <IconChevronDownOutlineRegular size={14} className={open ? css.chevronOpen : css.chevron} />
       </button>
+      {(checks !== null || note !== undefined) && (
+        <p className={css.rowNote}>
+          {checks !== null && <Freshness t={t} freshness={checks[row.id]} />}
+          {note !== undefined && <span>{note}</span>}
+        </p>
+      )}
       <div id={detailsId} className={css.details} hidden={!open}>
         {open && <RowDetails t={t} bill={bill} id={row.id} />}
       </div>
     </li>
+  )
+}
+
+/**
+ * What the release row's state rests on, in one line: while the background full check waits or runs, that it will hash
+ * or is hashing every file; when the release stays checked at start, why no full check can run.
+ * @param t - the trust copy.
+ * @param row - the row.
+ * @param checks - how fresh each row is.
+ * @returns the line, or `undefined` for another row or state.
+ */
+export function releaseNote(t: Translate, row: TrustRow, checks: TrustChecks | null): string | undefined {
+  if (row.id !== 'release' || checks === null) return undefined
+  const full = checks.release.full
+  if (row.state === 'checking') return t(full.state === 'running' ? 'full.running' : 'full.waiting')
+  if (row.state !== 'checked-at-start' || full.state !== 'unavailable') return undefined
+  return full.reason === 'failed' ? t('full.reason.failed', { detail: full.detail ?? t('value.none') }) : t(`full.reason.${full.reason}`)
+}
+
+/**
+ * How fresh a row is: "Checking…" while its check runs, otherwise when it last ran, relative and live, with the exact
+ * time on hover.
+ * @param props - the copy and the row's freshness.
+ * @param props.t - the trust copy.
+ * @param props.freshness - the row's freshness.
+ * @returns the line.
+ */
+export function Freshness({ t, freshness }: { readonly t: Translate, readonly freshness: TrustRowFreshness }) {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const timer = setInterval(() => { setNow(Date.now()) }, TRUST_TICK_MS)
+    return () => { clearInterval(timer) }
+  }, [])
+  if (freshness.running) return <span className={css.fresh}>{t('fresh.checking')}</span>
+  if (freshness.at === null) return <span className={css.fresh}>{t('fresh.never')}</span>
+  const ago = relativeTime(t('time.locale'), freshness.at, now)
+  if (ago === undefined) return null
+  return (
+    <time className={css.fresh} dateTime={freshness.at} title={formatTime(t, freshness.at)}>
+      {ago.kind === 'just-now' ? t('fresh.justNow') : t('fresh.ago', { ago: ago.text })}
+    </time>
   )
 }
 

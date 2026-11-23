@@ -1,0 +1,269 @@
+/* The security overview: a calm headline, the view toggle and five rows; each status has an icon, words and a colour. */
+.overview {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.headline,
+.row {
+  --overview-state: var(--dsw-alias-state-success-primary);
+}
+
+.headline[data-status='chosen'],
+.row[data-status='chosen'] {
+  --overview-state: var(--dsw-alias-state-warn-primary);
+}
+
+.headline[data-status='look'],
+.row[data-status='look'] {
+  --overview-state: var(--dsw-alias-state-warn-primary);
+}
+
+.headline[data-status='red'],
+.row[data-status='red'] {
+  --overview-state: var(--dsw-alias-state-error-primary);
+}
+
+.headline {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+/* The status glyph: 14 px, stroked, in a 24 px circle tinted at 14% of its tone (the alert style, A630). */
+.headlineIcon,
+.rowIcon {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--overview-state) 14%, transparent);
+  color: var(--overview-state);
+}
+
+.headlineText,
+.rowText {
+  min-width: 0;
+  flex: 1;
+}
+
+.headlineTitle {
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 24px;
+}
+
+.headlineDetail {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.views {
+  align-self: flex-start;
+}
+
+.disclosure {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.disclosure:focus-visible {
+  box-shadow: inset 0 0 0 var(--dsw-focus-ring-width) var(--dsw-alias-brand-primary);
+  outline: none;
+}
+
+.chevron,
+.chevronOpen {
+  flex: none;
+  color: var(--dsw-alias-label-tertiary);
+}
+
+.chevronOpen {
+  transform: rotate(180deg);
+}
+
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  padding: 12px 4px;
+  border-bottom: 0.5px solid var(--dsw-alias-border-l2);
+}
+
+.row:last-child {
+  border-bottom: 0;
+}
+
+.rowHead {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.rowTitle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 24px;
+}
+
+/* The status in words, so colour is never the only signal. */
+.status {
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  font-weight: 400;
+}
+
+.row:not([data-status='green']) .status {
+  color: var(--overview-state);
+}
+
+.sentence {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.fresh {
+  margin: 2px 0 0;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.explain {
+  margin: 8px 0 0 36px;
+}
+
+.fields {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+}
+
+.field dt {
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.field dd {
+  margin: 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+/* The fixing action: the alert style's tinted text button (A630), on upstream's tokens so the stock look keeps it. */
+.action {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  margin-top: 8px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--dsw-radius-sm);
+  background: color-mix(in oklab, var(--dsw-alias-link) 10%, transparent);
+  color: var(--dsw-alias-link);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+:global(body[data-ds-dark-theme]) .action {
+  background: color-mix(in oklab, var(--dsw-alias-link) 14%, transparent);
+}
+
+@media (hover: hover) {
+  .action:hover {
+    background: color-mix(in oklab, var(--dsw-alias-link) 16%, transparent);
+  }
+}
+
+.action:focus-visible {
+  outline: var(--dsw-focus-ring-width, 2px) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
+  outline-offset: 2px;
+}
+
+.breakdown {
+  margin: 10px 0 0 36px;
+}
+
+.subhead {
+  margin: 10px 0 2px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.line {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.list {
+  margin: 0;
+  padding-inline-start: 18px;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 13px;
+  line-height: 20px;
+  overflow-wrap: anywhere;
+}
+
+.note {
+  margin: 0;
+  color: var(--dsw-alias-label-secondary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.error {
+  margin: 0;
+  color: var(--dsw-alias-state-error-primary);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+.link {
+  color: var(--dsw-alias-brand-primary);
+}
+
+@media (width <= 480px) {
+  .explain,
+  .breakdown {
+    margin-inline-start: 0;
+  }
+}

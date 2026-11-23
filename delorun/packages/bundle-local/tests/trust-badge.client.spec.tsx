@@ -8,18 +8,40 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { Context } from '@deepseek-ai/cordis'
+import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { LocaleRuntime } from '@deepseek-ai/dsh-client-locale/client'
 import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { SlotRegistry } from '@deepseek-ai/dsh-client-ui-renderer/client'
 import { applyTrustBadge, TRUST_BADGE, TRUST_NS } from '../src/client/index.ts'
-import { fetchTrustBill, postTrustCheck, TrustStore, type TrustApi, type TrustCheckOutcome } from '../src/client/trust-api.ts'
-import { TRUST_BILL_PATH, TRUST_BILL_SCHEMA, TRUST_CHECK_PATH, type TrustBill, type TrustPlugin } from '../src/client/trust-bill.ts'
+import { NO_HOST_FACTS, OverviewStore, type OverviewHostFacts } from '../src/client/security-overview-api.ts'
+import type { OverviewAction } from '../src/client/security-overview.ts'
+import { OVERVIEW_VIEW_KEY } from '../src/client/SecurityOverview.tsx'
+import {
+  fetchTrustBill, fetchTrustSnapshot, postTrustCheck, TRUST_POLL_IDLE_MS, TRUST_POLL_RUNNING_MS, TRUST_POLL_WAITING_MS, trustPollDelay, TrustStore,
+  type TrustApi, type TrustCheckOutcome,
+} from '../src/client/trust-api.ts'
+import { TRUST_BILL_PATH, TRUST_BILL_SCHEMA, TRUST_CHECK_PATH, type TrustBill, type TrustChecks, type TrustPlugin } from '../src/client/trust-bill.ts'
 import { TrustBadge, VERIFY_COMMAND, type TrustBadgeInjected } from '../src/client/TrustBadge.tsx'
 import { en, zh } from '../src/client/trust-locales.ts'
 
 afterEach(() => {
   cleanup()
+  localStorage.clear()
+  vi.useRealTimers()
 })
+
+/** The facts of a studio whose every protection is on. */
+const PROTECTED: OverviewHostFacts = {
+  ...NO_HOST_FACTS,
+  run: { prompts: 'safer', dangerous: 'off', reach: { on: false } },
+  everywhere: { on: false },
+  workspaces: [],
+  protection: 'on',
+  devices: [],
+  pin: { on: false },
+  mcpWaiting: 0,
+  agentLevels: [],
+}
 
 /** A bill in which every row is verified and the person has no changes. */
 function verifiedBill(): TrustBill {
@@ -123,10 +145,10 @@ const CASES: readonly { readonly name: string, readonly bill: TrustBill | null, 
  * @param check - what a check answers.
  * @returns the API and its calls.
  */
-function api(bill: TrustBill | null, check: () => Promise<TrustCheckOutcome> = async () => ({ kind: 'checked', bill: verifiedBill() })) {
+function api(bill: TrustBill | null, check: () => Promise<TrustCheckOutcome> = async () => ({ kind: 'checked', bill: verifiedBill(), checks: null })) {
   const calls = { read: 0, check: 0 }
   const value: TrustApi = {
-    read: async () => { calls.read++; return bill },
+    read: async () => { calls.read++; return { bill, checks: null } },
     check: () => { calls.check++; return check() },
   }
   return { api: value, calls }
@@ -141,11 +163,24 @@ function api(bill: TrustBill | null, check: () => Promise<TrustCheckOutcome> = a
  * @param dictionary - the copy.
  * @returns the render.
  */
-function renderBadge(store: TrustStore, options: { readonly wide?: boolean, readonly remote?: boolean } = {}, dictionary: Record<string, string> = en) {
-  const face: TrustBadgeInjected = { hooks: { bill: store.bill, checking: store.checking }, check: options.remote === true ? null : () => { void store.check() } }
+function renderBadge(
+  store: TrustStore,
+  options: { readonly wide?: boolean, readonly remote?: boolean, readonly facts?: OverviewHostFacts, readonly act?: (action: OverviewAction) => Promise<boolean> } = {},
+  dictionary: Record<string, string> = en,
+) {
+  const facts = createSnapshotStore<OverviewHostFacts>(options.facts ?? PROTECTED)
+  const loaded = createSnapshotStore(true)
+  const face: TrustBadgeInjected = {
+    hooks: { bill: store.bill, checks: store.checks, checking: store.checking, overview: facts, overviewLoaded: loaded },
+    check: options.remote === true ? null : () => { void store.check() },
+    watchOverview: () => () => {},
+    act: options.act ?? (async () => true),
+  }
   return render(
     <TrustBadge wide={options.wide ?? true} t={makeTranslate(dictionary)} useBill={bindSnapshotSelector(face.hooks.bill)}
-      useChecking={bindSnapshotSelector(face.hooks.checking)} check={face.check} />,
+      useChecks={bindSnapshotSelector(face.hooks.checks)} useChecking={bindSnapshotSelector(face.hooks.checking)}
+      useOverview={bindSnapshotSelector(face.hooks.overview)} useOverviewLoaded={bindSnapshotSelector(face.hooks.overviewLoaded)}
+      check={face.check} watchOverview={face.watchOverview} act={face.act} />,
   )
 }
 
@@ -168,7 +203,17 @@ function storeOf(bill: TrustBill | null, check?: () => Promise<TrustCheckOutcome
  */
 function openPanel(): HTMLElement {
   fireEvent.click(screen.getByRole('button', { name: /^Trust: / }))
-  return screen.getByRole('dialog', { name: en['panel.title'] })
+  return screen.getByRole('dialog', { name: en['overview.title'] })
+}
+
+/**
+ * Open the panel in the advanced view, which shows the trust bill's four rows under this copy of Delorun.
+ * @returns the dialog.
+ */
+function openAdvanced(): HTMLElement {
+  const dialog = openPanel()
+  fireEvent.click(within(dialog).getByRole('tab', { name: en['overview.view.advanced'] }))
+  return dialog
 }
 
 describe('the badge', () => {
@@ -233,7 +278,7 @@ describe('the badge', () => {
 describe('the panel', () => {
   it('names the four rows, discloses each one\'s details and states the checks\' limit', () => {
     renderBadge(storeOf(verifiedBill()).store)
-    const dialog = openPanel()
+    const dialog = openAdvanced()
     const rows = within(dialog).getAllByRole('button', { expanded: false }).filter(button => button.getAttribute('aria-controls') !== null)
     expect(rows.map(row => row.textContent)).toEqual([
       'Signed releaseVerified', 'Release logVerified', 'PluginsVerified', 'Your changesVerified',
@@ -258,7 +303,7 @@ describe('the panel', () => {
   it('shows the plugins with their source, install match, warnings and critical advisories', () => {
     const bill = billWith(value => ({ ...value, plugins: { status: 'known', entries: [plugin({ match: 'mismatch', warnings: ['a lifecycle script ran'], criticalAdvisories: ['GHSA-1234'] })] } }))
     renderBadge(storeOf(bill).store)
-    const dialog = openPanel()
+    const dialog = openAdvanced()
     fireEvent.click(within(dialog).getByRole('button', { name: /^Plugins/ }))
     for (const text of ['@acme/delorun-plugin', 'npm registry', 'Differs from its install', 'a lifecycle script ran', 'GHSA-1234']) {
       expect(within(dialog).getByText(text)).toBeTruthy()
@@ -268,7 +313,7 @@ describe('the panel', () => {
   it('shows the person\'s changes as a neutral count, not as a warning', () => {
     const bill = billWith(value => ({ ...value, changes: { ...value.changes, harnessEdits: [{ file: 'packages/core/agent/src/a.ts' }], notReviewed: 4 } }))
     renderBadge(storeOf(bill).store)
-    const dialog = openPanel()
+    const dialog = openAdvanced()
     const row = within(dialog).getByRole('button', { name: /^Your changes/ })
     expect(row.textContent).toBe('Your changesWaiting for your review · 5 of your changes')
     expect(row.closest('li')?.getAttribute('data-tone')).toBe('neutral')
@@ -299,8 +344,8 @@ describe('Check now', () => {
     expect(calls.check).toBe(1)
     expect(within(dialog).getByRole('status').textContent).toBe(en['check.progress.studio'])
     expect(within(dialog).getByText(/^\d+ s$/)).toBeTruthy()
-    await act(async () => { finish({ kind: 'checked', bill: { ...verifiedBill(), stage: 'verify', checkedBy: { via: 'launcher', seconds: 21.4 } } }) })
-    expect(within(dialog).getByText(/^From a full check/)).toBeTruthy()
+    await act(async () => { finish({ kind: 'checked', bill: { ...verifiedBill(), stage: 'verify', checkedBy: { via: 'launcher', seconds: 21.4 } }, checks: null }) })
+    expect(within(dialog).getByText(en['overview.copy.verified'].replace('{version}', '0.1.0'))).toBeTruthy()
     expect(within(dialog).getByText(en['checked.launcher'].replace('{seconds}', '21.4'))).toBeTruthy()
     expect(within(dialog).queryByText(en['check.progress.studio'])).toBeNull()
     expect(screen.getByRole('button', { name: 'Trust: Verified' })).toBeTruthy()
@@ -315,7 +360,7 @@ describe('Check now', () => {
   })
 
   it.each(['no-launcher', 'launcher-unresolvable'] as const)('says a check run inside the studio, because of %s, ran code that was not hashed first', async (reason) => {
-    const { store } = storeOf(verifiedBill(), async () => ({ kind: 'checked', bill: { ...verifiedBill(), stage: 'verify', checkedBy: { via: 'host', reason, seconds: 9 } } }))
+    const { store } = storeOf(verifiedBill(), async () => ({ kind: 'checked', bill: { ...verifiedBill(), stage: 'verify', checkedBy: { via: 'host', reason, seconds: 9 } }, checks: null }))
     renderBadge(store)
     const dialog = openPanel()
     await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: 'Check now' })) })
@@ -329,7 +374,7 @@ describe('Check now', () => {
     await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: 'Check now' })) })
     expect(within(dialog).getByRole('alert').textContent).toBe(en['check.failed'])
     expect(within(dialog).getByRole('button', { name: 'Check now' }).getAttribute('aria-describedby')).not.toBeNull()
-    expect(within(dialog).getByText(/^From a full check/)).toBeTruthy()
+    expect(within(dialog).getByText(en['overview.copy.verified'].replace('{version}', '0.1.0'))).toBeTruthy()
   })
 
   it('reports the Host\'s refusal in place', async () => {
@@ -387,7 +432,7 @@ describe('the wire', () => {
 
   it('posts a JSON check and reads its outcome', async () => {
     const fetch = answering(json({ bill: verifiedBill() }))
-    await expect(postTrustCheck(fetch)).resolves.toEqual({ kind: 'checked', bill: verifiedBill() })
+    await expect(postTrustCheck(fetch)).resolves.toEqual({ kind: 'checked', bill: verifiedBill(), checks: null })
     expect(fetch.mock.calls[0]).toEqual([TRUST_CHECK_PATH.slice(1), expect.objectContaining({ method: 'POST', body: '{}', headers: expect.objectContaining({ 'content-type': 'application/json' }) })])
     await expect(postTrustCheck(answering(new Response('forbidden', { status: 403 })))).resolves.toEqual({ kind: 'refused' })
     await expect(postTrustCheck(answering(json({ error: 'TRUST_CHECK_FAILED', message: 'x' }, 500)))).resolves.toEqual({ kind: 'failed' })
@@ -424,7 +469,8 @@ describe('the registration', () => {
       if (remote) ctx.provide('connection', { remoteMedia: 'placeholder' } as never)
       try {
         const { api: value } = api(verifiedBill())
-        await ctx.plugin({ inject: ['slots', 'locale'], apply: (scope: Context) => { applyTrustBadge(scope, value) } }).await()
+        const fetch = async (): Promise<Response> => new Response('not found', { status: 404 })
+        await ctx.plugin({ inject: ['slots', 'locale'], apply: (scope: Context) => { applyTrustBadge(scope, value, new OverviewStore(fetch), fetch) } }).await()
         const [entry] = ctx.get('slots')?.entries('sidebar.footer.action') ?? []
         expect(entry?.options).toMatchObject({ id: TRUST_BADGE.id, order: TRUST_BADGE.order })
         const face = entry?.inject?.()
@@ -434,5 +480,220 @@ describe('the registration', () => {
         await ctx.fiber.dispose()
       }
     }
+  })
+})
+
+/** A start bill whose start check hashed only part of the release, with Check now through the launcher. */
+function startBill(): TrustBill {
+  const { checkedBy: _verifyRoute, ...bill } = billWith(value => ({ ...value, stage: 'start', checkNow: { via: 'launcher' } }))
+  return bill
+}
+
+/**
+ * Freshness with one background full check state.
+ * @param full - the background full check.
+ * @param release - the release row's freshness.
+ * @returns the freshness.
+ */
+function checksWith(full: TrustChecks['release']['full'], release: { readonly at: string | null, readonly running: boolean } = { at: '2026-11-11T09:59:00Z', running: false }): TrustChecks {
+  return {
+    release: { ...release, full },
+    releaseLog: { at: '2026-11-11T09:00:00Z', running: release.running },
+    plugins: { at: '2026-11-11T09:59:30Z', running: release.running },
+    changes: { at: '2026-11-11T09:59:30Z', running: release.running },
+  }
+}
+
+/**
+ * A store holding a bill and its freshness.
+ * @param bill - the bill.
+ * @param checks - the freshness.
+ * @returns the store.
+ */
+function storeWith(bill: TrustBill, checks: TrustChecks | null) {
+  const made = storeOf(bill)
+  made.store.checks.set(checks)
+  return made
+}
+
+describe('the release row\'s states', () => {
+  it('reads "Signature verified · checking files" while the background full check waits, and says what comes next', () => {
+    renderBadge(storeWith(startBill(), checksWith({ state: 'waiting' })).store)
+    expect(screen.getByRole('button', { name: 'Trust: Checking files' }).getAttribute('data-tone')).toBe('neutral')
+    const dialog = openAdvanced()
+    expect(within(dialog).getByRole('button', { name: /^Signed release/ }).textContent).toBe('Signed releaseSignature verified · checking files')
+    expect(within(dialog).getByText(en['full.waiting'])).toBeTruthy()
+  })
+
+  it('says it is hashing while the background full check runs', () => {
+    renderBadge(storeWith(startBill(), checksWith({ state: 'running' }, { at: '2026-11-11T09:59:00Z', running: true })).store)
+    const dialog = openAdvanced()
+    expect(within(dialog).getByText(en['full.running'])).toBeTruthy()
+    expect(within(dialog).getAllByText(en['fresh.checking']).length).toBeGreaterThan(0)
+  })
+
+  it.each([
+    [{ state: 'unavailable', reason: 'no-launcher' }, en['full.reason.no-launcher']],
+    [{ state: 'unavailable', reason: 'launcher-unresolvable' }, en['full.reason.launcher-unresolvable']],
+    [{ state: 'unavailable', reason: 'off' }, en['full.reason.off']],
+    [{ state: 'unavailable', reason: 'failed', detail: 'stopped after 600 s' }, en['full.reason.failed'].replace('{detail}', 'stopped after 600 s')],
+  ] as const)('stays "Checked at start" with the honest reason when the full check cannot run (%o)', (full, reason) => {
+    renderBadge(storeWith(startBill(), checksWith(full)).store)
+    const dialog = openAdvanced()
+    expect(within(dialog).getByRole('button', { name: /^Signed release/ }).textContent).toBe('Signed releaseChecked at start')
+    expect(within(dialog).getByText(reason)).toBeTruthy()
+  })
+
+  it('reads "Verified" once a full check passed', () => {
+    renderBadge(storeWith(verifiedBill(), checksWith({ state: 'done' })).store)
+    expect(screen.getByRole('button', { name: 'Trust: Verified' })).toBeTruthy()
+  })
+
+  it('keeps a check run inside the studio short of Verified, with its reason', async () => {
+    const hosted = billWith(bill => ({ ...bill, checkedBy: { via: 'host', reason: 'no-launcher', seconds: 4 } }))
+    renderBadge(storeWith(hosted, checksWith({ state: 'unavailable', reason: 'no-launcher' })).store)
+    expect(screen.getByRole('button', { name: 'Trust: Checked in the studio' })).toBeTruthy()
+    const dialog = openAdvanced()
+    expect(within(dialog).getByText(en['checked.host.no-launcher'].replace('{seconds}', '4.0'))).toBeTruthy()
+  })
+})
+
+describe('freshness', () => {
+  it('says how long ago each check ran, live, with the exact time on hover', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'], now: Date.parse('2026-11-11T10:02:10Z') })
+    renderBadge(storeWith(verifiedBill(), checksWith({ state: 'done' }, { at: '2026-11-11T09:59:00Z', running: false })).store)
+    const dialog = openAdvanced()
+    const line = within(dialog).getAllByText('Checked 3 minutes ago')[0]
+    expect(line?.tagName).toBe('TIME')
+    expect(line?.getAttribute('dateTime')).toBe('2026-11-11T09:59:00Z')
+    expect(line?.getAttribute('title')).toBe(new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date('2026-11-11T09:59:00Z')))
+    await act(async () => { vi.advanceTimersByTime(60_000) })
+    expect(within(dialog).getAllByText('Checked 4 minutes ago').length).toBeGreaterThan(0)
+  })
+
+  it('reads "Checked just now" under a minute and "Not checked yet" before any check', () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'], now: Date.parse('2026-11-11T09:59:20Z') })
+    const checks = { ...checksWith({ state: 'done' }), releaseLog: { at: null, running: false } }
+    renderBadge(storeWith(verifiedBill(), checks).store)
+    const dialog = openAdvanced()
+    expect(within(dialog).getAllByText(en['fresh.justNow']).length).toBeGreaterThan(0)
+    expect(within(dialog).getByText(en['fresh.never'])).toBeTruthy()
+  })
+})
+
+describe('the overview', () => {
+  it('shows one calm line when every row is green, with the rows folded', () => {
+    renderBadge(storeWith(verifiedBill(), checksWith({ state: 'done' })).store)
+    const dialog = openPanel()
+    expect(within(dialog).getByText(en['overview.headline.green'])).toBeTruthy()
+    expect(within(dialog).queryByText(en['overview.headline.green.detail'])).toBeNull()
+    const disclosure = within(dialog).getByRole('button', { name: new RegExp(en['overview.list.show']) })
+    const list = within(dialog).getByText(en['overview.row.agent']).closest('ul')
+    expect({ hidden: list?.hidden, expanded: disclosure.getAttribute('aria-expanded') }).toEqual({ hidden: true, expanded: 'false' })
+    fireEvent.click(disclosure)
+    expect({ hidden: list?.hidden, expanded: disclosure.getAttribute('aria-expanded') }).toEqual({ hidden: false, expanded: 'true' })
+    for (const row of ['agent', 'undo', 'reach', 'addons', 'copy'] as const) expect(within(dialog).getByText(en[`overview.row.${row}`])).toBeTruthy()
+    expect(within(dialog).getByText(en['overview.addons.reviewed'].replace('{count}', '2'))).toBeTruthy()
+  })
+
+  it('opens a row that is not green with what it means, why, whether it was chosen, and its fix', async () => {
+    const act$ = vi.fn(async (_action: OverviewAction) => true)
+    renderBadge(storeWith(verifiedBill(), checksWith({ state: 'done' })).store, { facts: { ...PROTECTED, protection: 'off' }, act: act$ })
+    const dialog = openPanel()
+    expect(within(dialog).getByText(en['overview.headline.red'])).toBeTruthy()
+    const row = within(dialog).getByText(en['overview.row.undo']).closest('li')
+    expect(row?.getAttribute('data-status')).toBe('red')
+    expect(row?.textContent).toContain(en['overview.status.red'])
+    expect(row?.textContent).toContain(en['overview.undo.off.meaning'])
+    expect(row?.textContent).toContain(en['overview.kind.choice'])
+    await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: en['overview.undo.off.action'] })) })
+    expect(act$).toHaveBeenCalledWith({ kind: 'protection-on' })
+    expect(within(dialog).getByText(en['overview.row.agent'])).toBeTruthy()
+  })
+
+  it('says so in place when turning change protection on fails', async () => {
+    renderBadge(storeWith(verifiedBill(), null).store, { facts: { ...PROTECTED, protection: 'off' }, act: async () => false })
+    const dialog = openPanel()
+    await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: en['overview.undo.off.action'] })) })
+    expect(within(dialog).getByRole('alert').textContent).toBe(en['overview.protectionFailed'])
+  })
+
+  it('closes and opens the settings section for a row whose fix lives there', async () => {
+    const act$ = vi.fn(async (_action: OverviewAction) => true)
+    const facts: OverviewHostFacts = { ...PROTECTED, run: { prompts: 'safer', dangerous: 'off', reach: { on: true } }, devices: [{ id: 'p', label: 'Phone', approvedAt: Date.now(), lastSignInAt: Date.now() }] }
+    renderBadge(storeWith(verifiedBill(), null).store, { facts, act: act$ })
+    const dialog = openPanel()
+    expect(within(dialog).getByText(en['overview.headline.chosen'])).toBeTruthy()
+    await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: en['overview.reach.phone.action'] })) })
+    expect(act$).toHaveBeenCalledWith({ kind: 'open-section', section: 'delorun-devices' })
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('runs the full check from this copy\'s row when it could not check every file', () => {
+    const { store, calls } = storeWith(startBill(), checksWith({ state: 'unavailable', reason: 'failed', detail: 'stopped' }))
+    renderBadge(store)
+    const dialog = openPanel()
+    expect(within(dialog).getByText(en['overview.headline.look'])).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: en['overview.copy.not-full.action'] }))
+    expect(calls.check).toBe(1)
+  })
+
+  it('never reads a fact it could not read as protected', () => {
+    renderBadge(storeWith(verifiedBill(), null).store, { facts: NO_HOST_FACTS })
+    const dialog = openPanel()
+    expect(within(dialog).getByText(en['overview.headline.look'])).toBeTruthy()
+    expect(within(dialog).getByText(en['overview.undo.unread'])).toBeTruthy()
+  })
+
+  it('remembers the advanced view, which breaks every row down', () => {
+    const { unmount } = renderBadge(storeWith(verifiedBill(), null).store)
+    const dialog = openAdvanced()
+    expect(localStorage.getItem(OVERVIEW_VIEW_KEY)).toBe('advanced')
+    expect(within(dialog).getByText(en['overview.undo.checked'])).toBeTruthy()
+    expect(within(dialog).getByText(en['overview.states'])).toBeTruthy()
+    unmount()
+    renderBadge(storeWith(verifiedBill(), null).store)
+    const again = openPanel()
+    expect(within(again).getByRole('tab', { name: en['overview.view.advanced'] }).getAttribute('aria-selected')).toBe('true')
+  })
+
+  it('reads in Chinese', () => {
+    renderBadge(storeWith(verifiedBill(), checksWith({ state: 'done' })).store, {}, zh)
+    fireEvent.click(screen.getByRole('button', { name: /^可信状态：/ }))
+    const dialog = screen.getByRole('dialog', { name: zh['overview.title'] })
+    expect(within(dialog).getByText(zh['overview.headline.green'])).toBeTruthy()
+  })
+})
+
+describe('polling', () => {
+  it('reads every 3 s while a check runs, every 15 s while the full check waits, and every 60 s otherwise', () => {
+    expect(trustPollDelay(null)).toBe(TRUST_POLL_IDLE_MS)
+    expect(trustPollDelay(checksWith({ state: 'waiting' }))).toBe(TRUST_POLL_WAITING_MS)
+    expect(trustPollDelay(checksWith({ state: 'running' }, { at: null, running: true }))).toBe(TRUST_POLL_RUNNING_MS)
+    expect(trustPollDelay(checksWith({ state: 'done' }))).toBe(TRUST_POLL_IDLE_MS)
+    expect([TRUST_POLL_RUNNING_MS, TRUST_POLL_WAITING_MS, TRUST_POLL_IDLE_MS]).toEqual([3_000, 15_000, 60_000])
+  })
+
+  it('reads the freshness beside the bill, and reads again on its timer', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    const checks = checksWith({ state: 'waiting' })
+    let reads = 0
+    const store = new TrustStore({ read: async () => { reads++; return { bill: startBill(), checks } }, check: async () => ({ kind: 'failed' }) })
+    const stop = store.start(() => () => {})
+    await vi.advanceTimersByTimeAsync(0)
+    expect(store.checks.getSnapshot()).toEqual(checks)
+    expect(reads).toBe(1)
+    await vi.advanceTimersByTimeAsync(TRUST_POLL_WAITING_MS)
+    expect(reads).toBe(2)
+    stop()
+    await vi.advanceTimersByTimeAsync(TRUST_POLL_IDLE_MS)
+    expect(reads).toBe(2)
+  })
+
+  it('parses the freshness on the wire, and reads none from a Host that sends none', async () => {
+    const checks = checksWith({ state: 'unavailable', reason: 'failed', detail: 'x' })
+    const answer = (body: object) => async (): Promise<Response> => new Response(JSON.stringify(body), { status: 200 })
+    await expect(fetchTrustSnapshot(answer({ bill: verifiedBill(), checks }), new AbortController().signal)).resolves.toEqual({ bill: verifiedBill(), checks })
+    await expect(fetchTrustSnapshot(answer({ bill: verifiedBill() }), new AbortController().signal)).resolves.toEqual({ bill: verifiedBill(), checks: null })
   })
 })

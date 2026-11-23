@@ -22,6 +22,7 @@ const STATE_WORDS: Readonly<Record<TrustState, string>> = {
   'verified': 'verified',
   'checked-at-start': 'checked at start only',
   'checked-in-studio': 'checked inside the studio only',
+  'checking': 'signature verified, checking files',
   'waiting': 'waiting for your review',
   'attention': 'needs attention',
   'failed': 'failed',
