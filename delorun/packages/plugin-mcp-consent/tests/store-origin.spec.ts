@@ -1,7 +1,7 @@
 /**
  * Specs of the acceptance store's origins: a version-7 acceptance keeps the origin it was accepted for, a version-6
  * store is read forward with no origin and rewritten as version 7, an invalid origin refuses the store, and an
- * acceptance covers a server of its own origin, or of any origin when it holds none.
+ * acceptance covers a server of its own origin only, one with none counting as the unknown origin's.
  */
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -145,8 +145,9 @@ describe('acceptanceCovers', () => {
   const absent: ServerAcceptance = acceptanceOfStart(START, 1)
   const packed: ServerAcceptance = acceptanceOfStart(START, 1, 'pack:x')
 
-  it('covers a server of any origin when the acceptance holds none', () => {
-    for (const origin of ['profile', 'settings', 'chat', 'unknown', 'pack:x', 'plugin:x']) expect(acceptanceCovers(absent, origin)).toBe(true)
+  it('counts an acceptance from a version-6 store, which holds no origin, as the unknown origin\'s only', () => {
+    expect(acceptanceCovers(absent, 'unknown')).toBe(true)
+    for (const origin of ['profile', 'settings', 'chat', 'pack:x', 'plugin:x']) expect(acceptanceCovers(absent, origin), origin).toBe(false)
   })
 
   it('covers only the origin the acceptance holds', () => {

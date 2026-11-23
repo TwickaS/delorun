@@ -22,8 +22,9 @@
  * holding its lock file ({@link withAcceptanceStoreLock}), because the store is
  * shared by every profile of the home. A store of version 6, which recorded no
  * origins, is read forward: its acceptances and set-aside starts are kept, each
- * acceptance with no origin, which counts for its server name from any origin
- * until the person accepts it again, and the next write is version 7. A store of any other
+ * acceptance with no origin, which counts as an acceptance for the `unknown`
+ * origin only, so a server that asks is asked about once more, and the next
+ * write is version 7. A store of any other
  * version, or of another format, is refused as a whole: no acceptance in it
  * counts, nothing is written into it, and the refusal asks the person to remove
  * the file and accept the servers again.
@@ -58,6 +59,9 @@ export const ACCEPTANCE_ORIGIN_PATTERN = /^(profile|settings|chat|unknown|(pack|
 
 /** The longest origin an acceptance may hold, in characters. */
 export const ACCEPTANCE_ORIGIN_MAX_LENGTH = 300
+
+/** The origin key an acceptance recorded before origins were kept counts for ({@link acceptanceCovers}). */
+const UNKNOWN_ORIGIN_KEY = 'unknown'
 
 /** Directory of the acceptance store under the home's `secrets/` directory. */
 export const ACCEPTANCE_STORE_DIR = 'mcp-add-consent'
@@ -240,11 +244,11 @@ export function acceptanceOfStart(start: ServerStart, acceptedAt: number, origin
  * Whether an acceptance counts for a server of an origin.
  * @param acceptance - the server name's acceptance.
  * @param origin - the `originKey` of the origin of the server under review.
- * @returns true when the acceptance holds no origin (it was recorded before origins were kept, so it counts for its
- *   server name from any origin until the person accepts it again) or holds exactly this one.
+ * @returns true when the acceptance holds exactly this origin. One with no origin was recorded before origins were kept
+ *   and counts as `unknown`'s, so a server of any known origin that asks is asked about once more.
  */
 export function acceptanceCovers(acceptance: ServerAcceptance, origin: string): boolean {
-  return acceptance.origin === undefined || acceptance.origin === origin
+  return (acceptance.origin ?? UNKNOWN_ORIGIN_KEY) === origin
 }
 
 /** The part of a start that differs from its server's acceptance. */

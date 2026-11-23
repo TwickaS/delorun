@@ -12,6 +12,7 @@
   "references": [
     { "path": "../../../vendor/cordis" },
     { "path": "../../../vendor/loader" },
+    { "path": "../../../packages/boot/app-boot" },
     { "path": "../../../packages/client/connection/tsconfig.host.json" },
     { "path": "../../../packages/mcp/mcp-client" },
     { "path": "../../../packages/mcp/mcp-manager" },

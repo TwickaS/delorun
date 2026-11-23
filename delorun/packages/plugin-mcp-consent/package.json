@@ -8,6 +8,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./store": "./src/store.ts",
+    "./layers": "./src/layers.ts",
     "./review": "./src/review.ts",
     "./wire": "./src/wire.ts",
     "./locale/*.json": "./locale/*.json"
@@ -21,6 +22,7 @@
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:~",
     "@deepseek-ai/cordis-plugin-loader": "workspace:~",
+    "@deepseek-ai/dsh-app-boot": "workspace:*",
     "@deepseek-ai/dsh-client-connection": "workspace:*",
     "@deepseek-ai/dsh-mcp-client": "workspace:*",
     "@deepseek-ai/dsh-mcp-manager": "workspace:*",
@@ -30,6 +32,7 @@
   "devDependencies": {
     "@deepseek-ai/cordis": "workspace:~",
     "@deepseek-ai/cordis-plugin-loader": "workspace:~",
+    "@deepseek-ai/dsh-app-boot": "workspace:*",
     "@deepseek-ai/dsh-client-connection": "workspace:*",
     "@deepseek-ai/dsh-mcp-client": "workspace:*",
     "@deepseek-ai/dsh-mcp-manager": "workspace:*",

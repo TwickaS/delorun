@@ -42,7 +42,7 @@ import { setTimeout as sleep } from 'node:timers/promises'
 import type { Context, Fiber } from '@deepseek-ai/cordis'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import type { ResolvedProfileRuntime, RunProfileOptions } from '@deepseek-ai/dsh/profile-boot'
-import { assertDelorunInvariants, composeDelorunProfile, type ApprovedPluginContent, type ServiceProvider } from './compose.ts'
+import { assertDelorunInvariants, composeDelorunProfile, packLayersOf, type ApprovedPluginContent, type ServiceProvider } from './compose.ts'
 import { DELORUN_START_CHECK_ENV, HEADLESS_PROFILE, HOME_STATUS_TIMEOUT_MS, type RuntimeVersion } from '@delorun/contract-home-layout'
 import type { ReachConfigRows } from '@delorun/contract-reach-providers'
 import { START_WAIT_MS, type ChangesReloadOutcome } from '@delorun/contract-home-process'
@@ -62,6 +62,8 @@ import { checkRunningRuntime, handOffToComposedTree, handsOff, harnessContextOf,
 import { provideChangesHarness } from './changes/harness-service.ts'
 import { provideChangesRestart, restartSupport, type RunningHolder } from './changes/restart-service.ts'
 import { provideUpdateChannel } from './update/channel-service.ts'
+import { providePackLayers } from './pack-layers-service.ts'
+import type { DelorunPackLayers } from '@delorun/plugin-mcp-consent'
 import { relaunchForeground, retryDetached, retryForeground, retryHandOff, startRetry, type DetachedOutcome, type ForegroundRelaunch, type StartRetry } from './changes/retry.ts'
 import { CliError, EXIT } from './exit.ts'
 import { parseOptions, prepareHome, type CliCommand, type CommandOutput, type CommandResult } from './command.ts'
@@ -747,15 +749,19 @@ export async function settleSecrets(booted: Pick<BootedProfile, 'settleSecretVal
  * @param restart - the home process's restart and what this Host boots with, which the studio's Restart route uses;
  *   undefined, or a control of undefined, outside the runtime store; `channel` is the home process's update channel,
  *   which the studio's update routes use.
+ * @param packLayers - the composition's judgement of the profile's bundle layers, which the MCP consent reads at each
+ *   review ([pack layers](./pack-layers-service.ts)); undefined provides none, and then no bundle counts as a pack's or
+ *   Delorun's own.
  * @returns the booted profile.
  */
-export function runHost(dependencies: Pick<StartDependencies, 'loadEnvironment' | 'runProfile'>, homeLog: HomeLog, options: Omit<RunProfileOptions, 'environment' | 'prepare'>, harness?: HarnessContext, restart?: { readonly control: RestartControl | undefined, readonly running: RunningComposition, readonly channel?: UpdateChannelAccess }): Promise<BootedProfile> {
+export function runHost(dependencies: Pick<StartDependencies, 'loadEnvironment' | 'runProfile'>, homeLog: HomeLog, options: Omit<RunProfileOptions, 'environment' | 'prepare'>, harness?: HarnessContext, restart?: { readonly control: RestartControl | undefined, readonly running: RunningComposition, readonly channel?: UpdateChannelAccess }, packLayers?: DelorunPackLayers): Promise<BootedProfile> {
   const environment = dependencies.loadEnvironment()
   // The `.env` layers apply their names to this process's environment, so the secret-named values they add are read from it.
   registerEnvironment(process.env, homeLog.redactor)
   return dependencies.runProfile({ ...options, environment, prepare: (root) => {
     attachHomeLogs(root, homeLog)
     provideChangesHarness(root, harness)
+    if (packLayers !== undefined) providePackLayers(root, packLayers)
     if (restart !== undefined) {
       provideChangesRestart(root, restart.control, restart.running)
       provideUpdateChannel(root, restart.control === undefined ? undefined : restart.channel)
@@ -821,7 +827,7 @@ async function bootProfile(request: StartRequest, dependencies: StartDependencie
       patchFiles: composed.patchFiles,
       // The studio opens through the home process's `studio.open-token`, never through upstream's browser handoff.
       args: ['--no-open'],
-    }, harnessContextOf(request.home, dependencies.runtime(request.home), request.env, logger), stored === undefined ? undefined : { control: restart.control, running: restart.running.current, channel: restart.channel })
+    }, harnessContextOf(request.home, dependencies.runtime(request.home), request.env, logger), stored === undefined ? undefined : { control: restart.control, running: restart.running.current, channel: restart.channel }, packLayersOf(composed.request, composed.resolvedProfile.profile.dir, composed.releasePacks))
   } catch (error) {
     await recordChangesBoot({ home: request.home, profile: request.profile, logger }, [], error)
     await removeSandboxOverlay(request.home, request.profile)

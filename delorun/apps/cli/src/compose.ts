@@ -56,6 +56,7 @@ import { readFileSync, realpathSync, rmSync } from 'node:fs'
 import { activeDirectory, readApproved, type ApprovedRecord } from '@delorun/changes'
 import { runDirectory, writeProtectedFile } from '@delorun/home'
 import { COMPUTER_ONLY_ROW_MODULES, protectedPluginsIn } from '@delorun/home-auth'
+import type { DelorunPackLayers } from '@delorun/plugin-mcp-consent'
 import { stringify } from 'yaml'
 import { createRuntimeResolution } from '@deepseek-ai/dsh-app-boot'
 import { homedir } from 'node:os'
@@ -174,6 +175,8 @@ export interface ComposedStart {
   readonly rowPackages: readonly RowPackage[]
   /** The running release's optional plugin pack bundles that load from the release's pack folder or its approved review copy, without the runtime's own bundles; their rows are not required Delorun rows. */
   readonly packBundles: ReadonlySet<string>
+  /** The running release's packs and their folders, without the runtime's own bundles, which {@link packLayersOf} judges layers by. */
+  readonly releasePacks: ReadonlyMap<string, string>
   /** The directory this Delorun's own packages lie in ({@link delorunPackagesRoot}). */
   readonly packagesRoot: string
   /** Whether the npm mirror is on ({@link npmMirrorOf}); the start passes it to the Host as `DELORUN_NPM_MIRROR`. */
@@ -304,6 +307,7 @@ export async function composeDelorunProfile(request: ComposeRequest, dependencie
     prompts,
     rowPackages,
     packBundles,
+    releasePacks,
     packagesRoot: delorunPackagesRoot(),
     npmMirror: npmMirrorOf(layers),
   }
@@ -326,9 +330,36 @@ function realPathOf(path: string): string | undefined {
 }
 
 /**
- * The layers that are packs of the running release by where they load from: the folder the release installs the pack
- * in, reached through any link, or the profile's Changes review copy of the pack whose approved source resolves to that
- * folder. A layer that only carries a pack's name is not a pack.
+ * The test for whether a bundle layer is a pack of the running release by where it loads from: the folder the release
+ * installs the pack in, reached through any link, or the profile's Changes review copy of the pack whose approved source
+ * resolves to that folder. A layer that only carries a pack's name is not a pack. The approved record is read at each
+ * test, so a test after the person applied or discarded a change sees the record as it is then.
+ * @param request - the home and the profile.
+ * @param profileDir - the profile's folder, which holds its approved record.
+ * @param releasePacks - the running release's packs and their folders, without the runtime's own bundles.
+ * @returns the test: true when the layer is a pack.
+ */
+export function packLayerTest(request: Pick<ComposeRequest, 'home' | 'profile'>, profileDir: string, releasePacks: ReadonlyMap<string, string>): (layer: { readonly packageName: string, readonly packageDir: string }) => Promise<boolean> {
+  return async (layer) => {
+    const folder = releasePacks.get(layer.packageName)
+    const pack = folder === undefined ? undefined : realPathOf(folder)
+    const real = realPathOf(layer.packageDir)
+    if (pack === undefined || real === undefined) return false
+    if (real === pack) return true
+    let approved: ApprovedRecord | undefined
+    try {
+      approved = await readApproved(profileDir)
+    } catch (error) {
+      // A record Changes cannot read (`error`) approves no source, so only a layer in a pack's own folder is a pack.
+      approved = undefined
+    }
+    const source = approved?.plugins[layer.packageName]?.source
+    return source !== undefined && realPathOf(source) === pack && real === realPathOf(activeDirectory(request.home, request.profile, layer.packageName))
+  }
+}
+
+/**
+ * The layers that are packs of the running release by where they load from ({@link packLayerTest}).
  * @param request - the home and the profile.
  * @param profile - the loaded profile.
  * @param releasePacks - the running release's packs and their folders, without the runtime's own bundles.
@@ -337,23 +368,30 @@ function realPathOf(path: string): string | undefined {
 async function installedPackBundles(request: ComposeRequest, profile: ResolvedProfileRuntime['profile'], releasePacks: ReadonlyMap<string, string>): Promise<Set<string>> {
   const packs = new Set<string>()
   if (releasePacks.size === 0) return packs
-  let approved: ApprovedRecord | undefined
-  try {
-    approved = await readApproved(profile.dir)
-  } catch (error) {
-    // A record Changes cannot read (`error`) approves no source, so only a layer in a pack's own folder is a pack.
-    approved = undefined
-  }
-  for (const layer of profile.layers) {
-    const folder = releasePacks.get(layer.packageName)
-    const pack = folder === undefined ? undefined : realPathOf(folder)
-    const real = realPathOf(layer.packageDir)
-    if (pack === undefined || real === undefined) continue
-    const source = approved?.plugins[layer.packageName]?.source
-    const reviewCopy = source !== undefined && realPathOf(source) === pack && real === realPathOf(activeDirectory(request.home, request.profile, layer.packageName))
-    if (real === pack || reviewCopy) packs.add(layer.packageName)
-  }
+  const isPack = packLayerTest(request, profile.dir, releasePacks)
+  for (const layer of profile.layers) if (await isPack(layer)) packs.add(layer.packageName)
   return packs
+}
+
+/**
+ * The launcher's judgement of the profile's bundle layers, which `@delorun/plugin-mcp-consent` reads at each review to
+ * tell a pack's or Delorun's own row from a third-party bundle's ([layers](../../../packages/plugin-mcp-consent/src/layers.ts)).
+ * A layer is `runtime` when it is one of the bundles the runtime ships and its profiles require (a bundle name resolves
+ * from the installation first, so a profile package cannot take one's place), `pack` when {@link packLayerTest} says so
+ * now, and `other` otherwise.
+ * @param request - the home and the profile.
+ * @param profileDir - the profile's folder, which holds its approved record.
+ * @param releasePacks - the running release's packs and their folders, without the runtime's own bundles.
+ * @returns the judge.
+ */
+export function packLayersOf(request: Pick<ComposeRequest, 'home' | 'profile'>, profileDir: string, releasePacks: ReadonlyMap<string, string>): DelorunPackLayers {
+  const isPack = packLayerTest(request, profileDir, releasePacks)
+  return {
+    kindOf: async (layer) => {
+      if (RUNTIME_BUNDLES.has(layer.packageName)) return 'runtime'
+      return await isPack(layer) ? 'pack' : 'other'
+    },
+  }
 }
 
 /**

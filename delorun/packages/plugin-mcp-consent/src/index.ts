@@ -59,10 +59,12 @@ import { acceptHint, McpReviewError, pendingReviewOf, showsEnvValue, type McpRev
 import { changedPin, pinsOf, spawnArgsOf, type PinnedStart } from './pins.ts'
 import { chatWritableRoots, writableByChats } from './writable.ts'
 import { asksFor, MCP_ASK_MODES, originKey, type AcceptedServer, type EnvVariable, type McpAskMode, type PendingServer, type PinnedFile, type ServerOrigin } from './wire.ts'
+import { readRowSources } from './layers.ts'
 import { originOf } from './origin.ts'
 import type { ComputerOnlySwitch } from '@delorun/home-auth'
 import { registerMcpConsentRoutes } from './routes.ts'
 
+export { readRowSources, rowsOfPatches, type DelorunPackLayers, type LayerKind, type LayerSource, type RowLayer, type RowSources } from './layers.ts'
 export {
   acceptHint, mcpReviewId, MCP_REVIEW_ID_LENGTH, MCP_REVIEW_ID_PATTERN, McpReviewError, pendingReviewOf, shownEnv, showsEnvValue,
   type McpReviews, type PendingReview, type RefusedStart,
@@ -177,7 +179,8 @@ export class DelorunMcpConsent extends McpAddConsent implements McpReviews {
    *   environment value.
    */
   async review(command: McpServerCommand, client?: Context): Promise<McpConsentDecision> {
-    const origin = client === undefined ? UNKNOWN_ORIGIN : originOf(client, command.serverName, this.ctx.get('mcpManager'))
+    // The row sources are read for each review, so a hot reload that changed the profile's layers counts at once.
+    const origin = client === undefined ? UNKNOWN_ORIGIN : originOf(client, command.serverName, this.ctx.get('mcpManager'), await readRowSources(this.ctx))
     if (!asksFor(origin, this.config.ask)) {
       this.reviews.delete(command.serverName)
       return { allow: true }
