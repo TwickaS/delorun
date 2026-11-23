@@ -103,6 +103,8 @@ export function MosaicHero({ children, next }: { children: ReactNode; next: stri
     const picture = handover.current
     const field = cover.current
     if (root === null || frame === null || picture === null || field === null) return
+    // The layers that fade with the words; they stay in the page for as long as the hero does.
+    const wordLayers = [...frame.querySelectorAll<HTMLElement>('[data-words]')]
     const still = matchMedia('(prefers-reduced-motion: reduce)')
     let pending = 0
     let settle = 0
@@ -110,7 +112,7 @@ export function MosaicHero({ children, next }: { children: ReactNode; next: stri
     let logged = false
     // The wall's and the pinned tile's places with no zoom, in fractional pixels from the stage's corner. Whole-pixel
     // offsets would be multiplied by the zoom and leave the tile and the full copy visibly apart.
-    let rest: { readonly wall: HTMLElement; readonly x: number; readonly y: number; readonly tileX: number; readonly tileY: number; readonly tileW: number; readonly tileH: number; readonly tiles: readonly TilePicture[] } | undefined
+    let rest: { readonly wall: HTMLElement; readonly x: number; readonly y: number; readonly tileX: number; readonly tileY: number; readonly tileW: number; readonly tileH: number; readonly tiles: readonly TilePicture[]; readonly swaps: readonly HTMLElement[] } | undefined
     const measure = (wall: HTMLElement, tile: HTMLElement) => {
       const before = wall.style.transform
       wall.style.transform = 'none'
@@ -119,7 +121,7 @@ export function MosaicHero({ children, next }: { children: ReactNode; next: stri
       const t = tile.getBoundingClientRect()
       wall.style.transform = before
       const tiles = [...wall.querySelectorAll<HTMLElement>('[data-shot]')].map(button => ({ button, left: button.offsetLeft, top: button.offsetTop, width: button.offsetWidth, height: button.offsetHeight }))
-      return { wall, x: w.left - origin.left, y: w.top - origin.top, tileX: t.left - w.left + t.width / 2, tileY: t.top - w.top, tileW: t.width, tileH: t.height, tiles }
+      return { wall, x: w.left - origin.left, y: w.top - origin.top, tileX: t.left - w.left + t.width / 2, tileY: t.top - w.top, tileW: t.width, tileH: t.height, tiles, swaps: [...wall.querySelectorAll<HTMLElement>('[data-swap]')] }
     }
 
     const update = () => {
@@ -191,13 +193,13 @@ export function MosaicHero({ children, next }: { children: ReactNode; next: stri
       // Each value goes on the elements that read it. A custom property set on the stage would be inherited by every tile
       // under it, and the browser would recalculate the style of the whole mosaic on every frame of the zoom.
       const words = String(1 - progress(p, 0.03, 0.2))
-      frame.querySelectorAll<HTMLElement>('[data-words]').forEach(layer => { layer.style.setProperty('--words', words) })
+      for (const layer of wordLayers) layer.style.setProperty('--words', words)
       frame.toggleAttribute('data-zooming', p > 0.02)
       if (p < 0.02) logged = false
       else if (p > 0.12 && !logged) { logged = true; note('zoom → chat') }
       tile.style.setProperty('--lit', String(progress(p, 0.01, 0.08) * (1 - progress(p, 0.14, 0.3))))
       const swap = String(progress(p, 0.12, 0.28))
-      wall.querySelectorAll<HTMLElement>('[data-swap]').forEach(layer => { layer.style.setProperty('--swap', swap) })
+      for (const layer of rest.swaps) layer.style.setProperty('--swap', swap)
       field.style.setProperty('--field-in', String(progress(p, 0.7, 0.84)))
       frame.style.opacity = String(1 - progress(p, 0.9, 0.99))
     }
