@@ -12,7 +12,7 @@ import type { InjectFace, PropsLocale, PropsRenderSlots, PropsRuntime } from '@d
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { Toast } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { RememberScope } from '../config.ts'
-import type { MultiviewService } from '../client/contract.ts'
+import type { AdoptResult, MultiviewService } from '../client/contract.ts'
 import { limitsOf } from '../entry/state.ts'
 import {
   drawnPreset, fitToMinimums, mainShareFromDrag, panesOf, PaneLayout, reconcileLayout, selectPane, slotOrder,
@@ -111,7 +111,17 @@ const ChatMultiview = memo(function ChatMultiview(props: Omit<LayerProps, 'child
   const heldArea = useHeld(area, AREA_SETTLE_MS, busy, sameArea)
   const [focused, setFocused] = useState<PaneId | undefined>(undefined)
   const [active, setActive] = useState<PaneId>(main)
-  const [notice, setNotice] = useState<{ readonly seq: number; readonly scope: RememberScope } | undefined>(undefined)
+  const [notice, setNotice] = useState<{ readonly seq: number; readonly scope: RememberScope; readonly refused: boolean } | undefined>(undefined)
+  // The notice waits for the Host's answer: "Saved…" with Undo once it accepted the default, a refusal notice once it refused.
+  const seq = useRef(0)
+  const announce = useCallback((result: AdoptResult): void => {
+    if (!result.saved) return
+    const mine = ++seq.current
+    void result.written.then((accepted) => {
+      if (seq.current === mine) setNotice({ seq: mine, scope: result.scope, refused: !accepted })
+    })
+  }, [])
+  useEffect(() => () => { seq.current += 1 }, [])
   const references = usePaneReferences(sessions, useMemo(() => [main, ...state.pins], [main, state.pins]))
   const frame: Frame = { SessionProvider, renderSlot, useSessions, useSessionStatus, t, multiview, sessions, openFull, clock, dots, layoutsT, layers }
 
@@ -163,9 +173,8 @@ const ChatMultiview = memo(function ChatMultiview(props: Omit<LayerProps, 'child
       multiview.setMainShare(share)
       return
     }
-    const result = multiview.adoptArrangement(main, model, 'resize')
-    if (result.saved) setNotice(previous => ({ seq: (previous?.seq ?? 0) + 1, scope: result.scope }))
-  }, [multiview, main, state.slots, state.pins, arrangement, heldArea, limits, defaults.autoColumns])
+    announce(multiview.adoptArrangement(main, model, 'resize'))
+  }, [multiview, main, state.slots, state.pins, arrangement, heldArea, limits, defaults.autoColumns, announce])
   const resizeBase = useRef<LayoutModel | undefined>(undefined)
   useEffect(() => {
     if (busy || pendingResize.current === undefined) return
@@ -190,8 +199,7 @@ const ChatMultiview = memo(function ChatMultiview(props: Omit<LayerProps, 'child
         return
       case 'move':
       case 'swap': {
-        const result = multiview.adoptArrangement(main, model, reason)
-        if (result.saved) setNotice(previous => ({ seq: (previous?.seq ?? 0) + 1, scope: result.scope }))
+        announce(multiview.adoptArrangement(main, model, reason))
         return
       }
       default:
@@ -252,16 +260,25 @@ const ChatMultiview = memo(function ChatMultiview(props: Omit<LayerProps, 'child
   return (
     <div ref={root} className={css.root} data-multiview-panel={main}>
       <PhoneSwitch phone={phone} split={<div className={css.layout}>{split}</div>} />
-      {notice !== undefined && (
-        <Toast
-          key={notice.seq}
-          tone="success"
-          holdMs={6000}
-          text={layoutsT(`saved.${notice.scope}`)}
-          actions={[{ label: layoutsT('saved.undo'), prefix: ' · ', onClick: () => { multiview.undoDefault(); setNotice(undefined) } }]}
-          onDone={() => { setNotice(current => (current?.seq === notice.seq ? undefined : current)) }}
-        />
-      )}
+      {notice !== undefined && (notice.refused
+        ? (
+            <Toast
+              key={notice.seq}
+              holdMs={6000}
+              text={layoutsT('saved.refused')}
+              onDone={() => { setNotice(current => (current?.seq === notice.seq ? undefined : current)) }}
+            />
+          )
+        : (
+            <Toast
+              key={notice.seq}
+              tone="success"
+              holdMs={6000}
+              text={layoutsT(`saved.${notice.scope}`)}
+              actions={[{ label: layoutsT('saved.undo'), prefix: ' · ', onClick: () => { multiview.undoDefault(); setNotice(undefined) } }]}
+              onDone={() => { setNotice(current => (current?.seq === notice.seq ? undefined : current)) }}
+            />
+          ))}
     </div>
   )
 })

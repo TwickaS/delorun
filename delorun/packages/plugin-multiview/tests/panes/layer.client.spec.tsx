@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createContext, useContext, useSyncExternalStore, type ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { layoutOf, layoutsEn, leafOf, splitOf } from '../../src/layout/index.ts'
@@ -180,6 +180,21 @@ describe('the multiview layer', () => {
     setup({ waiting: [B], pins: [A, B] })
     expect(screen.queryByRole('status')).toBeNull()
     expect(screen.getAllByRole('tab').map(tab => tab.querySelector('[data-attention-dot]') !== null)).toEqual([false, true])
+  })
+
+  it('says "Saved as your default layout" with Undo once the Host accepts a swap as the default, and a refusal when it refuses', async () => {
+    const accepted = setup()
+    accepted.store.attachHost({ write: async (patch) => { accepted.change(patch); return true } })
+    act(() => { accepted.owners.header.get(A)!.controls.actions.swap(A, B) })
+    await waitFor(() => { expect(screen.getByRole('alert').textContent).toContain(layoutsEn['saved.studio']) })
+    expect(screen.getByRole('button', { name: layoutsEn['saved.undo'] })).toBeTruthy()
+    cleanup()
+    const refused = setup()
+    refused.store.attachHost({ write: async () => false })
+    act(() => { refused.owners.header.get(A)!.controls.actions.swap(A, B) })
+    await waitFor(() => { expect(screen.getByRole('alert').textContent).toContain(layoutsEn['saved.refused']) })
+    expect(screen.getByRole('alert').textContent).not.toContain(layoutsEn['saved.studio'])
+    expect(screen.queryByRole('button', { name: layoutsEn['saved.undo'] })).toBeNull()
   })
 
   it('returns to the normal chat when the last pinned pane is closed', () => {

@@ -83,10 +83,14 @@ export interface DefaultsRevision {
 /** Why the person's own arrangement is being kept: a drag of a pane or a divider, or a move from a pane's menu. */
 export type AdoptReason = 'move' | 'swap' | 'resize'
 
-/** Whether a kept arrangement became a default, and at which scope, for the "Saved as your default layout" notice. */
+/**
+ * Whether a kept arrangement is to become a default, and at which scope, for the "Saved as your default layout" notice. `written`
+ * settles with true once the Host accepted the new default (at once for the chat scope, which writes nothing) and false when it
+ * refused it, for example on a device whose settings are read-only; the notice waits for it.
+ */
 export type AdoptResult =
   | { readonly saved: false }
-  | { readonly saved: true; readonly scope: RememberScope }
+  | { readonly saved: true; readonly scope: RememberScope; readonly written: Promise<boolean> }
 
 /** Where a chat's Multiview state is kept between page loads. */
 export interface MultiviewPersistence {

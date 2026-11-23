@@ -804,6 +804,14 @@ describe('the everyday settings and shipped plugin toggles of an approved device
     }
   })
 
+  it('admits the Multiview layout settings from an approved device, PIN mode on or off', () => {
+    // Pins L200: Multiview's fields are display preferences, so a phone that drags panes or picks a layout saves its default.
+    const write = (action: RemoteAccessAction, args: Record<string, unknown>, overrides: Partial<ReachAccessFacts> = {}) => approved(overrides)({ action, resource: GLOBAL, args })
+    expect(write('settings/mutate', { ns: 'delorun-multiview', ops: [{ op: 'set', path: ['defaultLayout'], value: 'grid' }] })).toEqual(ALLOW)
+    expect(write('settings/update', { ns: 'delorun-multiview', patch: { paneGap: 8 } }, { unlockModeEnabled: () => true })).toEqual(ALLOW)
+    expect(write('settings/update', { ns: 'delorun-multiview-other', patch: {} })).toEqual(DENY('settings/update'))
+  })
+
   it('keeps the fields that steer installs and the Host\'s sweep at an unlock', () => {
     const write = (ns: string, patch: Record<string, unknown>) => approved()({ action: 'settings/update', resource: GLOBAL, args: { ns, patch } })
     const mutate = (ns: string, path: string[]) => approved()({ action: 'settings/mutate', resource: GLOBAL, args: { ns, ops: [{ op: 'set', path, value: 1 }] } })

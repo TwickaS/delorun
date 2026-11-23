@@ -88,11 +88,12 @@ describe('the default for new Multiviews', () => {
 })
 
 describe('Yours', () => {
-  it('keeps a dragged arrangement as a shape, applies it to other chats’ agents, and says where it was saved', () => {
+  it('keeps a dragged arrangement as a shape, applies it to other chats’ agents, and says where it was saved', async () => {
     const { store, change } = connected()
     store.pinAll(CHAT, [A, B])
     const result = store.adoptArrangement(CHAT, dragged(), 'move')
-    expect(result).toEqual({ saved: true, scope: 'studio' })
+    expect(result).toMatchObject({ saved: true, scope: 'studio' })
+    expect(result.saved && await result.written).toBe(true)
     const saved = store.settings.getSnapshot()
     expect(saved.defaultLayout).toBe('yours')
     expect(JSON.stringify(saved.yours)).not.toContain('agent-a')
@@ -103,17 +104,19 @@ describe('Yours', () => {
     change({})
   })
 
-  it('saves for this workspace only with the workspace scope, and for nobody else with the chat scope', () => {
+  it('saves for this workspace only with the workspace scope, and for nobody else with the chat scope', async () => {
     const ws = connected({ settings: { rememberScope: 'workspace' } }, { [CHAT]: 'ws-1', [OTHER]: 'ws-2' })
     ws.store.pinAll(CHAT, [A, B])
-    expect(ws.store.adoptArrangement(CHAT, dragged(), 'move')).toEqual({ saved: true, scope: 'workspace' })
+    expect(ws.store.adoptArrangement(CHAT, dragged(), 'move')).toMatchObject({ saved: true, scope: 'workspace' })
     expect(ws.store.settings.getSnapshot().yours ?? null).toBeNull()
     expect(ws.store.defaultsOf(CHAT).shapeScope).toBe('workspace')
     expect(ws.store.defaultsOf(OTHER).shape).toBeUndefined()
 
     const one = connected({ settings: { rememberScope: 'chat' } })
     one.store.pinAll(CHAT, [A, B])
-    expect(one.store.adoptArrangement(CHAT, dragged(), 'move')).toEqual({ saved: true, scope: 'chat' })
+    const chatOnly = one.store.adoptArrangement(CHAT, dragged(), 'move')
+    expect(chatOnly).toMatchObject({ saved: true, scope: 'chat' })
+    expect(chatOnly.saved && await chatOnly.written).toBe(true)
     expect(one.writes).toEqual([])
     expect(one.store.arrangementOf(CHAT)).toBe('yours')
     one.store.pin(OTHER, A)
@@ -126,7 +129,7 @@ describe('Yours', () => {
     expect(store.adoptArrangement(CHAT, dragged(), 'resize')).toEqual({ saved: false })
     expect(writes).toEqual([])
     expect(store.arrangementOf(CHAT)).toBe('custom')
-    expect(store.adoptArrangement(CHAT, dragged(), 'move')).toEqual({ saved: true, scope: 'studio' })
+    expect(store.adoptArrangement(CHAT, dragged(), 'move')).toMatchObject({ saved: true, scope: 'studio' })
   })
 
   it('undoes: the previous default and the chat’s previous arrangement come back', () => {
@@ -190,5 +193,33 @@ describe('the layout keys’ store operations', () => {
     expect(store.defaultsOf(CHAT).mainShare).toBe(75)
     store.resizeMain(CHAT, -1)
     expect(store.defaultsOf(CHAT).mainShare).toBe(70)
+  })
+})
+
+describe('a refused write of the defaults', () => {
+  it('reports the refusal, takes the default back, and leaves nothing to undo; the chat keeps its arrangement', async () => {
+    const made = makeStore({ settings: { defaultLayout: 'grid' } })
+    made.store.attachHost({ write: async () => false })
+    made.store.pinAll(CHAT, [A, B])
+    const result = made.store.adoptArrangement(CHAT, dragged(), 'move')
+    expect(made.store.defaultsOf(CHAT).layout).toBe('yours')
+    expect(result.saved && await result.written).toBe(false)
+    expect(made.store.defaultsOf(CHAT)).toMatchObject({ layout: 'grid', canUndo: false })
+    expect(made.store.arrangementOf(CHAT)).toBe('yours')
+    made.store.pin(OTHER, A)
+    expect(made.store.arrangementOf(OTHER)).toBe('grid')
+  })
+
+  it('counts a failed request and a store with no Host as refusals', async () => {
+    const failing = makeStore()
+    failing.store.attachHost({ write: () => Promise.reject(new Error('offline')) })
+    failing.store.pinAll(CHAT, [A, B])
+    const failed = failing.store.adoptArrangement(CHAT, dragged(), 'move')
+    expect(failed.saved && await failed.written).toBe(false)
+    const alone = makeStore()
+    alone.store.pinAll(CHAT, [A, B])
+    const unwritten = alone.store.adoptArrangement(CHAT, dragged(), 'move')
+    expect(unwritten.saved && await unwritten.written).toBe(false)
+    expect(alone.store.defaultsOf(CHAT).layout).toBe('auto')
   })
 })

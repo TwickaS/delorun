@@ -104,14 +104,37 @@ export class MultiviewStore implements MultiviewService {
     this.#defaults.set({ revision: this.#revision, canUndo: this.#undo !== undefined })
   }
 
-  #writeSettings(patch: Partial<MultiviewSettings>): void {
-    if (Object.keys(patch).length === 0) return
+  /**
+   * Write settings to the Host, showing them here at once. A refusal (no writer, a read-only device, a failed request) takes the
+   * values back, so this page shows the Host's again.
+   * @returns whether the Host accepted the write; true for an empty patch.
+   */
+  #writeSettings(patch: Partial<MultiviewSettings>): Promise<boolean> {
+    if (Object.keys(patch).length === 0) return Promise.resolve(true)
     this.#settings()
     this.#pending = { ...this.#pending, ...patch }
     this.#bump()
-    this.#writer?.(patch).catch((_refused: unknown) => {
-      // A refused write leaves the Host's value in force; the value chosen here holds for this page until the settings change.
+    const writer = this.#writer
+    const written = writer === undefined ? Promise.resolve(false) : writer(patch).catch((_failed: unknown) => false)
+    return written.then((accepted) => {
+      if (!accepted) this.#takeBack(patch)
+      return accepted
     })
+  }
+
+  /** Drop pending values a refused write set, unless a later write changed them since. */
+  #takeBack(patch: Partial<MultiviewSettings>): void {
+    const pending: Partial<MultiviewSettings> = { ...this.#pending }
+    let changed = false
+    for (const key of Object.keys(patch) as (keyof MultiviewSettings)[]) {
+      if (key in pending && pending[key] === patch[key]) {
+        delete pending[key]
+        changed = true
+      }
+    }
+    if (!changed) return
+    this.#pending = pending
+    this.#bump()
   }
 
   /** Changes whenever the defaults of any chat may have changed; read a chat's with {@link MultiviewStore.defaultsOf}. */
@@ -261,7 +284,7 @@ export class MultiviewStore implements MultiviewService {
   chooseLayout(chat: SessionId, choice: LayoutChoiceId): void {
     this.#follow(chat, choice)
     if (choice === 'yours' && this.#store(chat).getSnapshot().arrangement !== 'yours') return
-    this.#writeSettings(this.#planFor(chat, { defaultLayout: choice }))
+    void this.#writeSettings(this.#planFor(chat, { defaultLayout: choice }))
   }
 
   /** Keep the person's own arrangement as the chat's and, at the person's scope, as "Yours". */
@@ -277,11 +300,19 @@ export class MultiviewStore implements MultiviewService {
     const settings = this.#settings()
     const previous: Partial<MultiviewSettings> = {}
     for (const key of Object.keys(patch) as (keyof SettingsPatch)[]) Object.assign(previous, { [key]: settings[key] })
-    this.#undo = { chat, before, settings: previous }
+    const undo = { chat, before, settings: previous }
+    this.#undo = undo
     this.#write(chat, { ...before, arrangement: 'yours', shape, layout })
-    this.#writeSettings(patch)
+    const written = this.#writeSettings(patch).then((accepted) => {
+      // Nothing became a default, so there is nothing to undo; the chat keeps the arrangement as its own.
+      if (!accepted && this.#undo === undo) {
+        this.#undo = undefined
+        this.#bump()
+      }
+      return accepted
+    })
     this.#bump()
-    return { saved: true, scope: this.#scopeOf(chat) }
+    return { saved: true, scope: this.#scopeOf(chat), written }
   }
 
   /** Undo the last adopted arrangement. */
@@ -293,14 +324,14 @@ export class MultiviewStore implements MultiviewService {
     const { before } = undo
     // The pins may have changed since; only the arrangement goes back.
     this.#write(undo.chat, { ...now, arrangement: before.arrangement ?? this.#settle(undo.chat, before).arrangement, shape: before.shape, layout: before.layout, slots: before.slots })
-    this.#writeSettings(undo.settings)
+    void this.#writeSettings(undo.settings)
     this.#bump()
   }
 
   /** Clear "Yours" where the chat sees it and make Auto the default. */
   resetToAuto(chat?: SessionId): void {
     this.#undo = undefined
-    this.#writeSettings(planResetToAuto(this.#settings(), chat === undefined ? undefined : this.#workspaceOf(chat)))
+    void this.#writeSettings(planResetToAuto(this.#settings(), chat === undefined ? undefined : this.#workspaceOf(chat)))
     if (chat !== undefined) this.#follow(chat, 'auto')
     this.#bump()
   }
@@ -325,7 +356,7 @@ export class MultiviewStore implements MultiviewService {
     const values: DefaultValues = { ...(options.mainSide === undefined ? {} : { mainSide: options.mainSide }), ...(options.stackStyle === undefined ? {} : { stackStyle: options.stackStyle }) }
     const settings = this.#settings()
     const scope = settings.rememberScope === 'workspace' ? 'workspace' : 'studio'
-    this.#writeSettings(planDefaults(settings, scope, chat === undefined ? undefined : this.#workspaceOf(chat), values))
+    void this.#writeSettings(planDefaults(settings, scope, chat === undefined ? undefined : this.#workspaceOf(chat), values))
   }
 
   /** Show the next or previous choice. */
