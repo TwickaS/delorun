@@ -103,7 +103,7 @@ describe('a refused start', () => {
     await expect(consent.review(START)).resolves.toMatchObject({ allow: false })
     const [pending] = consent.pending()
     expect(pending).toEqual({
-      serverName: 'files', reviewId: reviewIdOf(START), command: START.command, args: START.args, cwd: START.cwd,
+      serverName: 'files', reviewId: reviewIdOf(START), origin: { kind: 'unknown' }, command: START.command, args: START.args, cwd: START.cwd,
       resolvedCommand: START.resolvedCommand, resolvedCwd: START.resolvedCwd, env: [{ name: 'API_TOKEN' }],
       files: [{ path: START.resolvedCommand, sha256: expect.stringMatching(/^sha256:[0-9a-f]{64}$/) }],
       // The suite's tree lies in the temporary directory, which chats can write.
@@ -578,7 +578,7 @@ describe('the mounted plugin', () => {
   it('provides its pending reviews as mcpReviews while the switch is on', async () => {
     const mountedCtx = new Context()
     try {
-      await apply(mountedCtx, { enabled: true })
+      await apply(mountedCtx, { enabled: true, ask: 'outside' })
       expect(mountedCtx.get('mcpReviews')).toBeInstanceOf(DelorunMcpConsent)
       expect(mountedCtx.get('mcpReviews')?.pending()).toEqual([])
     } finally {
@@ -738,7 +738,7 @@ describe('the routes when a request is not the message', () => {
     const register = vi.fn<(route: { readonly path: string }) => void>()
     try {
       mountedCtx.provide('connection', { fetch: { register } } as never)
-      await apply(mountedCtx, { enabled: true })
+      await apply(mountedCtx, { enabled: true, ask: 'outside' })
       expect(register.mock.calls.map(([route]) => route.path).sort()).toEqual(Object.values(MCP_CONSENT_ROUTES).sort())
     } finally {
       await mountedCtx.fiber.dispose()

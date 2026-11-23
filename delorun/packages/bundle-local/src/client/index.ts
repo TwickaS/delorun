@@ -119,14 +119,15 @@ import { AllowForChat, ChatSwitchRefused, type AllowForChatInjected } from './Al
 import { FullAccessAction, type FullAccessActionInjected } from './FullAccessAction.tsx'
 import { ExternalAgentAction, type ExternalAgentActionInjected } from './ExternalAgentAction.tsx'
 import { confirmPermissionSwitch, createFullAccessConsentSource, FullAccessConsent, ownsPermissionConfirmation, type FullAccessConsentSource } from './FullAccessConsent.tsx'
-import { FULL_ACCESS_PRESET, readWorkspaces, type WorkspacesAnswer } from './consents-api.ts'
+import { FULL_ACCESS_PRESET, MCP_CONSENT_ROW, readWorkspaces, type McpConsentSettings, type WorkspacesAnswer } from './consents-api.ts'
 import type { DelorunFullAccessService } from './full-access.ts'
 import { createMcpReviewSource, McpServerReview } from './McpServerReview.tsx'
 import { PairingNotice, type PairingNoticeInjected } from './PairingNotice.tsx'
 import { createPairingSource } from './pairing-source.ts'
 import { PairingWriter, type PairingRowSettings } from './pairing-writer.ts'
 import { HOME_AUTH_ROW } from '@delorun/home-auth/wire'
-import { McpWaitingNotice, type McpWaitingNoticeInjected } from './McpWaitingNotice.tsx'
+import { createMcpStartCardMemory, McpStartCard, type McpStartCardInjected } from './McpStartCard.tsx'
+import { McpAskWriter } from './mcp-ask-writer.ts'
 import { DangerousBadge, type DangerousBadgeInjected } from './DangerousBadge.tsx'
 import { ExternalAgentsSection, type ExternalAgentsSectionInjected } from './ExternalAgentsSection.tsx'
 import { approvalPolicyDefinition, delegatedSessionDefinition, FULL_ACCESS_START_KIND, fullAccessStartDefinition, sandboxModeDefinition } from './full-access-start.ts'
@@ -157,7 +158,7 @@ export type { FullAccessConsentProps, FullAccessConsentSource, FullAccessConsent
 export type { FullAccessActionInjected, FullAccessActionProps } from './FullAccessAction.tsx'
 export type { ExternalAgentActionInjected, ExternalAgentActionProps } from './ExternalAgentAction.tsx'
 export type { McpReviewSource, McpReviewState, McpServerReviewProps } from './McpServerReview.tsx'
-export type { McpWaitingNoticeInjected, McpWaitingNoticeProps } from './McpWaitingNotice.tsx'
+export type { McpStartCardInjected, McpStartCardProps } from './McpStartCard.tsx'
 export type { DangerousBadgeInjected, DangerousBadgeProps } from './DangerousBadge.tsx'
 export type { ConsentToastProps, ConsentToastSource, ConsentToastState } from './ConsentToast.tsx'
 export type { NetworkLocaleKey } from './network-locales.ts'
@@ -385,7 +386,7 @@ export const MCP_REVIEW_ID = 'delorun-mcp-review'
 /** The `shell.overlay` id of the notice and code box for a device that asks to connect without an approval window. */
 export const PAIRING_NOTICE_ID = 'delorun-pairing-notice'
 
-/** The `shell.overlay` id of the notice that an MCP server waits. */
+/** The `conversation.input.dock` id of the card that says an MCP server wants to start. */
 export const MCP_WAITING_NOTICE_ID = 'delorun-mcp-waiting'
 
 /** The `shell.overlay` id of the toast that shows the outcome of an answer given outside Settings. */
@@ -794,13 +795,16 @@ export function applyConsents(ctx: Context, fetch: HostFetch): void {
     inject: () => ({ hooks: review.hooks, confirm: review.confirm, cancel: review.cancel }),
   }, McpServerReview))
   const toast = createConsentToastSource()
-  const noticeFace = (): McpWaitingNoticeInjected => ({ fetch, review: review.ask, notify: toast.show })
-  ctx.slots.inject('shell.overlay', () => ctx.slots.register({
-    name: 'shell.overlay',
+  // The cards the person set aside outlive each chat's dock, so one memory serves every chat.
+  const cards = createMcpStartCardMemory()
+  const cardFace = (): McpStartCardInjected => ({ fetch, review: review.ask, notify: toast.show, hooks: cards.hooks, hide: cards.hide })
+  ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
+    name: 'conversation.input.dock',
     id: MCP_WAITING_NOTICE_ID,
+    order: 10,
     locale: CONSENTS_NS,
-    inject: noticeFace,
-  }, McpWaitingNotice))
+    inject: cardFace,
+  }, McpStartCard))
   ctx.slots.inject('conversation.approval.action', () => ctx.slots.register({
     name: 'conversation.approval.action',
     id: FULL_ACCESS_ACTION_ID,
@@ -836,7 +840,12 @@ export function applyConsents(ctx: Context, fetch: HostFetch): void {
     inject: () => ({ hooks: toast.hooks, dismiss: toast.dismiss }),
   }, ConsentToast))
   const agentSettings = new OptIn(ctx.configForms.get<DelegationConsentSettings>(DELEGATION_CONSENT_ROW))
-  const permissionsFace = (): PermissionsSectionInjected => ({ fetch, ask: consent.ask, review: review.ask })
+  const mcpAsk = new McpAskWriter(ctx.configForms.get<McpConsentSettings>(MCP_CONSENT_ROW))
+  const permissionsFace = (): PermissionsSectionInjected => ({
+    fetch, ask: consent.ask, review: review.ask,
+    hooks: { mcpConsent: mcpAsk.form, mcpConsentMutation: mcpAsk.state },
+    setMcpAsk: mode => mcpAsk.set(mode),
+  })
   const externalAgentsFace = (): ExternalAgentsSectionInjected => ({
     fetch,
     hooks: { agentSettings: agentSettings.form, agentSettingsMutation: agentSettings.state },

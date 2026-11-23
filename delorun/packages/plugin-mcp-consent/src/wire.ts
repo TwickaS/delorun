@@ -94,12 +94,72 @@ export interface PinnedFile {
   readonly sha256: string
 }
 
+/**
+ * Where a server's definition lives (A631), judged from the plugins that mounted the server's mcp-client, never from the
+ * server's name or command:
+ * - `profile`: a row of the profile's own configuration (the person's config file, or a row the person's setup wrote);
+ * - `settings`: the MCP manager's server list, which the person edits in Settings;
+ * - `pack`: mounted by a plugin of one of Delorun's own packs ({@link ServerOrigin} names the pack and the plugin);
+ * - `plugin`: mounted by any other plugin, named by its module;
+ * - `chat`: mounted by one chat's own setup, which an editor's ACP session uses for the servers it brings;
+ * - `unknown`: no Loader row owns the mount.
+ */
+export type ServerOrigin =
+  | { readonly kind: 'profile' }
+  | { readonly kind: 'settings' }
+  | { readonly kind: 'pack'; readonly pack: string; readonly plugin: string }
+  | { readonly kind: 'plugin'; readonly plugin: string }
+  | { readonly kind: 'chat' }
+  | { readonly kind: 'unknown' }
+
+/**
+ * Which servers wait for the person before they start, the Settings choice stored as the consent row's `ask`:
+ * `outside` asks only for servers from outside the person's own configuration and Delorun's packs (the default),
+ * `always` asks for every stdio server, `never` asks for none.
+ */
+export type McpAskMode = 'outside' | 'always' | 'never'
+
+/** The ask modes, in the order Settings offers them. */
+export const MCP_ASK_MODES: readonly McpAskMode[] = ['outside', 'always', 'never']
+
+/**
+ * Whether a start from an origin waits for the person's acceptance under an ask mode.
+ * @param origin - where the server's definition lives.
+ * @param mode - the ask mode.
+ * @returns true when the start needs an acceptance that covers it.
+ */
+export function asksFor(origin: ServerOrigin, mode: McpAskMode): boolean {
+  if (mode === 'never') return false
+  if (mode === 'always') return true
+  return origin.kind === 'plugin' || origin.kind === 'chat' || origin.kind === 'unknown'
+}
+
+/**
+ * The key an acceptance records its origin under, so an acceptance covers a server name from that origin only.
+ * @param origin - the origin.
+ * @returns `profile`, `settings`, `chat`, `unknown`, or `pack:<plugin>` / `plugin:<plugin>` with the mounting module.
+ */
+export function originKey(origin: ServerOrigin): string {
+  switch (origin.kind) {
+    case 'pack':
+    case 'plugin':
+      return `${origin.kind}:${origin.plugin}`
+    case 'profile':
+    case 'settings':
+    case 'chat':
+    case 'unknown':
+      return origin.kind
+  }
+}
+
 /** One stdio server whose start the consent refused, as a surface shows it before the person answers. */
 export interface PendingServer {
   /** The server's configured name. */
   readonly serverName: string
   /** The id an answer to this review carries; a new review of the server's start gets a new id. */
   readonly reviewId: string
+  /** Where the server's definition lives; a surface says it in plain words ("from plugin …", "from your editor"). */
+  readonly origin: ServerOrigin
   /** The configured executable. */
   readonly command: string
   /** The configured arguments, in order. */

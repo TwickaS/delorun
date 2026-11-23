@@ -261,10 +261,14 @@ export abstract class McpAddConsent extends Service {
    * person answers and when the provider's own plugin unloads.
    *
    * @param command - the server start under review.
+   * @param client - the context of the mcp-client plugin that starts the
+   *   server. Its fiber's ancestors are the plugins that mounted the server,
+   *   so a provider can judge a start by where its definition lives; the
+   *   server's configuration cannot change them.
    * @returns `allow: true` to start the server, or `allow: false` with the
    *   reason that leaves the server stopped.
    */
-  abstract review(command: McpServerCommand): Promise<McpConsentDecision>
+  abstract review(command: McpServerCommand, client: Context): Promise<McpConsentDecision>
 }
 
 /**

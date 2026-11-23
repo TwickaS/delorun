@@ -538,7 +538,7 @@ describe('the plugin', () => {
       await ctx.plugin({ inject: [...settingsInject], apply: settingsApply }).await()
       const slots = ctx.get('slots')
       if (slots === undefined) throw new Error('no slot registry')
-      slots.register({ name: 'root', children: { 'settings.section': { kind: 'list', scope: 'root' }, 'settings.section.icon': { kind: 'list', scope: 'root', inline: true }, 'shell.overlay': { kind: 'list', scope: 'root' }, 'settings.onboarding': { kind: 'list', scope: 'root' }, 'sidebar.brand.mark': { kind: 'single', scope: 'root' }, 'sidebar.brand.name': { kind: 'single', scope: 'root' }, 'conversation.approval.action': { kind: 'list', scope: 'session' } }, inject: () => ({}) },
+      slots.register({ name: 'root', children: { 'settings.section': { kind: 'list', scope: 'root' }, 'settings.section.icon': { kind: 'list', scope: 'root', inline: true }, 'shell.overlay': { kind: 'list', scope: 'root' }, 'settings.onboarding': { kind: 'list', scope: 'root' }, 'sidebar.brand.mark': { kind: 'single', scope: 'root' }, 'sidebar.brand.name': { kind: 'single', scope: 'root' }, 'conversation.approval.action': { kind: 'list', scope: 'session' }, 'conversation.input.dock': { kind: 'list', scope: 'session' } }, inject: () => ({}) },
         ({ renderSlot }) => <>{renderSlot('settings.section', { close: () => {} })}</>)
       await ctx.plugin({ inject: [], apply: connectionApply }).await()
       await ctx.plugin({ inject, apply }).await()
@@ -559,9 +559,11 @@ describe('the plugin', () => {
       // The preview notice's copy lookup reads the Privacy dictionary.
       const notice = slots.entries('settings.onboarding')[0]?.inject?.() as { t: (key: string) => string }
       expect(notice.t('notice.continue')).toBe('Continue')
-      expect(slots.entries('shell.overlay').map(entry => entry.options.id)).toEqual([PAIRING_NOTICE_ID, FACE_ID_GRANT_ID, FACE_ID_OVERLAY_ID, REMOTE_NOTICE_ID, FULL_ACCESS_CONSENT_ID, MCP_REVIEW_ID, MCP_WAITING_NOTICE_ID, CONSENT_TOAST_ID])
+      expect(slots.entries('shell.overlay').map(entry => entry.options.id)).toEqual([PAIRING_NOTICE_ID, FACE_ID_GRANT_ID, FACE_ID_OVERLAY_ID, REMOTE_NOTICE_ID, FULL_ACCESS_CONSENT_ID, MCP_REVIEW_ID, CONSENT_TOAST_ID])
       // Each overlay and each section with a store (the About section has none) read their store's view and actions.
       for (const entry of [...slots.entries('shell.overlay'), ...slots.entries('settings.section').filter(section => section.options.id !== ABOUT_SECTION_ID)]) expect(entry.inject?.()).toBeTypeOf('object')
+      // The card that an MCP server wants to start sits above the composer, not over the transcript.
+      expect(slots.entries('conversation.input.dock').map(entry => entry.options.id)).toEqual([MCP_WAITING_NOTICE_ID])
       // Each approval card action is bound to the card's chat.
       const actions = slots.entries('conversation.approval.action')
       expect(actions.map(entry => entry.options.id)).toEqual([FACE_ID_ANSWER_ID, FULL_ACCESS_ACTION_ID, EXTERNAL_AGENT_ACTION_ID])

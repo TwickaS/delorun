@@ -305,6 +305,17 @@ export default class McpServerManager extends TypertRemoteService {
   }
 
   /**
+   * Whether a server comes from a plugin's {@link register} call rather than
+   * the configured `servers` list, so a consumer such as an add-time consent
+   * can tell a server the person configured from one a plugin contributed.
+   * @param name - the server key.
+   * @returns true while a registration of that name is live.
+   */
+  registered(name: string): boolean {
+    return this.registrations.has(name)
+  }
+
+  /**
    * Stream server views for a management surface: the current list on
    * subscription, then the complete list again after each status or entry change.
    * @param signal - subscription lifetime; aborting ends only this stream.

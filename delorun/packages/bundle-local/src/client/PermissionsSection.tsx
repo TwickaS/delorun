@@ -13,13 +13,16 @@ import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type { ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
+import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
 import {
-  declineServer, FULL_ACCESS_PRESET, readEverywhere, readServers, readWorkspaces, revokeServer, setFullAccess, turnEverywhereOff,
-  type AcceptedServer, type EverywhereAnswer, type PendingServer, type PendingServersAnswer, type WorkspaceAccess, type WorkspacesAnswer,
+  declineServer, FULL_ACCESS_PRESET, MCP_ASK_MODES, readEverywhere, readServers, readWorkspaces, revokeServer, setFullAccess, turnEverywhereOff,
+  type AcceptedServer, type EverywhereAnswer, type McpAskMode, type McpConsentSettings, type PendingServer, type PendingServersAnswer, type WorkspaceAccess, type WorkspacesAnswer,
 } from './consents-api.ts'
 import { consentFailureOf, consentFailureText, FULL_ACCESS_COMMAND, workspaceName, type FullAccessConsentSource } from './FullAccessConsent.tsx'
 import { serverChangeText, ServerStart, type McpReviewSource } from './McpServerReview.tsx'
 import type { HostFetch } from './host-api.ts'
+import type { OptInMutation } from './opt-in.ts'
 import { formatTime, listLine, readListing, type GroupProps, type Listing } from './ConsentListing.tsx'
 import { SettingsCard } from '@delorun/settings-controls'
 import css from './ConsentSections.module.css'
@@ -38,6 +41,18 @@ export interface PermissionsSectionInjected {
   ask: FullAccessConsentSource['ask']
   /** Shows a waiting MCP server's review and waits for the person's answer. */
   review: McpReviewSource['ask']
+  hooks: {
+    /** The MCP consent row's Host settings form. */
+    mcpConsent: ObservableSnapshot<ConfigFormSnapshot<McpConsentSettings>>
+    /** The write state of the row's `ask` field. */
+    mcpConsentMutation: ObservableSnapshot<OptInMutation>
+  }
+  /**
+   * Write which MCP servers ask first.
+   * @param mode - the mode the person chose.
+   * @returns after the write settles.
+   */
+  setMcpAsk(mode: McpAskMode): Promise<void>
 }
 
 /** Props the renderer binds for the section. */
@@ -48,7 +63,9 @@ export type PermissionsSectionProps = PropsRuntime<'settings.section'> & PropsLo
  * @param props - the copy, the request function, the consent and the review.
  * @returns the section.
  */
-export function PermissionsSection({ t, fetch, ask, review }: PermissionsSectionProps): ReactNode {
+export function PermissionsSection({ t, fetch, ask, review, useMcpConsent, useMcpConsentMutation, setMcpAsk }: PermissionsSectionProps): ReactNode {
+  const mcpConsent = useMcpConsent(value => value)
+  const mcpConsentMutation = useMcpConsentMutation(value => value)
   const [workspaces, setWorkspaces] = useState<Listing<WorkspacesAnswer>>({ kind: 'loading' })
   const [servers, setServers] = useState<Listing<PendingServersAnswer>>({ kind: 'loading' })
   const [everywhere, setEverywhere] = useState<EverywhereAnswer>({ on: false })
@@ -129,8 +146,39 @@ export function PermissionsSection({ t, fetch, ask, review }: PermissionsSection
       <FullAccessGroup t={t} listing={workspaces} busy={busy} allow={allowWorkspace} revoke={revokeWorkspace} />
     </SettingsCard>
     <SettingsCard title={t('mcp.heading')} description={t('mcp.description')} group="mcp">
+      <McpAskChoice t={t} form={mcpConsent} mutation={mcpConsentMutation} set={setMcpAsk} />
       <ServersGroup t={t} listing={servers} busy={busy} review={reviewServer} decline={declineWaiting} revoke={revokeAccepted} />
     </SettingsCard>
+  </div>
+}
+
+/**
+ * The choice of which MCP servers ask first, written to the `ask` field of the MCP consent row. A reach device is refused
+ * the write by the Host, so the failure line says so in place. The shown value is the one the Host accepted; absent, the
+ * default `outside`.
+ * @param props - the copy, the row's form and write state, and the writer.
+ * @returns the choice, or nothing while the profile does not serve the row.
+ */
+function McpAskChoice({ t, form, mutation, set }: {
+  readonly t: PermissionsSectionProps['t']
+  readonly form: ConfigFormSnapshot<McpConsentSettings>
+  readonly mutation: OptInMutation
+  readonly set: PermissionsSectionInjected['setMcpAsk']
+}): ReactNode {
+  if (form.status === 'unavailable' || form.value === undefined) return null
+  const chosen: McpAskMode = form.value.ask ?? 'outside'
+  const disabled = mutation.busy || form.status !== 'ready' || !form.writable
+  return <div className={css.askChoice} role="radiogroup" aria-label={t('mcp.ask.title')} data-mcp-ask={chosen}>
+    <h4 className={css.label}>{t('mcp.ask.title')}</h4>
+    {MCP_ASK_MODES.map(mode => <label key={mode} className={css.askOption}>
+      <input type="radio" name="mcp-ask" value={mode} checked={chosen === mode} disabled={disabled}
+        onChange={() => { if (chosen !== mode) void set(mode) }} />
+      <span className={css.details}>
+        <span className={css.title}>{t(`mcp.ask.${mode}.title`)}</span>
+        <span className={css.description}>{t(`mcp.ask.${mode}.description`)}</span>
+      </span>
+    </label>)}
+    {mutation.failed ? <p className={css.failed} role="alert">{t('mcp.ask.failed')}</p> : null}
   </div>
 }
 

@@ -6,21 +6,27 @@
  * commands — a command an acceptance would let run outside the agent sandbox
  * can neither read the list nor add itself to it.
  *
- * A store of this version holds one acceptance per configured server name: the
+ * A store of this version, 7, holds one acceptance per configured server name: the
  * whole start accepted for that server — the command, the argument list, the
  * configured working directory, the absolute executable path and canonical
  * working directory they resolved to, on Windows the canonical command shell
  * that runs a batch file, a SHA-256 digest of each configured environment
  * variable's value, never the values themselves, and the canonical path and
  * SHA-256 digest of each file the start runs: the executable and every file an
- * argument names ([`./pins.ts`](./pins.ts)) — and when it was accepted. It
- * also holds the starts the person set aside, declined or revoked, by server
+ * argument names ([`./pins.ts`](./pins.ts)) — when it was accepted, and the
+ * origin of the server's definition the person accepted it for (`origin`, an
+ * `originKey` of [`./wire.ts`](./wire.ts)), so an acceptance given to a server
+ * of one origin does not cover a server of the same name from another
+ * ({@link acceptanceCovers}). It also holds the starts the person set aside, declined or revoked, by server
  * name and start digest. Every change reads, changes and writes the store while
  * holding its lock file ({@link withAcceptanceStoreLock}), because the store is
- * shared by every profile of the home. A store of any other version, or of another format,
- * is refused as a whole: no acceptance in it counts, nothing is written into
- * it, and the refusal asks the person to remove the file and accept the
- * servers again.
+ * shared by every profile of the home. A store of version 6, which recorded no
+ * origins, is read forward: its acceptances and set-aside starts are kept, each
+ * acceptance with no origin, which counts for its server name from any origin
+ * until the person accepts it again, and the next write is version 7. A store of any other
+ * version, or of another format, is refused as a whole: no acceptance in it
+ * counts, nothing is written into it, and the refusal asks the person to remove
+ * the file and accept the servers again.
  *
  * The module is free of Cordis, so the store's format, its refusals and its
  * file handling are testable without a mounted plugin.
@@ -42,7 +48,16 @@ import { SERVER_NAME_PATTERN } from './wire.ts'
 import type { PinnedFile } from './wire.ts'
 
 /** Format version of the acceptance store. */
-export const ACCEPTANCE_STORE_VERSION = 6 as const
+export const ACCEPTANCE_STORE_VERSION = 7 as const
+
+/** The earlier format version that is read forward: version 6 recorded no origin of an acceptance. */
+export const ACCEPTANCE_STORE_PREVIOUS_VERSION = 6 as const
+
+/** The form of an acceptance's origin: an `originKey` of `./wire.ts`, at most {@link ACCEPTANCE_ORIGIN_MAX_LENGTH} characters. */
+export const ACCEPTANCE_ORIGIN_PATTERN = /^(profile|settings|chat|unknown|(pack|plugin):[^\s]{1,280})$/u
+
+/** The longest origin an acceptance may hold, in characters. */
+export const ACCEPTANCE_ORIGIN_MAX_LENGTH = 300
 
 /** Directory of the acceptance store under the home's `secrets/` directory. */
 export const ACCEPTANCE_STORE_DIR = 'mcp-add-consent'
@@ -85,6 +100,11 @@ export interface ServerAcceptance {
   readonly files: readonly PinnedFile[]
   /** When the acceptance was recorded, in milliseconds since the epoch. */
   readonly acceptedAt: number
+  /**
+   * The origin the person accepted the server for, as `originKey` gives it; absent for an acceptance recorded before
+   * origins were kept (a version-6 store), and then absent from the store's text. {@link acceptanceCovers} reads it.
+   */
+  readonly origin?: string
 }
 
 /** How the person set a server's start aside. */
@@ -110,7 +130,10 @@ export interface AcceptanceStore {
 export const EMPTY_ACCEPTANCE_STORE: AcceptanceStore = { acceptances: new Map(), setAside: new Map() }
 
 /** The fields of one acceptance in the store's format, in the order they are written. */
-const ACCEPTANCE_FIELDS: readonly string[] = ['command', 'args', 'cwd', 'resolvedCommand', 'resolvedCwd', 'resolvedShell', 'env', 'files', 'acceptedAt']
+const ACCEPTANCE_FIELDS: readonly string[] = ['command', 'args', 'cwd', 'resolvedCommand', 'resolvedCwd', 'resolvedShell', 'env', 'files', 'acceptedAt', 'origin']
+
+/** The fields of one acceptance in a version-6 store: those of this version but `origin`. */
+const PREVIOUS_ACCEPTANCE_FIELDS: readonly string[] = ACCEPTANCE_FIELDS.filter(field => field !== 'origin')
 
 /** The fields of one pinned file, in the order they are written. */
 const FILE_FIELDS: readonly string[] = ['argument', 'path', 'sha256']
@@ -203,10 +226,25 @@ export function acceptedStartDigest(accepted: ServerAcceptance): string {
  * The acceptance of a server start, recorded at a time.
  * @param start - the accepted start.
  * @param acceptedAt - when it was accepted, in milliseconds since the epoch.
+ * @param origin - the `originKey` of the server's origin the person accepts it for; `undefined` records none.
  * @returns the acceptance the store holds for the start's server name.
  */
-export function acceptanceOfStart(start: ServerStart, acceptedAt: number): ServerAcceptance {
-  return { command: start.command, args: [...start.args], cwd: start.cwd, ...resolvedPathsOf(start), env: envDigests(start.env), files: start.files.map(copyFile), acceptedAt }
+export function acceptanceOfStart(start: ServerStart, acceptedAt: number, origin?: string): ServerAcceptance {
+  return {
+    command: start.command, args: [...start.args], cwd: start.cwd, ...resolvedPathsOf(start), env: envDigests(start.env), files: start.files.map(copyFile), acceptedAt,
+    ...origin === undefined ? {} : { origin },
+  }
+}
+
+/**
+ * Whether an acceptance counts for a server of an origin.
+ * @param acceptance - the server name's acceptance.
+ * @param origin - the `originKey` of the origin of the server under review.
+ * @returns true when the acceptance holds no origin (it was recorded before origins were kept, so it counts for its
+ *   server name from any origin until the person accepts it again) or holds exactly this one.
+ */
+export function acceptanceCovers(acceptance: ServerAcceptance, origin: string): boolean {
+  return acceptance.origin === undefined || acceptance.origin === origin
 }
 
 /** The part of a start that differs from its server's acceptance. */
@@ -421,17 +459,35 @@ function resolvedPathsIn(named: string, entry: Record<string, unknown>): Pick<Se
 }
 
 /**
+ * The origin an entry holds, if any.
+ * @param named - the entry, as a refusal names it.
+ * @param entry - the entry's fields.
+ * @returns the origin, with no `origin` key when the entry holds none.
+ * @throws {AcceptanceStoreError} when the origin is set and is not an `originKey` form of at most
+ *   {@link ACCEPTANCE_ORIGIN_MAX_LENGTH} characters.
+ */
+function originIn(named: string, entry: Record<string, unknown>): { readonly origin?: string } {
+  if (!('origin' in entry)) return {}
+  const { origin } = entry
+  if (typeof origin !== 'string' || origin.length > ACCEPTANCE_ORIGIN_MAX_LENGTH || !ACCEPTANCE_ORIGIN_PATTERN.test(origin)) {
+    throw new AcceptanceStoreError(`${named} does not hold an origin of the forms profile, settings, chat, unknown, pack:<plugin> or plugin:<plugin>`)
+  }
+  return { origin }
+}
+
+/**
  * One server's acceptance as the store holds it.
  * @param serverName - the server name, named in the reason.
  * @param value - the store's value for it.
+ * @param fields - the fields the store's version allows: those of version 6 hold no `origin`.
  * @returns the acceptance.
  * @throws {AcceptanceStoreError} when the value is not an object holding only the command, the argument list, the
  *   working directory, the absolute resolved executable path and working directory, an optional absolute command
- *   shell, the environment's digests and the acceptance time, with the right types.
+ *   shell, the environment's digests, the acceptance time and an optional origin, with the right types.
  */
-function acceptanceOf(serverName: string, value: unknown): ServerAcceptance {
+function acceptanceOf(serverName: string, value: unknown, fields: readonly string[]): ServerAcceptance {
   const named = `the acceptance of the server ${JSON.stringify(serverName)}`
-  const entry = fieldsOf(named, value, ACCEPTANCE_FIELDS)
+  const entry = fieldsOf(named, value, fields)
   const { command, args, cwd, env, acceptedAt } = entry
   if (typeof command !== 'string' || command.length === 0) throw new AcceptanceStoreError(`${named} does not hold a command`)
   if (!isStringList(args)) throw new AcceptanceStoreError(`${named} does not hold a list of argument strings`)
@@ -441,7 +497,7 @@ function acceptanceOf(serverName: string, value: unknown): ServerAcceptance {
     throw new AcceptanceStoreError(`${named} does not hold a sha256 digest for each environment variable`)
   }
   const digests = Object.fromEntries(Object.entries(env).filter((entry): entry is [string, string] => isDigest(entry[1])))
-  return { command, args, cwd, ...resolved, env: digests, files: filesOf(named, entry['files']), acceptedAt: acceptedAtOf(named, acceptedAt) }
+  return { command, args, cwd, ...resolved, env: digests, files: filesOf(named, entry['files']), acceptedAt: acceptedAtOf(named, acceptedAt), ...originIn(named, entry) }
 }
 
 /**
@@ -514,9 +570,9 @@ function serverNameKey(serverName: string): void {
 /**
  * Parse the store's text.
  * @param text - the store file's text.
- * @returns the store as written.
- * @throws {AcceptanceStoreError} when the text is not this version's format: no JSON document, not an object, another
- *   version, an unknown field, or an entry whose fields are wrong.
+ * @returns the store as written; a version-6 store is read forward, each acceptance with no origin.
+ * @throws {AcceptanceStoreError} when the text is not this version's or version 6's format: no JSON document, not an
+ *   object, another version, an unknown field, or an entry whose fields are wrong.
  */
 export function parseAcceptanceStore(text: string): AcceptanceStore {
   let document: unknown
@@ -527,13 +583,14 @@ export function parseAcceptanceStore(text: string): AcceptanceStore {
   }
   if (!isRecord(document)) throw new AcceptanceStoreError('the store is not a JSON object')
   const version = document['v']
-  if (version !== ACCEPTANCE_STORE_VERSION) {
+  if (version !== ACCEPTANCE_STORE_VERSION && version !== ACCEPTANCE_STORE_PREVIOUS_VERSION) {
     throw new AcceptanceStoreError(`the store's version is ${JSON.stringify(version)}, not ${String(ACCEPTANCE_STORE_VERSION)}`)
   }
   const extra = Object.keys(document).filter(key => !STORE_FIELDS.includes(key))
   if (extra.length > 0) throw new AcceptanceStoreError(`the store sets ${extra.join(', ')}`)
+  const fields = version === ACCEPTANCE_STORE_VERSION ? ACCEPTANCE_FIELDS : PREVIOUS_ACCEPTANCE_FIELDS
   return {
-    acceptances: sectionOf(document, 'acceptances', acceptanceOf, serverNameKey),
+    acceptances: sectionOf(document, 'acceptances', (serverName, value) => acceptanceOf(serverName, value, fields), serverNameKey),
     setAside: sectionOf(document, 'setAside', setAsideOf, serverNameKey),
   }
 }
@@ -566,6 +623,7 @@ export function serializeAcceptanceStore(store: AcceptanceStore): string {
       env: Object.fromEntries(Object.keys(accepted.env).sort().map(name => [name, accepted.env[name]])),
       files: accepted.files.map(copyFile),
       acceptedAt: accepted.acceptedAt,
+      ...accepted.origin === undefined ? {} : { origin: accepted.origin },
     })),
     setAside: sorted(store.setAside, ({ state, start }) => ({ state, start })),
   }, null, 2)}\n`
