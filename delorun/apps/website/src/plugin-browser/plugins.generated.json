@@ -177,7 +177,7 @@
       "state": "shipped",
       "standing": "on",
       "requires": [],
-      "files": 17,
+      "files": 18,
       "folder": "delorun/packages/plugin-packs"
     },
     {
@@ -267,7 +267,7 @@
       "state": "shipped",
       "standing": "on",
       "requires": [],
-      "files": 139,
+      "files": 142,
       "folder": "delorun/packages/plugin-onboarding"
     },
     {
@@ -287,7 +287,7 @@
       "state": "shipped",
       "standing": "on",
       "requires": [],
-      "files": 38,
+      "files": 42,
       "folder": "delorun/packages/plugin-downloads"
     },
     {
