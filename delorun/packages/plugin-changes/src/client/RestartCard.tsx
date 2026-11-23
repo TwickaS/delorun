@@ -6,7 +6,8 @@
  * by itself. After a failed restart Delorun keeps running as before; the card says why, names the change left out
  * with Undo, and offers Try again where waiting chats or a stop that failed ended it.
  */
-import { Button, Modal, StateDot } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Alert } from '@delorun/brand/alert'
 import type { ChangesStateView, HarnessEntryView } from '../wire.ts'
 import css from './ChangesSection.module.css'
 import { controlUse, pluralKey, type T } from './parts.tsx'
@@ -36,48 +37,28 @@ export function RestartCard(props: RestartCardProps) {
   const use = controlUse(state, 'restart', t)
   if (restart?.kind === 'restarting' || (restarting && restart?.kind !== 'failed')) {
     const waiting = restart?.kind === 'restarting' && restart.phase === 'waiting' && restart.runningChats > 0 ? restart.runningChats : 0
-    return <div className={`${css.row} ${css.restartCard}`} role="status" data-restart="restarting">
-      <div className={css.main}>
-        <p className={css.remoteTitle}><StateDot state="warning" />{t('restart.restarting')}</p>
-        <p className={css.meta}>{waiting === 0 ? t('restart.starting') : t(pluralKey('restart.waiting', waiting), { n: waiting })}</p>
-      </div>
-      {waiting === 0 ? null : <div className={css.actions}>
-        <Button variant="outline" size="sm" disabled={busy || use.disabled} title={use.title} onClick={props.onCancel}>{t('restart.cancel')}</Button>
-      </div>}
-    </div>
+    return <Alert kind="progress" role="status" data-restart="restarting" title={t('restart.restarting')}
+      line={waiting === 0 ? t('restart.starting') : t(pluralKey('restart.waiting', waiting), { n: waiting })}
+      secondary={waiting === 0 ? undefined : { label: t('restart.cancel'), disabled: busy || use.disabled, title: use.title, onClick: props.onCancel }} />
   }
   switch (restart?.kind) {
     case undefined: return null
     case 'failed': {
       const undo = controlUse(state, 'harness-undo', t)
       const leftOut = restart.leftOut === undefined ? undefined : state.harness.find(entry => entry.id === restart.leftOut?.id)
-      return <div className={`${css.row} ${css.restartCard}`} role="alert" data-restart="failed" data-restart-reason={restart.reason}>
-        <div className={css.main}>
-          <p className={css.remoteTitle}><StateDot state="error" />{t(`restart.failed.${restart.reason}`)}</p>
-          <p className={css.meta}>{t('restart.failed.kept', { failure: restart.failure })}</p>
-          {restart.leftOut === undefined ? null : <p className={css.failureText}>{t('restart.failed.leftOut', { file: restart.leftOut.file })}</p>}
-        </div>
-        <div className={css.actions}>
-          {leftOut?.undoable === true
-            ? <Button variant="outline" size="sm" disabled={busy || undo.disabled} title={undo.title} onClick={() => { props.onUndo(leftOut) }}>{t('restart.failed.undo')}</Button>
-            : null}
-          {restart.reason === 'health'
-            ? null
-            : <Button variant="outline" size="sm" disabled={busy || use.disabled} title={use.title} onClick={() => { props.onRestart(undefined) }}>{t('restart.again')}</Button>}
-        </div>
-      </div>
+      const undoTarget = leftOut?.undoable === true ? leftOut : undefined
+      const again = restart.reason === 'health' ? undefined : { label: t('restart.again'), disabled: busy || use.disabled, title: use.title, onClick: () => { props.onRestart(undefined) } }
+      const undoOffer = undoTarget === undefined ? undefined : { label: t('restart.failed.undo'), disabled: busy || undo.disabled, title: undo.title, onClick: () => { props.onUndo(undoTarget) } }
+      return <Alert kind="error" role="alert" data-restart="failed" data-restart-reason={restart.reason} title={t(`restart.failed.${restart.reason}`)}
+        line={<>
+          {t('restart.failed.kept', { failure: restart.failure })}
+          {restart.leftOut === undefined ? null : <span className={css.restartExtra}>{t('restart.failed.leftOut', { file: restart.leftOut.file })}</span>}
+        </>}
+        primary={again ?? undoOffer} secondary={again === undefined ? undefined : undoOffer} />
     }
-    case 'needed': return <div className={`${css.row} ${css.restartCard}`} role="note" data-restart="needed">
-      <div className={css.main}>
-        <p className={css.remoteTitle}>{t(pluralKey('restart.needed', restart.changes), { n: restart.changes })}</p>
-        <p className={css.meta}>{restart.available ? t('restart.body') : t('restart.unavailable')}</p>
-      </div>
-      {restart.available
-        ? <div className={css.actions}>
-          <Button variant="primary" size="sm" disabled={busy || use.disabled} title={use.title} onClick={() => { props.onRestart(restart.runningChats) }}>{t('restart.now')}</Button>
-        </div>
-        : null}
-    </div>
+    case 'needed': return <Alert kind="info" role="note" data-restart="needed" title={t(pluralKey('restart.needed', restart.changes), { n: restart.changes })}
+      line={restart.available ? t('restart.body') : t('restart.unavailable')}
+      primary={restart.available ? { label: t('restart.now'), disabled: busy || use.disabled, title: use.title, onClick: () => { props.onRestart(restart.runningChats) } } : undefined} />
   }
 }
 

@@ -26,6 +26,9 @@ describe('the set-aside notice', () => {
     expect(screen.getByRole('status').textContent).toBe(
       'Some workspace records could not be read and were set aside: workspaces.json.quarantined-20261114T101500Z.json, workspaces.json.quarantined-20261114T101600Z.json. Run delorun doctor for details.Dismiss',
     )
+    // It is the shared alert: a banner of the warning kind that stays a polite status.
+    expect(screen.getByRole('status').getAttribute('data-kind')).toBe('warning')
+    expect(screen.getByRole('status').getAttribute('data-variant')).toBe('banner')
   })
 
   it.each<readonly [string, readonly string[] | undefined]>([

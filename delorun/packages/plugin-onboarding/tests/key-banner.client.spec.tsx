@@ -47,6 +47,9 @@ describe('the banner', () => {
     await settle()
     expect(screen.getByRole('status').textContent).toBe(`${en['keyBanner.text']}${en['keyBanner.open']}`)
     expect(container.querySelector('[role="alert"]')).toBeNull()
+    // It is the shared alert: a banner of the info kind, a polite status.
+    expect(screen.getByRole('status').getAttribute('data-kind')).toBe('info')
+    expect(screen.getByRole('status').getAttribute('data-variant')).toBe('banner')
     fireEvent.click(screen.getByRole('button', { name: en['keyBanner.open'] }))
     expect(openModels).toHaveBeenCalledOnce()
   })

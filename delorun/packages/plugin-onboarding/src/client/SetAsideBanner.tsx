@@ -4,6 +4,7 @@
  * mounts; dismissing the notice hides it until the studio is loaded again.
  */
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
+import { Alert } from '@delorun/brand/alert'
 import { useEffect, useState, useSyncExternalStore } from 'react'
 import type { ReactNode } from 'react'
 import css from './KeyBanner.module.css'
@@ -40,9 +41,13 @@ export function SetAsideBanner({ t, setAside, dismissed, dismiss }: SetAsideBann
   }, [setAside, hidden])
   if (hidden || files.length === 0) return null
   return (
-    <div className={css.banner} role="status">
-      <span className={css.text}>{t('setAside.text', { files: files.join(', ') })}</span>
-      <button type="button" className={css.button} onClick={dismiss}>{t('setAside.dismiss')}</button>
-    </div>
+    <Alert
+      kind="warning"
+      variant="banner"
+      role="status"
+      className={css.banner}
+      title={t('setAside.text', { files: files.join(', ') })}
+      secondary={{ label: t('setAside.dismiss'), onClick: dismiss }}
+    />
   )
 }
