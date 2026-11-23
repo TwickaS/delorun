@@ -465,6 +465,30 @@ export class DelorunMcpConsent extends McpAddConsent implements McpReviews {
   }
 
   /**
+   * Review again every server this consent's predecessor left stopped, once the consent starts: a Loader row that failed
+   * with a consent refusal and an MCP manager server whose start failed. A change of the ask mode restarts the consent,
+   * so a server the new mode no longer asks for starts without a restart of the studio; one it still asks for is
+   * refused again and listed. Failures are logged; each row keeps its own error.
+   * @returns how many stopped servers started again.
+   */
+  async startRefused(): Promise<number> {
+    const names = new Set<string>()
+    for (const entry of this.ctx.get('loader')?.entries() ?? []) {
+      const fiber = entry.fiber
+      if (fiber === undefined || typeof Reflect.get(Object(fiber.config), 'serverName') !== 'string') continue
+      const failure = await fiber.await().then(() => undefined, (error: unknown) => error)
+      const refused = refusedServer(failure)
+      if (refused !== undefined) names.add(refused)
+    }
+    for (const server of this.ctx.get('mcpManager')?.list() ?? []) {
+      if (server.configured && server.status.state === 'failed' && server.status.reason === 'load') names.add(server.name)
+    }
+    let started = 0
+    for (const name of names) started += await this.startRefusedRows(name)
+    return started
+  }
+
+  /**
    * Start again the server of the same name that the MCP manager (Settings, or a plugin's registration) holds stopped
    * because its activation failed, now that its start is accepted. The manager mounts it again with its current entry,
    * so its next review judges the start as it is now and its tools register for every chat's next model request.
@@ -721,6 +745,11 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   }
   registerSwitches(ctx)
   await ctx.plugin(DelorunMcpConsent, { ask: config.ask })
+  // A changed ask mode restarts this row; the servers the previous mode left stopped are reviewed again under the new one.
+  ctx.inject(['mcpReviews'], (child) => {
+    const consent = child.get('mcpAddConsent')
+    if (consent instanceof DelorunMcpConsent) void consent.startRefused().catch((error: unknown) => { child.logger.warn(`mcp-consent: the stopped servers were not reviewed again: ${reasonOf(error)}`) })
+  })
   // The studio's routes, in a profile that serves a studio.
   ctx.inject(['connection', 'mcpReviews'], (child) => { registerMcpConsentRoutes(child, child.mcpReviews) })
 }

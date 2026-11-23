@@ -172,6 +172,15 @@ describe('the origin of a server', () => {
     expect(mockConnect).toHaveBeenCalledTimes(1)
   })
 
+  it('starts a waiting server without a restart once the ask mode no longer asks for it', async () => {
+    const [profile] = await startRows('always', [{ name: 'cordis:mcp', config: serverRow('files') }])
+    expect(profile).toBeInstanceOf(McpConsentRefusedError)
+    const consentId = [...ctx.loader.entries()].find(entry => entry.options.name === 'cordis:consent')?.id ?? ''
+    await ctx.loader.update(consentId, { config: { enabled: true, ask: 'outside' } })
+    await vi.waitFor(() => { expect(mockConnect).toHaveBeenCalledTimes(1) })
+    expect(ctx.tools.get('mcp__files__remote')).toBeDefined()
+  })
+
   it('asks for every server under "Always ask", the profile\'s too', async () => {
     const [profile] = await startRows('always', [{ name: 'cordis:mcp', config: serverRow('files') }])
     expect(profile).toBeInstanceOf(McpConsentRefusedError)
