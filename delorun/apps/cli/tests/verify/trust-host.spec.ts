@@ -5,8 +5,8 @@
  * service whenever the service is present.
  */
 import { Context } from '@deepseek-ai/cordis'
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { getPriority, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, onTestFinished, vi } from 'vitest'
 import { DELORUN_START_CHECK_ENV } from '@delorun/contract-home-layout'
@@ -16,7 +16,7 @@ import { TRUST_BILL_SCHEMA, type TrustBill } from '@delorun/bundle-local/trust-b
 import type { DelorunLogger } from '@delorun/logs'
 import type { BillContext } from '../../src/verify/bill.ts'
 import type { ReleaseCheckOutcome } from '../../src/verify/checks.ts'
-import { billOfVerifyOutput, childRunner, hostTrustOptions, launcherVerifyCommand, runChild, trustSource, watchTrust, type ChildRun, type RunChild, type TrustStages, type TrustWatchOptions } from '../../src/verify/trust-host.ts'
+import { BACKGROUND_NICE, billOfVerifyOutput, childRunner, hostTrustOptions, launcherVerifyCommand, runChild, trustSource, watchTrust, type ChildRun, type RunChild, type TrustStages, type TrustWatchOptions } from '../../src/verify/trust-host.ts'
 
 /**
  * A bill of one stage.
@@ -104,6 +104,17 @@ describe('the trust source', () => {
     expect(contexts).toHaveLength(1)
     expect(contexts[0]?.context.plugins).toBeDefined()
     expect(contexts[0]?.context.changes).toBeDefined()
+  })
+
+  it('makes a new start bill on each refresh, which hashes nothing and leaves the read bill alone', async () => {
+    let made = 0
+    const { stages: value, contexts } = stages(async () => ({ ...bill('start'), generatedAt: `2026-11-11T10:0${String(made++)}:00Z` }))
+    const source = trustSource(options(logger()), value)
+    expect((await source.read()).generatedAt).toBe('2026-11-11T10:00:00Z')
+    expect((await source.refresh()).generatedAt).toBe('2026-11-11T10:01:00Z')
+    expect((await source.refresh()).generatedAt).toBe('2026-11-11T10:02:00Z')
+    expect((await source.read()).generatedAt).toBe('2026-11-11T10:00:00Z')
+    expect(contexts.map(entry => entry.stage)).toEqual(['start', 'start', 'start'])
   })
 
   it('produces the start bill again after a failed one', async () => {
@@ -210,6 +221,27 @@ describe('Check now through the launcher', () => {
     expect(log.lines).toContain('info delorun-trust: delorun verify: notice: something')
   })
 
+  it('hands the background check\'s low priority and stop signal to the launcher run', async () => {
+    const { handoff } = launcherPackage()
+    const given: unknown[] = []
+    const { stages: value } = stages(undefined, async (_command, _timeoutMs, runOptions) => {
+      given.push(runOptions)
+      return { status: 0, stdout: `${JSON.stringify({ bill: bill('verify') })}\n`, stderr: '', timedOut: false }
+    })
+    const source = trustSource({ ...options(logger()), env: { [DELORUN_START_CHECK_ENV]: handoff } }, value)
+    const signal = new AbortController().signal
+    await source.check(5_000, { lowPriority: true, signal })
+    await source.check(5_000)
+    expect(given).toEqual([{ lowPriority: true, signal }, {}])
+  })
+
+  it('refuses a background check no launcher can run, rather than hashing inside the Host', async () => {
+    const { stages: value, contexts } = stages()
+    const source = trustSource({ ...options(logger()), env: {} }, value)
+    await expect(source.check(5_000, { lowPriority: true, signal: new AbortController().signal })).rejects.toThrow('no launcher can run the background full check (no-launcher)')
+    expect(contexts.filter(entry => entry.stage === 'verify')).toEqual([])
+  })
+
   it('c15-check-now-runs-through-launcher: a launcher that refuses to run delorun verify makes a bill whose files failed, with its refusal', async () => {
     const { handoff } = launcherPackage()
     const { stages: value } = stages(undefined, async () => ({ status: 1, stdout: '', stderr: 'Delorun did not run delorun verify: release 0.1.0 failed its start check.\nWhy: RUNTIME_CHANGED: node/bin/node (sha256)\n', timedOut: false }))
@@ -275,6 +307,48 @@ describe.skipIf(process.platform === 'win32')('a child\'s process tree', () => {
     const grandchild = Number(run.stdout.trim().split('\n')[0])
     expect(grandchild).toBeGreaterThan(0)
     await vi.waitFor(() => { expect(alive(grandchild)).toBe(false) })
+  })
+
+  it('stops the whole group when the background check is stopped, and rejects with the reason', async () => {
+    const controller = new AbortController()
+    const run = runner({ command: process.execPath, args: ['-e', WITH_GRANDCHILD('setInterval(() => {}, 1000)')], env: {} }, 30_000, { signal: controller.signal })
+    await new Promise(resolve => setTimeout(resolve, 300))
+    controller.abort(new Error('a turn started'))
+    await expect(run).rejects.toThrow('a turn started')
+  })
+
+  it('kills a group member that ignored SIGTERM as soon as the stopped child exits', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'delorun-trust-group-'))
+    onTestFinished(() => { rmSync(directory, { recursive: true, force: true }) })
+    const file = join(directory, 'grandchild.pid')
+    // The child exits on SIGTERM; its grandchild ignores SIGTERM and holds no output, so only the group kill ends it.
+    const child = `const g = require('node:child_process').spawn(process.execPath, ['-e', 'process.on("SIGTERM", () => {}); setInterval(() => {}, 1000)'], { stdio: 'ignore' }); require('node:fs').writeFileSync(${JSON.stringify(file)}, String(g.pid)); setInterval(() => {}, 1000)`
+    const controller = new AbortController()
+    const run = childRunner({ killMs: 60_000, closeMs: 60_000 })({ command: process.execPath, args: ['-e', child], env: {} }, 30_000, { signal: controller.signal })
+    let grandchild = 0
+    await vi.waitFor(() => {
+      grandchild = Number(readFileSync(file, 'utf8'))
+      expect(grandchild).toBeGreaterThan(0)
+    })
+    controller.abort(new Error('a turn started'))
+    await expect(run).rejects.toThrow('a turn started')
+    await vi.waitFor(() => { expect(alive(grandchild)).toBe(false) }, { timeout: 3_000 })
+  })
+
+  it('starts nothing for a check stopped before it began', async () => {
+    const controller = new AbortController()
+    controller.abort(new Error('a turn started'))
+    await expect(runner({ command: '/no/such/command', args: [], env: {} }, 1_000, { signal: controller.signal })).rejects.toThrow('a turn started')
+  })
+
+  it.runIf(process.platform === 'linux')('runs the background check at nice 10, and Check now at the Host\'s own priority', async () => {
+    // The priority is lowered just after the child starts, so the child reads its own a moment later.
+    const read = 'setTimeout(() => { process.stdout.write(String(require("node:os").getPriority())) }, 200)'
+    const low = await runner({ command: process.execPath, args: ['-e', read], env: {} }, 10_000, { lowPriority: true })
+    // A process may raise its nice value but not lower it, so under a Host already nicer than 10 the child keeps the Host's.
+    expect(Number(low.stdout)).toBe(Math.max(BACKGROUND_NICE, getPriority()))
+    const normal = await runner({ command: process.execPath, args: ['-e', read], env: {} }, 10_000)
+    expect(Number(normal.stdout)).toBe(getPriority())
   })
 
   it('settles when the child exits though a grandchild still holds its output, and ends the grandchild', async () => {

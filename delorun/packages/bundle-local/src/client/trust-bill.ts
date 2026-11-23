@@ -219,13 +219,53 @@ export interface TrustBill {
 }
 
 /**
- * A row's or the badge's state: `unknown` and `unchecked` are states of their own, never a pass. `attention` is a
- * plugin with a critical advisory. `checked-at-start` is a release the launcher's start check passed while hashing only
- * the files its unauthenticated identity record could not vouch for; `checked-in-studio` is a release Check now checked
- * inside the Host because no launcher could run it; neither is `verified`, which needs every runtime file hashed.
- * `waiting` is the person's own changes with some waiting for their review.
+ * Why the background full check cannot make the release Verified: the Host would have to run it itself, because no
+ * launcher started this runtime (`no-launcher`) or the one that did cannot be run from here (`launcher-unresolvable`);
+ * the last run stopped or failed before it produced a bill (`failed`); or the row's configuration switches the
+ * background check off (`off`).
  */
-export type TrustState = 'verified' | 'checked-at-start' | 'checked-in-studio' | 'waiting' | 'attention' | 'failed' | 'unchecked' | 'unknown'
+export type TrustFullCheckReason = TrustHostCheckReason | 'failed' | 'off'
+
+/**
+ * The background full check, which the Host runs through the launcher, at low priority, once the studio has started
+ * and no turn has run for a while: `waiting` until then; `running` while it hashes; `done` once a full check produced
+ * the current bill or the start check already hashed every file; `unavailable` with the reason when it cannot run.
+ */
+export type TrustFullCheck =
+  | { readonly state: 'waiting' }
+  | { readonly state: 'running' }
+  | { readonly state: 'done' }
+  | { readonly state: 'unavailable', readonly reason: TrustFullCheckReason }
+
+/** How fresh one row is: when its check last finished and whether one runs now. */
+export interface TrustRowFreshness {
+  /** When the row's check last finished, RFC 3339 UTC; `null` when it never ran. */
+  readonly at: string | null
+  /** Whether a check of this row runs now. */
+  readonly running: boolean
+}
+
+/**
+ * How fresh each row is, beside the bill, and the background full check. The Host keeps it; a bill alone, as
+ * `delorun verify` prints it, has none.
+ */
+export interface TrustChecks {
+  readonly release: TrustRowFreshness & { readonly full: TrustFullCheck }
+  readonly releaseLog: TrustRowFreshness
+  readonly plugins: TrustRowFreshness
+  readonly changes: TrustRowFreshness
+}
+
+/**
+ * A row's or the badge's state: `unknown` and `unchecked` are states of their own, never a pass. `attention` is a
+ * plugin with a critical advisory. `checking` is a release whose signature and start check passed while the background
+ * full check is waiting or running; `checked-at-start` is a release the launcher's start check passed while hashing only
+ * the files its unauthenticated identity record could not vouch for, when no full check can run or none is known;
+ * `checked-in-studio` is a release Check now checked inside the Host because no launcher could run it; none of the three
+ * is `verified`, which needs every runtime file hashed through the launcher. `waiting` is the person's own changes with
+ * some waiting for their review.
+ */
+export type TrustState = 'verified' | 'checking' | 'checked-at-start' | 'checked-in-studio' | 'waiting' | 'attention' | 'failed' | 'unchecked' | 'unknown'
 
 /**
  * How loudly a state shows: `red` for a failed check; `amber` for an unknown release state, an unchecked check, a
@@ -264,17 +304,20 @@ function row(id: TrustRowId, state: TrustState, tone: TrustTone, ownChanges = 0)
 /**
  * The `release` row: failed and red when the signature or the files failed; unknown and amber when either was not
  * checked, because an unverified release is never neutral; and when both passed, verified only when every runtime file
- * was hashed: `checked-at-start` for a start bill whose start check hashed fewer, and `checked-in-studio` for a Check now
- * that ran inside the Host, each neutral.
+ * was hashed: for a start bill whose start check hashed fewer, `checking` while the background full check waits or runs
+ * and `checked-at-start` otherwise, and `checked-in-studio` for a Check now that ran inside the Host, each neutral.
  * @param bill - the bill.
+ * @param full - the background full check, when the Host reports one.
  * @returns the row.
  */
-function releaseRow(bill: TrustBill): TrustRow {
+function releaseRow(bill: TrustBill, full: TrustFullCheck | undefined): TrustRow {
   const results = [bill.release.signature, bill.release.files]
   if (results.includes('fail')) return row('release', 'failed', 'red')
   if (!results.every(result => result === 'pass')) return row('release', 'unknown', 'amber')
   if (bill.checkedBy?.via === 'host') return row('release', 'checked-in-studio', 'neutral')
-  if (bill.stage === 'start' && bill.release.startCheck?.full !== true) return row('release', 'checked-at-start', 'neutral')
+  if (bill.stage === 'start' && bill.release.startCheck?.full !== true) {
+    return row('release', full?.state === 'waiting' || full?.state === 'running' ? 'checking' : 'checked-at-start', 'neutral')
+  }
   return row('release', 'verified', 'ok')
 }
 
@@ -325,14 +368,16 @@ function changesRow(changes: TrustChanges, patches: TrustPatches): TrustRow {
 /**
  * The panel's four rows.
  * @param bill - the bill.
+ * @param checks - how fresh each row is, when the Host reports it; its background full check decides between
+ *   `checking` and `checked-at-start`.
  * @returns the rows in {@link TRUST_ROW_IDS} order.
  */
-export function trustRows(bill: TrustBill): readonly TrustRow[] {
-  return [releaseRow(bill), releaseLogRow(bill.releaseLog), pluginsRow(bill.plugins), changesRow(bill.changes, bill.patches)]
+export function trustRows(bill: TrustBill, checks?: TrustChecks | null): readonly TrustRow[] {
+  return [releaseRow(bill, checks?.release.full), releaseLogRow(bill.releaseLog), pluginsRow(bill.plugins), changesRow(bill.changes, bill.patches)]
 }
 
 /** The order in which a row's state decides the badge: the first state any row has is the badge's. */
-const STATE_PRECEDENCE: readonly TrustState[] = ['failed', 'attention', 'unchecked', 'unknown', 'checked-in-studio', 'checked-at-start', 'waiting', 'verified']
+const STATE_PRECEDENCE: readonly TrustState[] = ['failed', 'attention', 'unchecked', 'unknown', 'checked-in-studio', 'checked-at-start', 'checking', 'waiting', 'verified']
 
 /** The order in which a row's tone decides the badge's colour. */
 const TONE_PRECEDENCE: readonly TrustTone[] = ['red', 'amber', 'neutral', 'ok']
@@ -347,7 +392,7 @@ export interface TrustBadge {
 
 /**
  * The badge over the rows: the state is `failed` when any row failed, then `attention`, `unchecked`, `unknown`,
- * `checked-in-studio`, `checked-at-start` and `waiting` in that order, and `verified` only when every row is; the tone
+ * `checked-in-studio`, `checked-at-start`, `checking` and `waiting` in that order, and `verified` only when every row is; the tone
  * is the loudest row's. The count of the person's own changes never changes the state or the tone.
  * @param rows - the rows, or `null` when no bill could be read, which is `unknown` and amber.
  * @returns the badge.

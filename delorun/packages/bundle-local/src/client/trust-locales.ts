@@ -1,7 +1,22 @@
-/** The trust badge's and the trust panel's copy. */
+/** The trust badge's and the trust panel's copy, with the security overview's. */
+import { en as overviewEn, zh as overviewZh } from './overview-locales.ts'
 
 /** English dictionary. */
 export const en = {
+  'badge.checking': 'Checking files',
+  'state.checking': 'Signature verified · checking files',
+  'fresh.checking': 'Checking…',
+  'fresh.never': 'Not checked yet',
+  'fresh.justNow': 'Checked just now',
+  'fresh.justNowShort': 'just now',
+  'fresh.ago': 'Checked {ago}',
+  'full.waiting': 'Every file is hashed once Delorun has been idle for a moment.',
+  'full.running': 'Hashing every file now, at low priority.',
+  'full.reason.no-launcher': 'The full check runs through the launcher, and no launcher started this Delorun; Check now checks inside the studio instead.',
+  'full.reason.launcher-unresolvable': 'The full check runs through the launcher, and the one that started this Delorun cannot be run from here.',
+  'full.reason.failed': 'The full check did not finish; Delorun\'s log says why. Check now runs it again.',
+  'full.reason.off': 'The background full check is switched off; press Check now to hash every file.',
+  ...overviewEn,
   'time.locale': 'en',
   'badge.verified': 'Verified',
   'badge.attention': 'Needs attention',
@@ -107,6 +122,20 @@ export type TrustLocaleKey = keyof typeof en
 
 /** Chinese dictionary. */
 export const zh: typeof en = {
+  'badge.checking': '正在检查文件',
+  'state.checking': '签名已验证 · 正在检查文件',
+  'fresh.checking': '正在检查…',
+  'fresh.never': '尚未检查',
+  'fresh.justNow': '刚刚检查过',
+  'fresh.justNowShort': '刚刚',
+  'fresh.ago': '{ago}检查过',
+  'full.waiting': 'Delorun 空闲片刻后，会对每个文件计算哈希。',
+  'full.running': '正在以低优先级对每个文件计算哈希。',
+  'full.reason.no-launcher': '完整检查通过启动器运行，而这个 Delorun 不是由启动器启动的；“立即检查”会改为在工作室内检查。',
+  'full.reason.launcher-unresolvable': '完整检查通过启动器运行，而无法从这里运行启动这个 Delorun 的启动器。',
+  'full.reason.failed': '完整检查没有完成，Delorun 的日志中写明了原因。“立即检查”会再次运行它。',
+  'full.reason.off': '后台完整检查已关闭；按“立即检查”可对每个文件计算哈希。',
+  ...overviewZh,
   'time.locale': 'zh-CN',
   'badge.verified': '已验证',
   'badge.attention': '需要注意',

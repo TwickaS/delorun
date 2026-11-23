@@ -1,6 +1,6 @@
 /**
  * The `delorun-trust` row (`delorun/packages/bundle-local/src/trust.ts`): with its switch off it mounts nothing; on, it serves
- * the attached source's start bill, read once, and then the last check's bill on `GET`, admits a device's read and no
+ * the attached source's start bill, read once on attach, and then the last check's bill on `GET`, admits a device's read and no
  * device's check, coalesces concurrent checks into one run, answers failures with a typed code, and takes one source.
  */
 import { Context } from '@deepseek-ai/cordis'
@@ -96,6 +96,7 @@ function source(read: () => Promise<TrustBill>, check: () => Promise<TrustBill>)
   const calls = { read: 0, check: 0, timeouts: [] as number[] }
   const value: TrustSource = {
     read: () => { calls.read++; return read() },
+    refresh: read,
     check: (timeoutMs) => { calls.check++; calls.timeouts.push(timeoutMs); return check() },
   }
   return { source: value, calls }
@@ -117,10 +118,17 @@ const peer = (kind: string): PeerScope => ({ principal: kind === 'owner' ? { kin
 
 describe('the switch', () => {
   it('off, the default and the parity value, mounts no service and no route', async () => {
-    expect(Config({} as Trust.Config).enabled).toBe(false)
+    expect(Config({}).enabled).toBe(false)
     const { ctx, routes } = await mount({})
     expect(ctx.get('delorunTrust')).toBeUndefined()
     expect(routes.size).toBe(0)
+  })
+
+  it('checks in the background by default, after 45 s without a turn, and re-reads at least 60 s after a key moment', () => {
+    expect(Config({ enabled: true })).toMatchObject({ autoCheck: true, idleSeconds: 45, keyMomentSeconds: 60 })
+    for (const wrong of [{ idleSeconds: 4 }, { idleSeconds: 3601 }, { keyMomentSeconds: 59 }, { keyMomentSeconds: 601 }]) {
+      expect(() => Config({ enabled: true, ...wrong })).toThrow()
+    }
   })
 
   it('on, registers the bill route for GET and the check route for POST', async () => {
@@ -133,7 +141,7 @@ describe('the bill route', () => {
   it('answers null while no source is attached', async () => {
     const { routes } = await mount({ enabled: true })
     const response = await route(routes, TRUST_BILL_PATH).fetch(request(TRUST_BILL_PATH, 'GET'))
-    expect({ status: response.status, body: await body(response), cache: response.headers.get('cache-control') }).toEqual({ status: 200, body: { bill: null }, cache: 'no-store' })
+    expect({ status: response.status, body: await body(response), cache: response.headers.get('cache-control') }).toEqual({ status: 200, body: { bill: null, checks: null }, cache: 'no-store' })
   })
 
   it('reads the start bill once and answers it on every render, then the last check\'s bill', async () => {
@@ -251,7 +259,7 @@ describe('the source', () => {
     expect(() => ctx.delorunTrust.attach(first.source)).toThrow('delorun-trust: a source is already attached')
     detach()
     const answer = await route(routes, TRUST_BILL_PATH).fetch(request(TRUST_BILL_PATH, 'GET'))
-    expect(await answer.json()).toEqual({ bill: null })
+    expect(await answer.json()).toEqual({ bill: null, checks: null })
     ctx.delorunTrust.attach(source(async () => bill('verify'), async () => bill('verify')).source)
     const next = await route(routes, TRUST_BILL_PATH).fetch(request(TRUST_BILL_PATH, 'GET'))
     expect((await next.json() as { bill: TrustBill }).bill.stage).toBe('verify')

@@ -54,6 +54,7 @@
     "src/prompt-wording.ts",
     "src/update-check.ts",
     "src/trust.ts",
+    "src/trust-schedule.ts",
     "src/profile-versions.ts",
     "src/run-settings.ts",
     "src/studio-page.ts",

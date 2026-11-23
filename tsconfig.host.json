@@ -257,6 +257,7 @@
     "apps/web/tests/delorun-reach-listener.e2e.ts",
     "apps/web/tests/delorun-dangerous-mode.e2e.ts",
     "apps/web/tests/delorun-pairing.e2e.ts",
+    "apps/web/tests/delorun-security-overview.e2e.ts",
     "apps/web/tests/delorun-create-plugin.e2e.ts",
     "apps/web/tests/delorun-setup-versions.e2e.ts",
     "delorun/packages/plugin-permission-defaults/src/store.ts",

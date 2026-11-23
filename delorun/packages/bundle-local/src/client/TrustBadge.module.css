@@ -316,3 +316,19 @@
     transform: translate(-50%, -50%);
   }
 }
+
+/* A row's freshness and what its state rests on, under its title. */
+.rowNote {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  margin: -6px 0 8px;
+  padding: 0 4px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.fresh {
+  color: var(--dsw-alias-label-tertiary);
+}

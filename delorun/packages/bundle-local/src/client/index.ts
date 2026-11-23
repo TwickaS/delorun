@@ -100,6 +100,8 @@ import { PinModeSection, type PinModeSectionInjected } from './PinModeSection.ts
 import { provideAgentSeatReach } from './agent-seat-reach.ts'
 import { watchSessionRotation } from './session-rotation.ts'
 import { createUnlockSource, type UnlockSource } from './unlock.ts'
+import { OverviewStore } from './security-overview-api.ts'
+import { turnProtectionOn } from './run-settings-api.ts'
 import { trustApi, TrustStore, type TrustApi } from './trust-api.ts'
 import { TrustBadge, type TrustBadgeInjected } from './TrustBadge.tsx'
 import { en as trustEn, zh as trustZh, type TrustLocaleKey } from './trust-locales.ts'
@@ -144,8 +146,8 @@ export type { TrustLocaleKey } from './trust-locales.ts'
 export type { TrustBadgeInjected, TrustBadgeProps } from './TrustBadge.tsx'
 export { badgeLabel, formatTime, rowStateLabel, TrustBadge, VERIFY_COMMAND } from './TrustBadge.tsx'
 export {
-  fetchTrustBill, postTrustCheck, trustApi, TrustBillSchema, TrustStore,
-  type TrustApi, type TrustCheckOutcome, type TrustCheckState,
+  fetchTrustBill, fetchTrustSnapshot, postTrustCheck, trustApi, TrustBillSchema, TrustChecksSchema, trustPollDelay, TrustStore,
+  type TrustApi, type TrustCheckOutcome, type TrustCheckState, type TrustSnapshot,
 } from './trust-api.ts'
 export type { ConsentsLocaleKey } from './consents-locales.ts'
 export type { ExternalAgentsSectionInjected, ExternalAgentsSectionProps } from './ExternalAgentsSection.tsx'
@@ -638,7 +640,7 @@ export function apply(ctx: Context): void {
   ctx.slots.inject('settings.section.icon', () => ctx.slots.register({ name: 'settings.section.icon', id: PIN_MODE_SECTION_ID }, PinModeIcon))
   applyNeedsSetup(ctx, browserFetch)
   applyRemoteNotice(ctx)
-  applyTrustBadge(ctx, trustApi(browserFetch))
+  applyTrustBadge(ctx, trustApi(browserFetch), new OverviewStore(browserFetch), studioFetch)
   applyConsents(ctx, studioFetch)
 }
 
@@ -695,18 +697,36 @@ export function applyNeedsSetup(ctx: Context, fetch: HostFetch): void {
 
 /**
  * Register the trust badge at the sidebar's foot and read its bill while the plugin lives. A page a reach listener
- * served, a remote session, shows the bill without Check now, which the Host refuses to any Peer but the owner.
+ * served, a remote session, shows the bill without Check now, which the Host refuses to any Peer but the owner. The badge
+ * opens the security overview, whose facts the overview store reads while it is open.
  * @param ctx - the browser plugin context.
  * @param api - the Host's trust routes.
+ * @param overview - the security overview's facts.
+ * @param actFetch - the fetch the overview's actions write through, which asks for an unlock where a route needs one.
  */
-export function applyTrustBadge(ctx: Context, api: TrustApi): void {
+export function applyTrustBadge(ctx: Context, api: TrustApi, overview: OverviewStore, actFetch: HostFetch): void {
   ctx.effect(() => ctx.locale.register(TRUST_NS, { en: trustEn, zh: trustZh }), 'delorun-trust: badge dictionaries')
   const store = new TrustStore(api)
   ctx.effect(() => store.start(listener => ctx.on('connection/reset', listener)), 'delorun-trust: bill reads')
   const remote = (ctx.get('connection') as ConnectionHandle | undefined)?.remoteMedia === 'placeholder'
   const face: TrustBadgeInjected = {
-    hooks: { bill: store.bill, checking: store.checking },
+    hooks: { bill: store.bill, checks: store.checks, checking: store.checking, overview: overview.facts, overviewLoaded: overview.loaded },
     check: remote ? null : () => { void store.check() },
+    watchOverview: () => overview.watch(),
+    act: async (action) => {
+      if (action.kind === 'open-section') {
+        ctx.get('settingsShell')?.openSection(action.section)
+        return true
+      }
+      try {
+        await turnProtectionOn(actFetch)
+      } catch (_refused) {
+        // Refused or unreachable: the panel says it did not turn on and points to Changes.
+        return false
+      }
+      await overview.reload()
+      return true
+    },
   }
   ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
     name: 'sidebar.footer.action',
