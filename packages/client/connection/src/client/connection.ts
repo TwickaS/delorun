@@ -53,6 +53,11 @@ export interface ConnectionSinks {
   onStateChange?: (state: ConnectionState) => void
   /** Start one fresh physical-carrier attempt before each logical retry. */
   onReconnectRequested?: () => void
+  /**
+   * The wall-clock time (`Date.now()` milliseconds) of the next automatic attempt when a backoff delay starts, then
+   * `undefined` when that delay ends, whether it ran out, a reconnect or a network change cut it short, or the loop stopped.
+   */
+  onRetryScheduled?: (retryAt: number | undefined) => void
 }
 
 /**
@@ -188,7 +193,10 @@ export class ConnectionController {
         if (!immediate) {
           const retryDelay = new AbortController()
           this.retryDelay = retryDelay
-          await sleep(this.backoffDelay(attempt), retryDelay.signal)
+          const delay = this.backoffDelay(attempt)
+          this.callSink(() => { this.sinks.onRetryScheduled?.(Date.now() + delay) })
+          await sleep(delay, retryDelay.signal)
+          this.callSink(() => { this.sinks.onRetryScheduled?.(undefined) })
           if (this.retryDelay === retryDelay) this.retryDelay = null
           if (!this.isRunning()) return
           if (retryDelay.signal.aborted) continue

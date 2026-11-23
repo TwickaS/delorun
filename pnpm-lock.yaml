@@ -3068,6 +3068,9 @@ importers:
       '@delorun/archive':
         specifier: workspace:*
         version: link:../archive
+      '@delorun/brand':
+        specifier: workspace:*
+        version: link:../brand
       '@delorun/changes':
         specifier: workspace:*
         version: link:../changes
@@ -3431,6 +3434,10 @@ importers:
         version: link:../../../packages/workspace/workspace
 
   delorun/packages/plugin-downloads:
+    dependencies:
+      '@delorun/brand':
+        specifier: workspace:*
+        version: link:../brand
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~
@@ -4568,6 +4575,9 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
+      '@delorun/brand':
+        specifier: workspace:*
+        version: link:../brand
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~
@@ -4729,6 +4739,9 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
+      '@delorun/brand':
+        specifier: workspace:*
+        version: link:../brand
       '@delorun/contract-home-process':
         specifier: workspace:*
         version: link:../contract-home-process

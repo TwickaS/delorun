@@ -419,8 +419,8 @@
     {
       "path": "packages/client/connection/src/client/index.ts",
       "class": "security",
-      "reason": "Reach listener Content Security Policy (C4): `ConnectionHandle.remoteMedia` reads the `__DSH_REMOTE_MEDIA__` global; it is `load` when the global is absent, so loopback pages are unchanged. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end. A page served from a loopback Host also ignores the browser's online and offline events (`watchBrowserNetwork` takes `hostIsLoopback`), so a computer with its network off, or a browser in a namespace with only loopback, no longer shows the studio as Disconnected while its loopback connection works; a failed connection still reports disconnected. The Content Security Policy handling above is untouched. Offer upstream. `ConnectionHandle.registerRequestExtras` registers a provider of extra request headers and WebSocket subprotocols for the browser carrier, read per request and per socket and withdrawn by its disposer; with none registered the requests and sockets are unchanged. The PIN mode page unlock token travels through it (C4, \"Page unlock\"). Offer upstream.",
-      "sha256": "c017bae25744aa767ce206b2477c4aaa8eda9e79ddfa6b5da129a3072d2dfaaa"
+      "reason": "Reach listener Content Security Policy (C4): `ConnectionHandle.remoteMedia` reads the `__DSH_REMOTE_MEDIA__` global; it is `load` when the global is absent, so loopback pages are unchanged. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end. A page served from a loopback Host also ignores the browser's online and offline events (`watchBrowserNetwork` takes `hostIsLoopback`), so a computer with its network off, or a browser in a namespace with only loopback, no longer shows the studio as Disconnected while its loopback connection works; a failed connection still reports disconnected. The Content Security Policy handling above is untouched. Offer upstream. `ConnectionHandle.registerRequestExtras` registers a provider of extra request headers and WebSocket subprotocols for the browser carrier, read per request and per socket and withdrawn by its disposer; with none registered the requests and sockets are unchanged. The PIN mode page unlock token travels through it (C4, \"Page unlock\"). Offer upstream. `ConnectionHandle.retry` publishes the owned loop's `onRetryScheduled` time (cleared when the owner releases the loop) for the reconnecting card's countdown (A630); it is optional on the type so stand-in handles need not provide it, adds no request, header or credential handling, and leaves the Content Security Policy and request extras untouched. Offer upstream.",
+      "sha256": "e8f75ae9d3efdd063b2f945e81ef17b9cb7393b4edcc2573d0e91e46c97f4827"
     },
     {
       "path": "packages/client/connection/src/index.ts",
@@ -3523,6 +3523,12 @@
       "class": "delorun-feature",
       "feature": "fork-gates",
       "reason": "Drops what read the upstream workflows Delorun removed (A555, L131): a comment that named one; no code changes."
+    },
+    {
+      "path": "packages/client/connection/src/client/connection.ts",
+      "class": "delorun-feature",
+      "feature": "studio-polish",
+      "reason": "ConnectionSinks.onRetryScheduled reports the wall-clock time of the next automatic attempt when a backoff delay starts and undefined when it ends, so Delorun's reconnecting card can say \"Trying again in N s\" (A630). Retry timing and the loop's behaviour are unchanged; without the sink nothing differs. Offer upstream."
     },
     {
       "path": "packages/client/ui-subagent/src/client/SubagentHeaderLineage.module.css",

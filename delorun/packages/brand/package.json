@@ -25,6 +25,7 @@
     "./icon-picker": "./src/icon-picker.tsx",
     "./icon-picker-locales": "./src/icon-picker-locales.ts",
     "./toast": "./src/toast.web.tsx",
+    "./alert": "./src/alert.tsx",
     "./button-link": "./src/button-link.web.tsx"
   },
   "dependencies": {

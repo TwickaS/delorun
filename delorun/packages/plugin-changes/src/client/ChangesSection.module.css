@@ -410,15 +410,10 @@
   border-color: var(--dsw-alias-state-warning-primary, var(--dsw-alias-settings-card-stroke));
 }
 
-/* The restart card: a card at the top of the section, its title with a state dot. */
-.restartCard {
-  border-color: var(--dsw-alias-state-warning-primary, var(--dsw-alias-settings-card-stroke));
-}
-
-.restartCard .remoteTitle {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+/* The failed card's second sentence, on its own line under the first. */
+.restartExtra {
+  display: block;
+  margin-top: 4px;
 }
 
 /* The version line and Apply's note above a review of a change to Delorun itself. */

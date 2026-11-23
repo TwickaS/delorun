@@ -1,5 +1,6 @@
-/** The desktop card: a slot in the toast area, collapsible to one line. */
+/** The desktop card: a slot in the toast area, collapsible to one line, on the studio's quiet glass surface. */
 import { IconChevronDownOutlineRegular, IconChevronUpOutlineRegular, IconCloseOutlineRegular, ToastSlot } from '@deepseek-ai/dsh-client-ui-primitives'
+import { ALERT_CLASSES } from '@delorun/brand/alert'
 import { useId, useState, type ReactNode } from 'react'
 import css from './Card.module.css'
 import { ItemList } from './Items.tsx'
@@ -34,7 +35,7 @@ export function DownloadsCard({ model, source, t }: { readonly model: PanelModel
     <>
       <Live announcement={model.announcement} t={t} />
       {model.phase !== 'hidden' && (
-        <ToastSlot width={340}><section className={css.card} aria-label={t('title')} data-phase={model.phase} data-collapsed={collapsed || undefined}>
+        <ToastSlot width={340}><section className={`${ALERT_CLASSES.glass} ${css.card}`} aria-label={t('title')} data-phase={model.phase} data-collapsed={collapsed || undefined}>
           <div className={css.header}>
             <button type="button" className={css.toggle} aria-expanded={!collapsed} aria-controls={bodyId}
               aria-label={`${headerText(model, t)}. ${collapsed ? t('expand') : t('collapse')}`} onClick={() => { setCollapsed(open => !open) }}>
@@ -42,7 +43,7 @@ export function DownloadsCard({ model, source, t }: { readonly model: PanelModel
               {collapsed ? <IconChevronUpOutlineRegular /> : <IconChevronDownOutlineRegular />}
             </button>
             {model.phase === 'attention' && (
-              <button type="button" className={css.dismiss} aria-label={t('dismiss')} onClick={() => { for (const item of model.items) if (item.state === 'failed') source.remove(item.key) }}>
+              <button type="button" className={`${ALERT_CLASSES.close} ${css.dismiss}`} aria-label={t('dismiss')} onClick={() => { for (const item of model.items) if (item.state === 'failed') source.remove(item.key) }}>
                 <IconCloseOutlineRegular />
               </button>
             )}

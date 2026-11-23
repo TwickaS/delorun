@@ -38,6 +38,7 @@ kind: "package-library"
 | `@delorun/brand/tokens.css` | 同样的取值，写成 `--dl-*` 自定义属性 |
 | `@delorun/brand/fonts.css` | Schibsted Grotesk 与 JetBrains Mono 的 `@font-face`，拉丁子集，SIL OFL 1.1 |
 | `@delorun/brand/mark` | `MARK`（路径数据）和 `Mark`（组件） |
+| `@delorun/brand/alert` | `Alert`, `ALERT_CLASSES` and `ALERT_EXIT_MS`, the studio's alert (also exported from the index) |
 | `@delorun/brand/toast` | `Toaster`、`showToast` 和 `ToastCard`，仅供网站和文档使用：通知通过 Sonner 绘制，而工作室不加载 Sonner |
 
 <a id="tokens"></a>
@@ -62,6 +63,7 @@ kind: "package-library"
 | `Pill` | `Pill` | 色调 |
 | `Dialog` | `Modal` | 操作区页脚和 `warning` 色调 |
 | `Card` | 无 | 由 `<h3>` 命名的带边框分区 |
+| `Alert` | none | The studio's alert: kinds `info`, `success`, `warning`, `error` and `progress`, each with its own glyph in a tinted circle; a title, one muted line, a tinted primary and a quiet secondary action, an optional close; `inline`, `toast` and `banner` variants; role `alert` for a warning or an error and `status` otherwise unless the caller names one; `closing` plays the leave and `onClosed` reports its end. It holds no styles: `@delorun/plugin-theme` styles `ALERT_CLASSES` while the Delorun look is on (its README, "Alerts and pop-ups") |
 | `Notice` | 无 | 四种色调、可选图标、标题、说明和操作，实时区域角色由调用方选择 |
 | `OutcomePanel` | 无 | 居中的整块结果：图标圆盘、标题、说明、操作 |
 | `StatusCard` | `Pill` | 图标圆盘、标题、细节和状态标签 |

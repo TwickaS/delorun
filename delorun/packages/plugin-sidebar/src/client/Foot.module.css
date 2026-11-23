@@ -2,14 +2,9 @@
  * The sidebar's foot, after T3 Code's footer (MIT, © 2026 T3 Tools Inc.): 32px icon buttons, then the undo notice in
  * the free space. Spacing, type sizes and corners are the studio's tokens; the lengths below are the foot's own geometry.
  */
-.utility,
-.undo {
+.utility {
   --foot-button: 32px;
   --foot-icon: 16px;
-  --foot-notice: 24px;
-}
-
-.utility {
   /* T3 Code's sidebar icon colour: the muted label at 85% over the sidebar. */
   --sidebar-icon: color-mix(in srgb, var(--dsw-alias-label-tertiary) 85%, var(--dsw-specific-sidebar-fill, var(--dsw-alias-bg-base)));
 
@@ -56,62 +51,22 @@
   height: var(--foot-icon);
 }
 
-/* T3 Code's undo notice: 24px, 11px text, the button before the summary in the source, after it on screen. */
-.undo {
-  display: flex;
-  flex: 1;
-  flex-flow: row-reverse wrap;
-  column-gap: var(--delorun-space-2);
+/*
+ * The undo notice is the studio's alert card, on a line of its own above the foot's icons: the one-row foot wraps, and
+ * a foot that lays its icons in a grid gives it every column.
+ */
+.undo[data-kind] {
+  grid-column: 1 / -1;
+  flex: 1 1 100%;
+  order: -1;
+  align-self: stretch;
+  width: 100%;
   min-width: 0;
-  height: var(--foot-notice);
-  overflow: hidden;
-  color: var(--dsw-alias-label-secondary);
-  font-size: var(--dsw-font-xxxs-11-font-size);
-  line-height: var(--foot-notice);
-  white-space: nowrap;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .undo {
-    animation: undoIn 200ms ease-out both;
-  }
-}
-
-.undoButton {
-  display: inline-flex;
-  flex-shrink: 1;
-  align-items: center;
-  min-width: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--dsw-alias-label-primary);
-  font: inherit;
-  font-weight: 500;
-  text-underline-offset: var(--delorun-space-1);
-  cursor: pointer;
-}
-
-@media (hover: hover) {
-  .undoButton:hover {
-    text-decoration: underline;
-  }
-}
-
-.undoText {
-  min-width: 0;
-}
-
-@keyframes undoIn {
-  from {
-    opacity: 0;
-  }
 }
 
 /* Phone widths and coarse pointers get 44px targets. */
 @media (max-width: 767px), (pointer: coarse) {
-  .utility,
-  .undo {
+  .utility {
     --foot-button: 44px;
   }
 }

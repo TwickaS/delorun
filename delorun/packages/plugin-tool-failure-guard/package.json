@@ -39,6 +39,9 @@
     "build": "tsc -b tsconfig.json && tsdown",
     "typecheck": "tsc -b tsconfig.json && tsc --noEmit -p tsconfig.tests.json && tsc --noEmit -p tsconfig.tests.client.json"
   },
+  "dependencies": {
+    "@delorun/brand": "workspace:*"
+  },
   "peerDependencies": {
     "@deepseek-ai/cordis": "workspace:~",
     "@deepseek-ai/dsh-agent": "workspace:*",

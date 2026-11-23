@@ -11,7 +11,7 @@ import type { StopChatsView } from '../wire.ts'
 
 /** What the sidebar alert reads and does. */
 export interface UpdateAlertsInjected {
-  readonly hooks: { readonly load: HostObservable<UpdateLoad>, readonly switching: HostObservable<boolean>, readonly connection: HostObservable<ConnectionState> }
+  readonly hooks: { readonly load: HostObservable<UpdateLoad>, readonly switching: HostObservable<boolean>, readonly connection: HostObservable<ConnectionState>, readonly retry: HostObservable<number | undefined> }
   /** Reconnect now. */
   readonly reconnect: () => void
   readonly cancel: () => Promise<unknown>
@@ -29,12 +29,13 @@ export type UpdateAlertsProps = PropsLocale<'delorunUpdate'> & InjectFace<Update
 export function UpdateAlerts(props: UpdateAlertsProps) {
   const { t, cancel, stopChats, reconnect } = props
   const connection = props.useConnection(value => value)
+  const retryAt = props.useRetry(value => value)
   const load = props.useLoad(value => value)
   const switching = props.useSwitching(value => value)
   if (load.status !== 'ready') return null
   const { state } = load
   return <UpdateProgress variant="alert" state={state} switching={switching} reconnecting={load.reconnecting} t={t} cancel={cancel}
-    stop={{ chats: state.runningChats ?? [], jobs: state.runningJobs ?? 0, automatic: state.continueStopped, run: stopChats }} connection={connection} reconnect={reconnect} />
+    stop={{ chats: state.runningChats ?? [], jobs: state.runningJobs ?? 0, automatic: state.continueStopped, run: stopChats }} connection={connection} retryAt={retryAt} reconnect={reconnect} />
 }
 
 /** What the per-chat line reads and does. */

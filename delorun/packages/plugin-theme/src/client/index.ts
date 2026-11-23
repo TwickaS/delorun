@@ -45,6 +45,7 @@ import { markMainLandmark } from './landmark.ts'
 import { COPY, COPY_ZH } from './copy.ts'
 import { VOCABULARY } from './vocabulary.ts'
 import fonts from './fonts.css?inline'
+import alerts from './alerts.css?inline'
 import { CHAT_NAMESPACE, type ChatDisplaySettings } from './conversation.ts'
 import { en as conversationEn, zh as conversationZh, type ConversationLocaleKey } from './conversation-locales.ts'
 import { ConversationSection, type ConversationInjected } from './ConversationSection.tsx'
@@ -250,7 +251,7 @@ function registerStockEntry(ctx: Context, form: ConfigForm<ThemeSettings>): Regi
  * @returns the registration set, which leaves upstream's look in place again once disposed.
  */
 function registerStudio(ctx: Context, form: ConfigForm<ThemeSettings>, initial: ThemeSettings): Registration {
-  const controller = new ThemeController(ctx.theme, `${fonts}\n${effortBarsCss()}\n${composerFocusCss()}\n${panelGlyphsCss()}`, document)
+  const controller = new ThemeController(ctx.theme, `${fonts}\n${effortBarsCss()}\n${composerFocusCss()}\n${panelGlyphsCss()}\n${alerts}`, document)
   const t = ctx.locale.bind(NS)
   const conversationT = ctx.locale.bind(CONVERSATION.ns)
   const useStockLook = (): Promise<boolean> => form.set('studioAdditions', false)

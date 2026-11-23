@@ -2,7 +2,7 @@
 /** The studio half: the report dialog, the progress and outcome cards, and the controller's reload, against stand-in routes. */
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReleaseChannel, SemanticVersion, Sha256Hex, UtcTimestamp } from '@delorun/contract-release-manifest'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { UpdateController, type UpdateLoad } from '../src/client/controller.ts'
@@ -253,11 +253,48 @@ describe('the progress and outcome cards', () => {
 
 describe('the connection as an ongoing state', () => {
   /** Render the alert with a connection state. */
-  function connection(state: UpdateStateView, value: 'connected' | 'connecting' | 'disconnected', extra: { switching?: boolean, reconnecting?: boolean } = {}) {
+  function connection(state: UpdateStateView, value: 'connected' | 'connecting' | 'disconnected', extra: { switching?: boolean, reconnecting?: boolean, retryAt?: number } = {}) {
     const reconnect = vi.fn()
-    render(<UpdateProgress variant="alert" state={state} switching={extra.switching ?? false} reconnecting={extra.reconnecting ?? false} t={t} cancel={vi.fn()} connection={value} reconnect={reconnect} />)
+    render(<UpdateProgress variant="alert" state={state} switching={extra.switching ?? false} reconnecting={extra.reconnecting ?? false} t={t} cancel={vi.fn()} connection={value} retryAt={extra.retryAt} reconnect={reconnect} />)
     return reconnect
   }
+
+  const line = (): string | null | undefined => document.querySelector('.delorun-alert-line')?.textContent
+
+  it('counts down to the next automatic attempt, then says it is trying, with Reconnect now as the tinted action', () => {
+    vi.useFakeTimers()
+    try {
+      connection(stateOf(), 'connecting', { retryAt: Date.now() + 4_200 })
+      const card = document.querySelector('[data-update-variant="alert"]')
+      expect(card?.getAttribute('role')).toBe('status')
+      expect(card?.getAttribute('data-kind')).toBe('progress')
+      expect(card?.querySelector('.delorun-alert-title')?.textContent).toBe(en['connection.connecting'])
+      expect(line()).toBe(en['connection.retryIn'].replace('{count}', '5'))
+      act(() => { vi.advanceTimersByTime(1_250) })
+      expect(line()).toBe(en['connection.retryIn'].replace('{count}', '3'))
+      act(() => { vi.advanceTimersByTime(3_000) })
+      expect(line()).toBe(en['connection.trying'])
+      expect(screen.getByRole('button', { name: en['connection.reconnect'] }).className).toBe('delorun-alert-primary')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('says it is trying while an attempt runs, and gives the reason while the device is offline', () => {
+    connection(stateOf(), 'connecting')
+    expect(line()).toBe(en['connection.trying'])
+    cleanup()
+    connection(stateOf(), 'disconnected')
+    const card = document.querySelector('[data-update-variant="alert"]')
+    expect(card?.getAttribute('data-kind')).toBe('warning')
+    expect(card?.getAttribute('role')).toBe('status')
+    expect(line()).toBe(en['connection.offline'])
+  })
+
+  it('keeps an update\'s own states free of a connection line', () => {
+    connection(stateOf({ progress: { kind: 'applying', phase: 'switching', target: '0.1.3', runningChats: 0 } }), 'connecting', { retryAt: Date.now() + 4_000 })
+    expect(line()).toBeUndefined()
+  })
 
   it('shows an unplanned loss as a pinned alert with Reconnect now, and nothing while connected', () => {
     const reconnect = connection(stateOf(), 'disconnected')
@@ -289,7 +326,7 @@ describe('the sidebar entry', () => {
   function entry(wide: boolean, state: UpdateStateView) {
     const hook = <V,>(value: V) => <R,>(select: (value: V) => R): R => select(value)
     render(<UpdateAlertsEntry t={t} wide={wide} reconnect={vi.fn()} cancel={vi.fn()} stopChats={vi.fn()}
-      useLoad={hook<UpdateLoad>({ status: 'ready', state, reconnecting: false })} useSwitching={hook(false)} useConnection={hook<'connected'>('connected')} />)
+      useLoad={hook<UpdateLoad>({ status: 'ready', state, reconnecting: false })} useSwitching={hook(false)} useConnection={hook<'connected'>('connected')} useRetry={hook<number | undefined>(undefined)} />)
   }
 
   it('shows the alert in the wide sidebar and only a dot on the collapsed rail', () => {

@@ -798,3 +798,96 @@ describe('connection lifecycle', () => {
     }
   })
 })
+
+describe('retry schedule', () => {
+  /** A source whose first generation fails and whose second connects and stays until aborted. */
+  function failOnceThenConnect(): { source: ConnectionGenerationSource; calls: () => number } {
+    let count = 0
+    return {
+      calls: () => count,
+      source: (signal, ready) => {
+        count++
+        if (count === 1) return Promise.reject(new Error('offline'))
+        ready({ home: '/h' })
+        return new Promise<void>((resolve) => { signal.addEventListener('abort', () => { resolve() }, { once: true }) })
+      },
+    }
+  }
+
+  it('reports when the next automatic attempt starts and that the wait ended once it runs out', async () => {
+    vi.useFakeTimers()
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0)
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const { source, calls } = failOnceThenConnect()
+    const schedule: Array<number | undefined> = []
+    const controller = new ConnectionController(source, { onRetryScheduled: at => schedule.push(at) }, FAST)
+    controller.start()
+    try {
+      const started = Date.now()
+      await vi.advanceTimersByTimeAsync(0)
+      // Math.random() = 0 takes half the first cap: 10 ms / 2.
+      expect(schedule).toEqual([started + 5])
+      await vi.advanceTimersByTimeAsync(5)
+      expect(schedule).toEqual([started + 5, undefined])
+      expect(calls()).toBe(2)
+    } finally {
+      controller.stop()
+      randomSpy.mockRestore()
+      warnSpy.mockRestore()
+      vi.useRealTimers()
+    }
+  })
+
+  it('ends the wait when a reconnect cuts it short or the loop stops, and schedules nothing for a manual attempt', async () => {
+    vi.useFakeTimers()
+    const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0)
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    let calls = 0
+    const source: ConnectionGenerationSource = () => {
+      calls++
+      return Promise.reject(new Error('offline'))
+    }
+    const schedule: Array<number | undefined> = []
+    const controller = new ConnectionController(source, { onRetryScheduled: at => schedule.push(at) }, FAST)
+    controller.start()
+    try {
+      await vi.advanceTimersByTimeAsync(0)
+      expect(schedule).toHaveLength(1)
+      controller.reconnect()
+      await vi.advanceTimersByTimeAsync(0)
+      // The manual attempt ran at once and failed; the next automatic attempt is scheduled afresh.
+      expect(calls).toBe(2)
+      expect(schedule.slice(1, 2)).toEqual([undefined])
+      expect(schedule).toHaveLength(3)
+      expect(typeof schedule[2]).toBe('number')
+      controller.stop()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(schedule).toHaveLength(4)
+      expect(schedule[3]).toBeUndefined()
+    } finally {
+      controller.stop()
+      randomSpy.mockRestore()
+      warnSpy.mockRestore()
+      vi.useRealTimers()
+    }
+  })
+
+  it('keeps retrying when the schedule sink throws', async () => {
+    vi.useFakeTimers()
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    const { source, calls } = failOnceThenConnect()
+    const controller = new ConnectionController(source, { onRetryScheduled: () => { throw new Error('sink') } }, FAST)
+    controller.start()
+    try {
+      await vi.advanceTimersByTimeAsync(100)
+      expect(calls()).toBe(2)
+      expect(errorSpy).toHaveBeenCalledWith('[connection] connection sink threw:', expect.any(Error))
+    } finally {
+      controller.stop()
+      errorSpy.mockRestore()
+      warnSpy.mockRestore()
+      vi.useRealTimers()
+    }
+  })
+})

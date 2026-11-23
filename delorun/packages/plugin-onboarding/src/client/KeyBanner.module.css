@@ -1,50 +1,5 @@
-/* A quiet line above the message box; the button wraps under the text on a narrow window. */
-.banner {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--delorun-space-4);
+/* Placement only (the attribute selector outranks the alert's own width): the banner sits above the message box, inset like the box itself. The look is the shared alert's. */
+.banner[data-variant] {
+  width: auto;
   margin: 0 var(--delorun-space-6);
-  padding: var(--delorun-space-3) var(--delorun-space-5);
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: var(--dsw-radius-md);
-  background: var(--dsw-alias-bg-layer-1);
-}
-
-.text {
-  min-width: 0;
-  font-size: var(--dsw-font-xs-13-font-size);
-  line-height: var(--dsw-font-xs-13-line-height);
-  color: var(--dsw-alias-label-secondary);
-}
-
-.button {
-  min-height: 32px;
-  box-sizing: border-box;
-  padding: var(--delorun-space-2) var(--delorun-space-5);
-  border: 0.5px solid var(--dsw-alias-border-l2);
-  border-radius: var(--dsw-radius-md);
-  background: transparent;
-  color: var(--dsw-alias-label-primary);
-  font: inherit;
-  font-size: var(--dsw-font-xs-13-font-size);
-  line-height: var(--dsw-font-xs-13-line-height);
-  cursor: pointer;
-}
-
-@media (hover: hover) {
-  .button:hover {
-    background: var(--dsw-alias-interactive-bg-hover);
-  }
-}
-
-@media (pointer: coarse) {
-  .button {
-    min-height: 44px;
-  }
-}
-
-.button:focus-visible {
-  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
 }

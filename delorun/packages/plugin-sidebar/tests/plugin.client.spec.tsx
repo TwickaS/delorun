@@ -9,6 +9,7 @@ import { SessionId } from '@deepseek-ai/dsh-session/types'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { ComponentType } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { ALERT_CLASSES } from '@delorun/brand/alert'
 import type { DelorunChatStates } from '@delorun/plugin-chat-states/client'
 import { FootLauncher } from '../src/client/FootLauncher.tsx'
 import { HeaderArt } from '../src/client/HeaderArt.tsx'
@@ -409,7 +410,7 @@ describe('the update notice in the studio', () => {
     const face = h.face<SidebarInjected>('sidebar.workspaces.list#').updateNotice
     expect(face.remote).toBe(true)
     render(<UpdateNoticeCard face={face} t={t} />)
-    expect((await screen.findByRole('status')).textContent).toBe('Delorun 0.1.3')
+    expect((await screen.findByRole('status')).textContent).toBe(`Delorun 0.1.3${en['update.whatsNew']}`)
     const reads = fetch.mock.calls.length
     fireEvent.click(screen.getByRole('button', { name: en['update.dismiss'] }))
     expect(screen.queryByRole('status')).toBeNull()
@@ -512,7 +513,11 @@ describe('the foot', () => {
     const { rerender } = render(<UndoNotice wide undoLine={undoLine} t={t} />)
     expect(screen.queryByRole('status')).toBeNull()
     act(() => { undoLine.set({ kind: 'pin', key: 1, undo }) })
-    expect(screen.getByRole('status').textContent).toBe(`${en.undo}${en['undo.pin']},`)
+    expect(screen.getByRole('status').textContent).toBe(`${en['undo.pin']}${en.undo}`)
+    // The undo line is the studio's alert card: a success row whose one action is Undo.
+    expect(screen.getByRole('status').classList.contains(ALERT_CLASSES.root)).toBe(true)
+    expect(screen.getByRole('status').getAttribute('data-kind')).toBe('success')
+    expect(screen.getByRole('status').getAttribute('data-variant')).toBe('banner')
     rerender(<UndoNotice wide={false} undoLine={undoLine} t={t} />)
     expect(screen.queryByRole('status')).toBeNull()
     rerender(<UndoNotice wide undoLine={undoLine} t={t} />)

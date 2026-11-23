@@ -3,6 +3,7 @@
 import { brandString } from '@deepseek-ai/dsh-brand'
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
+import { ALERT_CLASSES } from '@delorun/brand/alert'
 import type { SemanticVersion, Sha256Hex } from '@delorun/contract-release-manifest'
 import { UPDATE_COMMAND, UPDATE_NOTICE_PATH, type UpdateNotice } from '@delorun/contract-update-report'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
@@ -170,19 +171,20 @@ describe('the notice', () => {
     expect(open).toHaveBeenCalledTimes(1)
   })
 
-  it('announces the title and the kind and plugin line in a live region that holds no control', () => {
+  it('draws the notice as the studio\'s inline alert card, which is the polite status region', () => {
     const { container } = show(noticeOf({ security: true, summary: 'Fixes the reach listener' }))
     const status = screen.getByRole('status')
-    expect(status.textContent).toBe('Delorun 0.1.3 is availableSecurity fix · All your plugins stay compatible')
-    expect(status.querySelectorAll('button, a, input, [tabindex]')).toHaveLength(0)
+    expect(status).toBe(container.querySelector('[data-update-notice="0.1.3"]'))
+    expect(status.classList.contains(ALERT_CLASSES.root)).toBe(true)
+    expect(status.getAttribute('data-kind')).toBe('info')
+    expect(status.getAttribute('data-variant')).toBe('inline')
+    expect(status.querySelector(`.${ALERT_CLASSES.title}`)?.textContent).toBe('Delorun 0.1.3 is available')
+    expect(status.querySelector('[data-update-facts]')?.textContent).toBe('Security fix · All your plugins stay compatible')
     const buttons = screen.getAllByRole('button')
     expect(buttons.map(button => button.getAttribute('aria-label') ?? button.textContent)).toEqual([
-      en['update.dismiss'], 'Release note: Fixes the reach listener',
+      'Release note: Fixes the reach listener', en['update.dismiss'],
     ])
-    for (const button of buttons) {
-      expect(status.contains(button)).toBe(false)
-      expect(container.contains(button)).toBe(true)
-    }
+    expect(buttons[1]?.classList.contains(ALERT_CLASSES.close)).toBe(true)
   })
 
   it('marks the summary as the release\'s note, so a summary that reads as an instruction is not taken for the studio\'s', () => {
@@ -199,7 +201,7 @@ describe('the notice', () => {
     render(<UpdateNoticeCard face={face} t={makeTranslate(zh)} />)
     fireEvent.click(screen.getByRole('button', { name: '新功能' }))
     const summary = screen.getByText(/修复远程访问/)
-    expect(summary.tagName).toBe('P')
+    expect(summary.tagName).toBe('SPAN')
     expect(summary.textContent).toBe('版本说明：修复远程访问')
     expect(summary.firstElementChild?.textContent).toBe('版本说明：')
   })
@@ -207,7 +209,7 @@ describe('the notice', () => {
   it('names a minor release that would turn off two plugins and moves to another DeepSeek Harness, with its summary', () => {
     show(noticeOf({ delorun: '0.2.0', dsh: '0.3.0', kind: 'minor', disables: 2, summary: 'Moves to DeepSeek Harness 0.3 and adds the release check' }))
     expect(screen.getByText('Delorun 0.2.0 is available, on DeepSeek Harness 0.3.0')).toBeTruthy()
-    expect(screen.getByText(/Minor release/).closest('p')?.textContent).toBe('Minor release · It would turn off 2 of your plugins')
+    expect(screen.getByText(/Minor release/).closest('[data-update-facts]')?.textContent).toBe('Minor release · It would turn off 2 of your plugins')
     const summary = screen.getByRole('button', { expanded: false })
     expect(summary.textContent).toBe('Release note: Moves to DeepSeek Harness 0.3 and adds the release check')
     expect(summary.getAttribute('aria-expanded')).toBe('false')
@@ -222,7 +224,7 @@ describe('the notice', () => {
     ['major', 3, 'Major release · It would turn off 3 of your plugins'],
   ] as const)('names a %s release and its plugin count', (kind, disables, line) => {
     show(noticeOf({ kind, disables }))
-    expect(screen.getByText(new RegExp(en[`update.kind.${kind}`])).closest('p')?.textContent).toBe(line)
+    expect(screen.getByText(new RegExp(en[`update.kind.${kind}`])).closest('[data-update-facts]')?.textContent).toBe(line)
   })
 
   it('hides itself for the release the person dismisses', () => {
@@ -243,8 +245,9 @@ describe('the notice', () => {
   it('update-notice-remote-compact: a remote page shows one row, and What\'s new opens the kind line, release note and terminal line', () => {
     const { container } = show(noticeOf({ security: true, summary: 'Fixes the reach listener' }), undefined, undefined, true)
     const notice = container.querySelector('[data-update-notice="0.1.3"]')
-    expect(notice?.children).toHaveLength(1)
-    expect(screen.getByRole('status').textContent).toBe('Delorun 0.1.3')
+    expect(notice?.querySelector(`.${ALERT_CLASSES.title}`)?.textContent).toBe('Delorun 0.1.3')
+    expect(screen.getByRole('status')).toBe(notice)
+    expect(notice?.textContent).toBe(`Delorun 0.1.3${en['update.whatsNew']}`)
     expect(notice?.textContent).not.toContain('Security fix')
     expect(notice?.textContent).not.toContain('Release note')
     expect(notice?.textContent).not.toContain('Run delorun update')
@@ -265,11 +268,11 @@ describe('the notice', () => {
     expect((await screen.findByText('- Fixed')).closest('pre')).toBeTruthy()
   })
 
-  it('update-notice-local-layout: the computer\'s page keeps What\'s new below the head', () => {
+  it('update-notice-local-layout: the computer\'s page keeps What\'s new in the card\'s text, and the close button after it', () => {
     const { container } = show(noticeOf({ notes: true }))
-    const head = container.querySelector('[data-update-notice] > div')
-    expect([...head?.querySelectorAll('button') ?? []].map(button => button.getAttribute('aria-label'))).toEqual([en['update.dismiss']])
-    expect(screen.getByRole('button', { name: en['update.whatsNew'] })).toBeTruthy()
+    const notice = container.querySelector('[data-update-notice]')
+    expect([...notice?.querySelectorAll('button') ?? []].map(button => button.getAttribute('aria-label') ?? button.textContent)).toEqual([en['update.whatsNew'], en['update.dismiss']])
+    expect(notice?.querySelector(`.${ALERT_CLASSES.body} button`)?.textContent).toBe(en['update.whatsNew'])
   })
 
   it('update-notice-remote-may-true: a remote page the Host lets begin an update shows Update now… under What\'s new, and the close button', () => {

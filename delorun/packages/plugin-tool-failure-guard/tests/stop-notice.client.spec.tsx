@@ -48,6 +48,10 @@ describe('the row', () => {
     render(<StopNotice {...props} />)
     const row = screen.getByRole('status')
     expect(row.textContent).toBe(en['stop.title'] + en['stop.message'])
+    // It is the shared alert: an inline warning that stays a polite status.
+    expect(row.hasAttribute('data-tool-failure-stop')).toBe(true)
+    expect(row.getAttribute('data-kind')).toBe('warning')
+    expect(row.getAttribute('data-variant')).toBe('inline')
   })
 
   it('has Chinese copy for every English key', () => {

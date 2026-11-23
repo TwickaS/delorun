@@ -5,6 +5,7 @@
  * leaves soon after a key is added elsewhere and never polls on a timer. A key test that cannot be read shows nothing.
  */
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
+import { Alert } from '@delorun/brand/alert'
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { KeyTestAnswer } from '../wire.ts'
@@ -69,9 +70,13 @@ export function KeyBanner({ t, keyTest, openModels }: KeyBannerProps): ReactNode
   }, [keyTest, missing])
   if (!missing) return null
   return (
-    <div className={css.banner} role="status">
-      <span className={css.text}>{state.kind === 'failed' ? t('keyBanner.failed', { name: state.name }) : t('keyBanner.text')}</span>
-      <button type="button" className={css.button} onClick={openModels}>{t(state.kind === 'failed' ? 'keyBanner.check' : 'keyBanner.open')}</button>
-    </div>
+    <Alert
+      kind="info"
+      variant="banner"
+      role="status"
+      className={css.banner}
+      title={state.kind === 'failed' ? t('keyBanner.failed', { name: state.name }) : t('keyBanner.text')}
+      primary={{ label: t(state.kind === 'failed' ? 'keyBanner.check' : 'keyBanner.open'), onClick: openModels }}
+    />
   )
 }
