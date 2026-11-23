@@ -1800,7 +1800,7 @@
       "path": "LICENSE",
       "class": "delorun-feature",
       "feature": "project-identity",
-      "reason": "Adds Delo Run's copyright line under upstream's; upstream's MIT text and notice are unchanged."
+      "reason": "Adds Delorun contributors' copyright line under upstream's; upstream's MIT text and notice are unchanged."
     },
     {
       "path": "packages/client/ui-workspace/src/client/notice-hold.ts",

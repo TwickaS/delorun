@@ -47,7 +47,7 @@ Web 内置定义来自 `dsh-web-app` bundle。定义使用普通插件行；注�
 
 注册表不写入任何声明。`read` Remote 把一条声明的子插件列表按 entry-list YAML 方言（含 `!!js` 条件）渲染回来，供客户端展示 preset 的组成；没有任何接口接受 YAML 写回。新建 preset 或覆盖内置 preset 都是 bundle 补丁：插入一行 `@deepseek-ai/dsh-agent-preset`，或按该行 id 写覆盖补丁，再用 `plugin_manager` 安装到 profile；创造模式在对话中编写这类 bundle。
 
-`./tools` 入口只在其 `presetInspect` Config 开关开启时注册 `preset_inspect`。该开关默认关闭，即 Delo C16 的对等值，因此本模块不注册任何工具，模型看到的是原版工具列表。Web bundle 在 Standard、PTC 和 Cordis preset 中挂载本模块。
+`./tools` 入口只在其 `presetInspect` Config 开关开启时注册 `preset_inspect`。该开关默认关闭，即 Delorun C16 的对等值，因此本模块不注册任何工具，模型看到的是原版工具列表。Web bundle 在 Standard、PTC 和 Cordis preset 中挂载本模块。
 
 <a id="understand-the-implementation"></a>
 ## 理解实现

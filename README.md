@@ -98,4 +98,4 @@ Delorun is built on [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-h
 
 ## Licence
 
-[MIT](LICENSE). The upstream copyright line stays in the licence file, and Delo Run and contributors hold the copyright of Delorun's own changes. Third-party dependencies and their licences are disclosed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+[MIT](LICENSE). The upstream copyright line stays in the licence file, and Delorun contributors hold the copyright of Delorun's own changes. Third-party dependencies and their licences are disclosed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

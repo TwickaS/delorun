@@ -64,7 +64,7 @@ description: "契约 C6 的自托管中继：配置与启动拒绝、隧道令�
 
 ## 握手
 
-`GET wss://<tunnelHost>/v1/tunnel` 需要子协议 `delorun-relay.v1` 与 `Authorization: Delo-Tunnel <token>`，中继在升级请求之前检查两者：未带该子协议的升级返回 400 `SUBPROTOCOL_MISSING`，缺失、伪造、过期或重放的令牌返回 401 与 C6 的代码。
+`GET wss://<tunnelHost>/v1/tunnel` 需要子协议 `delorun-relay.v1` 与 `Authorization: Delorun-Tunnel <token>`，中继在升级请求之前检查两者：未带该子协议的升级返回 400 `SUBPROTOCOL_MISSING`，缺失、伪造、过期或重放的令牌返回 401 与 C6 的代码。
 
 升级之后中继发送 `{"type":"challenge","relayId","nonce"}`，home 回答 `{"type":"proof","signature"}`：绑定 home 密钥对 `delorun-relay-tunnel-v1`、一个零字节，随后 `relayId`、`name`、`jti` 与 `nonce` 的 UTF-8 字节所做的 Ed25519 签名。
 无法校验的证明以 4401 关闭。

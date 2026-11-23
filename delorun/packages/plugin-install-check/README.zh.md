@@ -1,5 +1,5 @@
 ---
-description: "Delo 的插件安装检查与安装记录，供维护者修改安装检查的内容、什么会拒绝安装、启动时用什么比对已安装的插件，以及其他界面读取的信任状态。"
+description: "Delorun 的插件安装检查与安装记录，供维护者修改安装检查的内容、什么会拒绝安装、启动时用什么比对已安装的插件，以及其他界面读取的信任状态。"
 ---
 
 # @delorun/plugin-install-check
@@ -10,7 +10,7 @@ description: "Delo 的插件安装检查与安装记录，供维护者修改安�
 
 ## 摘要
 
-`@delorun/plugin-install-check` 提供上游的 `pluginAudit` 钩子和 `delorunPluginTrust` 服务。[插件管理器](../../../packages/boot/plugin-manager/README.zh.md)在选入、启用或恢复组合包之前询问该钩子，即在组合包的任何插件代码加载之前。对插件及其安装向 profile 锁文件新增的每个包，它显示每一项发现：缺少完整性或 git 来源没有完整提交、明文 `http:` 注册表或下载 URL、GitHub 安全公告、发布时间短于可配置时长的版本，以及与 profile 或 Delo 已有名称相近的名称。检查在 pnpm 把安装解析进锁文件之后、任何文件下载进 profile 或任何安装脚本运行之前进行。已知的严重公告，以及在包安装之前无法运行的检查，会拒绝安装，直到本人允许；其他发现都不拒绝。包安装完毕且允许的构建运行之后，它记录每个已安装文件的 SHA-256，每次启动以低成本比对，`delorun verify` 完整比对。`delorun plugin` 在其 pnpm 操作周围执行同样的步骤（[`plugin-install-check.ts`](../../apps/cli/src/plugin-install-check.ts)）。开关关闭时（对等值），它不提供任何服务，也不审计任何内容，与 stock 相同；`@delorun/bundle-local` 和 `@delorun/bundle-headless` 把它挂载为开启。
+`@delorun/plugin-install-check` 提供上游的 `pluginAudit` 钩子和 `delorunPluginTrust` 服务。[插件管理器](../../../packages/boot/plugin-manager/README.zh.md)在选入、启用或恢复组合包之前询问该钩子，即在组合包的任何插件代码加载之前。对插件及其安装向 profile 锁文件新增的每个包，它显示每一项发现：缺少完整性或 git 来源没有完整提交、明文 `http:` 注册表或下载 URL、GitHub 安全公告、发布时间短于可配置时长的版本，以及与 profile 或 Delorun 已有名称相近的名称。检查在 pnpm 把安装解析进锁文件之后、任何文件下载进 profile 或任何安装脚本运行之前进行。已知的严重公告，以及在包安装之前无法运行的检查，会拒绝安装，直到本人允许；其他发现都不拒绝。包安装完毕且允许的构建运行之后，它记录每个已安装文件的 SHA-256，每次启动以低成本比对，`delorun verify` 完整比对。`delorun plugin` 在其 pnpm 操作周围执行同样的步骤（[`plugin-install-check.ts`](../../apps/cli/src/plugin-install-check.ts)）。开关关闭时（对等值），它不提供任何服务，也不审计任何内容，与 stock 相同；`@delorun/bundle-local` 和 `@delorun/bundle-headless` 把它挂载为开启。
 
 ## 目录
 
@@ -55,7 +55,7 @@ description: "Delo 的插件安装检查与安装记录，供维护者修改安�
 
 | 字段 | 默认值 | 含义 |
 | --- | --- | --- |
-| `enabled` | `false` | 提供 `pluginAudit` 与 `delorunPluginTrust`。关闭（对等值）时不审计任何内容；Delo 的组合包把它挂载为开启。 |
+| `enabled` | `false` | 提供 `pluginAudit` 与 `delorunPluginTrust`。关闭（对等值）时不审计任何内容；Delorun 的组合包把它挂载为开启。 |
 | `advisoryFeed` | npm 的批量公告端点 | https URL。 |
 | `registry` | `https://registry.npmjs.org/` | https 主注册表，其包文档提供发布时间，并核对由镜像解析的包的完整性。 |
 | `minimumAgeHours` | `24` | 比这更新的版本会产生警告。 |
@@ -76,7 +76,7 @@ description: "Delo 的插件安装检查与安装记录，供维护者修改安�
 
 - 检查只知道已发布的公告。尚无公告的恶意版本最多只得到发布时间或名称警告。
 - 检查读取锁文件，因此对包的安装脚本会运行什么，它只能通过上述发现得知，并不读取脚本；检查通过后，允许的构建才会运行。
-- 记录检测插件之外造成的改动：被编辑的文件、经链接被编辑的 pnpm 存储、Delo 之外的包操作。以本人身份运行的代码同样可以改写记录。
+- 记录检测插件之外造成的改动：被编辑的文件、经链接被编辑的 pnpm 存储、Delorun 之外的包操作。以本人身份运行的代码同样可以改写记录。
 - 发布时间来自配置的注册表；来自私有注册表的包会得到 `publish-time-unchecked` 发现。
 
 <a id="tests"></a>

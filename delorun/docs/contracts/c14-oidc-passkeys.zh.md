@@ -1,5 +1,5 @@
 ---
-description: "约定 C14：远程访问地址可使用的身份因子；每个地址的通行密钥依赖方 ID，以及 ts.net 规则的两种情形；本人自己的 OpenID Connect 提供方，包括客户端注册与每个地址的重定向 URI；必需声明；每个 home 的受众；在首次注册时固定的所有者身份；nonce、PKCE、签发方检查与混淆防护；签名密钥 ID 与轮换；以及作为后续功能的 Delo Run 签发方。"
+description: "约定 C14：远程访问地址可使用的身份因子；每个地址的通行密钥依赖方 ID，以及 ts.net 规则的两种情形；本人自己的 OpenID Connect 提供方，包括客户端注册与每个地址的重定向 URI；必需声明；每个 home 的受众；在首次注册时固定的所有者身份；nonce、PKCE、签发方检查与混淆防护；签名密钥 ID 与轮换；以及作为后续功能的 Delorun 签发方。"
 ---
 
 # 约定 C14：OpenID Connect 与通行密钥
@@ -11,7 +11,7 @@ description: "约定 C14：远程访问地址可使用的身份因子；每个�
 <a id="summary"></a>
 ## 摘要
 
-远程访问（reach）在设备批准（device approval）之外还要求一个身份因子（identity factor）：通行密钥，或在本人（the person）自己的 OpenID Connect 提供方处登录。home 是两者的依赖方（relying party）。本页定义每个远程访问地址可使用哪些因子、每个地址的通行密钥依赖方 ID、home 如何在本人的提供方处注册为客户端、带有 nonce、PKCE 与签发方（issuer）检查的授权流程、home 要求的声明与受众、它固定的所有者身份、它如何获取并轮换签名密钥，以及约束 Delo Run 签发方的规则，该签发方是一项后续功能（fast-follow）。因子从不替代设备批准（[C5](c05-device-approval.zh.md)）。类型包 [`@delorun/contract-oidc-passkeys`](../../packages/contract-oidc-passkeys/README.zh.md) 承载这些规则、声明、代码与上限。
+远程访问（reach）在设备批准（device approval）之外还要求一个身份因子（identity factor）：通行密钥，或在本人（the person）自己的 OpenID Connect 提供方处登录。home 是两者的依赖方（relying party）。本页定义每个远程访问地址可使用哪些因子、每个地址的通行密钥依赖方 ID、home 如何在本人的提供方处注册为客户端、带有 nonce、PKCE 与签发方（issuer）检查的授权流程、home 要求的声明与受众、它固定的所有者身份、它如何获取并轮换签名密钥，以及约束 Delorun 签发方的规则，该签发方是一项后续功能（fast-follow）。因子从不替代设备批准（[C5](c05-device-approval.zh.md)）。类型包 [`@delorun/contract-oidc-passkeys`](../../packages/contract-oidc-passkeys/README.zh.md) 承载这些规则、声明、代码与上限。
 
 <a id="status"></a>
 ## 状态
@@ -19,7 +19,7 @@ description: "约定 C14：远程访问地址可使用的身份因子；每个�
 Face ID 解锁（见下文）已构建。本页的通行密钥与 OpenID Connect 登录因子尚未构建：home 没有通行密钥依赖方，也没有 OpenID Connect 客户端。Tailscale 私有路由的 `tailnet-membership` 因子已构建。
 
 - **已构建并已接入：** 设置的答案模式指明 `reach.identityFactor`，并在 `--config` 文档中拒绝 `null` 以外的任何值（[C11](c11-setup-answers.zh.md)）。
-- **未构建：** 带用户验证与计数器的通行密钥注册与断言；在本人提供方处的客户端注册；带 `state`、`nonce`、PKCE 与签发方检查的授权流程；ID 令牌检查与签名密钥轮换；固定的所有者主体；重新认证；Delo Run 签发方。
+- **未构建：** 带用户验证与计数器的通行密钥注册与断言；在本人提供方处的客户端注册；带 `state`、`nonce`、PKCE 与签发方检查的授权流程；ID 令牌检查与签名密钥轮换；固定的所有者主体；重新认证；Delorun 签发方。
 
 下文中被此列表称为未构建或未被任何部分接入的要求与拒绝测试，在某项变更构建并接入它们之前不保护任何人。[远程访问设计](../design/reach.zh.md)规定私有 tailnet 路由仅凭已批准的设备密钥登录，不使用通行密钥或 OpenID Connect；本页为 `tailscale-private` 列出身份因子之处，以该设计为准。
 
@@ -45,7 +45,7 @@ Face ID 解锁（见下文）已构建。本页的通行密钥与 OpenID Connect
   - [PIN 模式](#pin-mode)
   - [上限](#limits)
   - [错误](#errors)
-  - [Delo Run 签发方](#delo-run-issuer)
+  - [Delorun 签发方](#delorun-issuer)
 - [消费方](#consumers)
 - [兼容性](#compatibility)
 - [安全](#security)
@@ -317,16 +317,16 @@ PIN 模式让持有已批准设备的本人用 PIN 或口令一次确认一个�
 | `UNLOCK_INVALID` | 页面解锁令牌；没有设备持有运行中的页面解锁，因此每个令牌都是未知的。 |
 | `LOOPBACK_REQUIRED` | 因子为 `tailnet-membership` 的会话答复提示或发送请求，而该操作只在 home 自己的电脑上授予（[tailnet 成员身份](#tailnet-membership)）。 |
 
-<a id="delo-run-issuer"></a>
-### Delo Run 签发方
+<a id="delorun-issuer"></a>
+### Delorun 签发方
 
-Delo Run 签发方让本人可以用 Delo Run 账户登录，它不属于 Delorun，Delorun 不配置任何 Delo Run 签发方（[路线图](../guide/roadmap.zh.md)）。这样的签发方作为第二个签发方遵循本页的每条规则，并且还遵循以下规则：
+Delorun 签发方让本人可以用 Delorun 账户登录，它不属于 Delorun，Delorun 不配置任何 Delorun 签发方（[路线图](../guide/roadmap.zh.md)）。这样的签发方作为第二个签发方遵循本页的每条规则，并且还遵循以下规则：
 
 - 其重定向 URI 为 `https://<address>/auth/oidc/callback/delorun`，因此它永远不与本人的提供方共用重定向 URI。
 - 它只用非对称密钥签署 ID 令牌，每个令牌头部都携带 `kid`，并且它发布一个密钥集。
 - 它在用新签名密钥签名之前至少 24 小时，就在密钥集中发布该密钥；并在已退役密钥最后一次使用之后，至少在密钥集中保留它 24 小时。
 - 其签名私钥是 Cloudflare Worker 机密，永远不放在代码仓库、配置文件或日志中。
-- 其受众是 Delo Run 为每个 home 分配的客户端 ID。
+- 其受众是托管服务为每个 home 分配的客户端 ID。
 
 <a id="consumers"></a>
 ## 消费方

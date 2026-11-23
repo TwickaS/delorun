@@ -102,7 +102,7 @@ To take full access away, choose **Revoke** in Settings, Safety, Permissions, pi
 - If the list of full-access grants cannot be read, then no grant counts and Settings, Safety, Permissions says so — repair or remove the file it names, then grant again.
 - If you run `delorun headless` in a folder without a grant, then it refuses with "which you have not granted full access" and does not start — run `delorun workspace full-access <folder> on`, or run without full access. A running headless task sees a revoke only when it next checks a permission.
 - If you choose the safer preset in a chat, then the workspace's grant is withdrawn and its other open chats on full access drop back too — grant it again to return.
-- If a single command asks to run outside the sandbox with no grant, then DeepSeek Harness asks you directly, and its question does not say the command can read Delorun's home — read it as if it did.
+- If a single command asks to run outside the sandbox with no grant, then Delorun asks you directly with the stock approval question, which does not say the command can read Delorun's home — read it as if it did.
 - If you chose [**Ask less (like DeepSeek Harness)**](../../reference/glossary.md#ask-less) with `delorun setup prompts`, then a workspace switches to full access after the studio's own confirmation, as in DeepSeek Harness, with no per-workspace grant.
 
 </details>

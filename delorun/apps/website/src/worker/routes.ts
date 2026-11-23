@@ -28,7 +28,7 @@ const SWEEP_LIMIT = 50
 /** The answer to every accepted sign-up, whether or not the address was already known. */
 function acceptedMessage(env: Env): string {
   return env.SEND_CONFIRMATION === 'on'
-    ? 'Thanks. We have sent a message from Delo Run with a link to confirm your address. Nothing is sent to you until you open it.'
+    ? 'Thanks. We have sent a message from Delorun with a link to confirm your address. Nothing is sent to you until you open it.'
     : 'Thanks. Your sign-up is saved. We will email you a link to confirm your address; nothing is sent to you until you open it.'
 }
 

@@ -1,5 +1,5 @@
 ---
-description: "Delo 插件版本约定（C17）的类型与固定值，供 app-boot 兼容性检查、CLI 的版本输出、更新报告与插件索引语料库使用：两条版本轴、它们的结果与豁免文件。"
+description: "Delorun 插件版本约定（C17）的类型与固定值，供 app-boot 兼容性检查、CLI 的版本输出、更新报告与插件索引语料库使用：两条版本轴、它们的结果与豁免文件。"
 kind: "package-library"
 ---
 
@@ -11,7 +11,7 @@ kind: "package-library"
 
 ## 摘要
 
-`@delorun/contract-plugin-versions` 定义插件接受检查的两条版本轴（上游的 `engines.dsh` 与 Delo 的 `engines.delorun`）、一次评估的按轴结果、每条轴的豁免文件与选项，以及 `delorun --version` 的输出。本包只包含导出的类型与只读常量，没有运行时代码，因此从不改变任何进程的行为；约定页面 [C17 插件版本要求](../../docs/contracts/c17-plugin-versions.zh.md) 是权威，本包遵循它。其入口为 `src/index.ts`，导出为 `.`。
+`@delorun/contract-plugin-versions` 定义插件接受检查的两条版本轴（上游的 `engines.dsh` 与 Delorun 的 `engines.delorun`）、一次评估的按轴结果、每条轴的豁免文件与选项，以及 `delorun --version` 的输出。本包只包含导出的类型与只读常量，没有运行时代码，因此从不改变任何进程的行为；约定页面 [C17 插件版本要求](../../docs/contracts/c17-plugin-versions.zh.md) 是权威，本包遵循它。其入口为 `src/index.ts`，导出为 `.`。
 
 ## 目录
 

@@ -4,7 +4,7 @@
 #   pnpm run verify-translation-pairing --write delorun/packages/contract-runtime-supervisor/README.md
 /:
   en: 2360dd88461fed48
-  zh: 764e3d15e5bc9655
+  zh: 9e99634e9932ba31
 /delorun-contract-runtime-supervisor:
   en: 9e96abe8b8f4649d
   zh: 2ab6c05868026a66

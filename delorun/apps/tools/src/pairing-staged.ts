@@ -4,14 +4,14 @@
  *
  * Upstream's `scripts/verify-translation-pairing.ts --cached` refuses any staged record whose pair has a violation.
  * About 43 pairs already drift on the train (left for the translation pass), so a commit that re-records
- * them, such as the fork directory rename, would be refused for drift it did not cause. This wrapper runs
+ * them, such as a directory move, would be refused for drift it did not cause. This wrapper runs
  * the upstream checker twice, as a child process, because the checker exports nothing: once on the staged records
  * (`--cached`), and once on the same pairs as `HEAD` holds them, read through a temporary index file selected with
  * `GIT_INDEX_FILE`. A pair that a staged rename moved is looked up under its old path.
  *
  * A stale record at `HEAD` makes the checker stop at "out of sync" before it compares structure, so `HEAD`'s
  * structural drift (headings, tables, link anchors) would be missing from the baseline and a commit that re-records
- * the pair, such as the rename, would be refused for drift it did not cause. The baseline therefore re-records every
+ * the pair, such as a move, would be refused for drift it did not cause. The baseline therefore re-records every
  * `HEAD` pair in the temporary index first. A pair nothing in the commit touches stays reported as it is today.
  *
  * It parses the checker's output by two stable keys: exit status 0 means no violation, 1 means violations listed on
@@ -28,7 +28,6 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { runGit } from './git.ts'
-import { applyRules, renamePath } from './rename/rules.ts'
 
 /** The upstream checker, relative to the repository root. */
 const CHECKER = 'scripts/verify-translation-pairing.ts'
@@ -38,7 +37,7 @@ const LISTED_EXISTING = 10
 
 /**
  * A quoted value of at least 60 characters. The checker cuts long values at a fixed length and ends them with an
- * ellipsis, and the rename lengthens a value, so one value is cut after the rename and whole before it. Only its first
+ * ellipsis, and an edit that lengthens a value makes the checker cut it where it was whole before. Only its first
  * 60 characters identify it.
  */
 const LONG_QUOTE = /"([^"…]{60})[^"…]*[…"]/g
@@ -73,7 +72,7 @@ function runChecker(root: string, anchors: readonly string[], env: NodeJS.Proces
 /**
  * Map each staged path to the path it had in `HEAD`.
  * @param root - the repository root.
- * @returns new path → old path for every staged rename, found by git or by the rename rules.
+ * @returns new path → old path for every staged rename, as git detects it.
  */
 export function stagedRenames(root: string): Map<string, string> {
   const renames = new Map<string, string>()
@@ -89,15 +88,6 @@ export function stagedRenames(root: string): Map<string, string> {
     } else {
       i += 2
     }
-  }
-  // Git pairs a rename only when enough content survives, and the rename rewrites small files heavily, so a moved
-  // file is also found by applying the rename rules to every path `HEAD` tracks.
-  const tracked = runGit(root, ['ls-tree', '-r', '--name-only', '-z', 'HEAD']).stdout.split('\0')
-  const staged = new Set(runGit(root, ['diff', '--cached', '--name-only', '-z']).stdout.split('\0'))
-  for (const old of tracked) {
-    if (old === '') continue
-    const next = renamePath(old)
-    if (next !== old && staged.has(next) && !renames.has(next)) renames.set(next, old)
   }
   return renames
 }
@@ -129,17 +119,15 @@ export function headBase(base: string, renames: ReadonlyMap<string, string>): st
  * A violation line reduced to what identifies it across a rename and unrelated edits.
  * @param line - one violation line.
  * @param pathMap - old base → new base for renamed pairs, applied longest first.
- * @returns the comparable key: paths mapped, line numbers removed, and the text that names renamed files, such as a
- * link target, passed through the rename rules so that a violation `HEAD` carries under the old names matches, and
- * with a value the checker truncated reduced to its first 60 characters.
+ * @returns the comparable key: paths mapped, line numbers removed, and a value the checker truncated reduced to its
+ * first 60 characters.
  */
 export function violationKey(line: string, pathMap: ReadonlyMap<string, string>): string {
   let key = line
   for (const [oldBase, newBase] of [...pathMap].sort((a, b) => b[0].length - a[0].length)) {
     key = key.split(oldBase).join(newBase)
   }
-  const path = key.trimStart().split(/[:\s]/, 1)[0] ?? ''
-  return applyRules(key, path).text.replace(/:\d+:/g, ':').replace(LONG_QUOTE, '"$1…')
+  return key.replace(/:\d+:/g, ':').replace(LONG_QUOTE, '"$1…')
 }
 
 /** The result of comparing the staged violations with `HEAD`'s. */

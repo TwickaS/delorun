@@ -14,7 +14,7 @@ description: "spike 报告：ts.net 是否在 Public Suffix List 中，tailscale
 
 | 问题 | 答案 |
 | --- | --- |
-| `ts.net` 是否在 Public Suffix List 中？ | 是，位于私有区段，由 Tailscale Inc. 提交：规则为 `ts.net` 本身，以及针对 `ts.net` 下 `c` 标签的每个直接子名称的通配规则，Delo 的地址不使用后者。 |
+| `ts.net` 是否在 Public Suffix List 中？ | 是，位于私有区段，由 Tailscale Inc. 提交：规则为 `ts.net` 本身，以及针对 `ts.net` 下 `c` 标签的每个直接子名称的通配规则，Delorun 的地址不使用后者。 |
 | serve 地址 `https://<node>.<tailnet>.ts.net` 上的依赖方 ID | `<node>.<tailnet>.ts.net` 或 `<tailnet>.ts.net`；`ts.net` 与 `net` 会以 `SecurityError` 被拒绝。 |
 | Funnel 地址 `https://<node>.<tailnet>.ts.net:8443` 上的依赖方 ID | 相同：`<node>.<tailnet>.ts.net` 或 `<tailnet>.ts.net`。端口不属于依赖方 ID，因此两个地址共用这些依赖方 ID。 |
 | 通行密钥能否在这些地址上注册与断言？ | Chromium 149：能，两个地址上均可，所用认证器分别为平台型与安全密钥型虚拟认证器。Firefox 151：未完成，因为没有可用的认证器。Safari：未测试。 |

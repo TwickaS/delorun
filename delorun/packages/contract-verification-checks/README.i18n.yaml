@@ -4,13 +4,13 @@
 #   pnpm run verify-translation-pairing --write delorun/packages/contract-verification-checks/README.md
 /:
   en: a8b05e1904b7a8ff
-  zh: a31d845bf751f7eb
+  zh: 2e44127a75e80e94
 /delorun-contract-verification-checks:
   en: a588bf6a9efda94f
   zh: 2dc8a25187e598d1
 /delorun-contract-verification-checks/summary:
   en: c16ec9823fb68c7f
-  zh: 550221921eda95df
+  zh: ef0862f39b582a92
 /delorun-contract-verification-checks/exports:
   en: dfd6c3fcc3471616
   zh: b544ef4583577791

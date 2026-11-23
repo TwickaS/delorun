@@ -1,5 +1,5 @@
 ---
-description: "Delo 的发布工具与随产品发布的验证器共同读取的发布文件格式：签名元数据及其客户端验证（C2）、release-log 条目、bundle、签名 note、Merkle 证明与 tile（C18），以及确定性归档格式。"
+description: "Delorun 的发布工具与随产品发布的验证器共同读取的发布文件格式：签名元数据及其客户端验证（C2）、release-log 条目、bundle、签名 note、Merkle 证明与 tile（C18），以及确定性归档格式。"
 ---
 
 # @delorun/release-formats
@@ -10,7 +10,7 @@ description: "Delo 的发布工具与随产品发布的验证器共同读取的�
 
 ## 摘要
 
-Delo 发布版的格式集中于一处，供两方共同使用：在 [`delorun/apps/release`](../../apps/release/README.zh.md) 中编写并签名发布版的发布工具，以及安装与检查发布版的随产品发布代码（`@delorun/install`、启动器、`@delorun/runtime-store`、`@delorun/release-verify`、`delorun verify` 与 relay 的令牌格式）。本包依赖发布约定，不依赖任何 CLI、开发工具或运行时发行包，因此运行时发行包携带验证器而不携带任何工具，且任何随产品发布的包都不依赖发布应用。规格见[约定 C2](../../docs/contracts/c02-release-manifest.zh.md) 与[约定 C18](../../docs/contracts/c18-release-log.zh.md)。
+Delorun 发布版的格式集中于一处，供两方共同使用：在 [`delorun/apps/release`](../../apps/release/README.zh.md) 中编写并签名发布版的发布工具，以及安装与检查发布版的随产品发布代码（`@delorun/install`、启动器、`@delorun/runtime-store`、`@delorun/release-verify`、`delorun verify` 与 relay 的令牌格式）。本包依赖发布约定，不依赖任何 CLI、开发工具或运行时发行包，因此运行时发行包携带验证器而不携带任何工具，且任何随产品发布的包都不依赖发布应用。规格见[约定 C2](../../docs/contracts/c02-release-manifest.zh.md) 与[约定 C18](../../docs/contracts/c18-release-log.zh.md)。
 
 ## 模块
 

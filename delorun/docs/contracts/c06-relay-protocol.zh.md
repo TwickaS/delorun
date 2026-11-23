@@ -57,7 +57,7 @@ description: "约定 C6：自托管中继的协议：其配置与名称绑定、
 ### 参与方
 
 - **中继。** `delorun/apps/relay/` 中的中继数据面：一个 Node 服务，在 TCP 443 端口上接受浏览器连接与来自各 home 的隧道。它不存储任何流量，不持有任何 studio 密钥，只为自己的隧道主机终止 TLS。
-- **令牌签发方。** 签发隧道令牌的一方。对于自托管中继，它是中继进程本身，使用中继首次启动时生成的令牌密钥。对于 Delorun 中继，它是 Delo Run 上的中继控制面。
+- **令牌签发方。** 签发隧道令牌的一方。对于自托管中继，它是中继进程本身，使用中继首次启动时生成的令牌密钥。对于 Delorun 中继，它是[托管服务](../reference/glossary.zh.md#hosted-service)中的中继控制面。
 - **中继客户端。** home 一侧的部分，位于 `delorun/packages/reach/`。它获取令牌、打开隧道、回答质询，并把每个流交给 [C4](c04-admission.zh.md#listeners) 的 `reach-self-hosted-relay` 监听器，TLS 在该监听器处终止。
 
 每个字节串都是不带填充的 base64url，每个签名对象都对其去掉 `signature` 字段后的 RFC 8785 序列化进行签名。home 密钥与 home 密钥 id 即 [C5](c05-device-approval.zh.md#keys-and-storage) 中定义的密钥与密钥 id。
@@ -201,7 +201,7 @@ description: "约定 C6：自托管中继的协议：其配置与名称绑定、
 <a id="delorun-relay"></a>
 ### Delorun 中继
 
-Delorun 中继位于 `delo.run` 名称下，其中继控制面位于 Delo Run 上；它不属于 Delorun，Delorun 不包含 Delorun 中继客户端，也不包含中继控制面（[路线图](../guide/roadmap.zh.md)）。上述中继数据面、帧、SNI 路由、握手与限额原样适用于它，由中继控制面担任令牌签发方。以下规则也约束它：
+Delorun 中继位于 `delo.run` 名称下，其中继控制面位于托管服务中；它不属于 Delorun，Delorun 不包含 Delorun 中继客户端，也不包含中继控制面（[路线图](../guide/roadmap.zh.md)）。上述中继数据面、帧、SNI 路由、握手与限额原样适用于它，由中继控制面担任令牌签发方。以下规则也约束它：
 
 - 名称永不重新分配给另一个账户，随机名称永不复用。
 - 重新绑定需要绑定密钥的签名；不存在强制重新绑定。

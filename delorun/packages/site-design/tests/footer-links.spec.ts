@@ -6,7 +6,7 @@ import { SiteFooter } from '../src/site-footer.tsx'
 import type { FooterCopy } from '../src/shell-copy.ts'
 
 const copy: FooterCopy = {
-  navLabel: 'Footer', owner: 'Published by Delo Run',
+  navLabel: 'Footer', owner: 'Published by Delorun',
   licence: { label: 'MIT licence', href: '/licence' }, upstream: { label: 'Built on DeepSeek Harness', href: '/upstream' },
   theme: { open: 'Open', title: 'Look', themes: 'Theme', scheme: 'Mode', device: 'System', light: 'Light', dark: 'Dark', back: 'Back', current: name => name, names: LOOK_NAMES, toast: { region: 'N', theme: name => name, scheme: name => name, undo: name => name, reset: 'R' } },
 }

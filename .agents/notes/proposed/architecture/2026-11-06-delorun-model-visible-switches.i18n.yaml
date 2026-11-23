@@ -4,22 +4,22 @@
 #   pnpm run verify-translation-pairing --write .agents/notes/proposed/architecture/2026-11-06-delorun-model-visible-switches.md
 /agent-note-each-model-visible-delorun-addition-has-its-own-switch-off-in-the-parity-composition:
   en: f7e0039670b10f2a
-  zh: 1a16973b39288bde
+  zh: e59f5e2428429ee5
 /agent-note-each-model-visible-delorun-addition-has-its-own-switch-off-in-the-parity-composition/problem:
   en: a0fa7b55bbd87eb5
-  zh: a95db7b2c3684b3b
+  zh: f91fd4cb27324fb1
 /agent-note-each-model-visible-delorun-addition-has-its-own-switch-off-in-the-parity-composition/proposal:
   en: 1fc841106e393d0c
-  zh: 9c4ff04f7ba12803
+  zh: 5ea94cd9edc40b5d
 /agent-note-each-model-visible-delorun-addition-has-its-own-switch-off-in-the-parity-composition/related:
   en: 13d0d4c910e6d17b
-  zh: 0532b1ee085c1505
+  zh: 4186d1c7eff4ac3e
 /agent-note-each-model-visible-delorun-addition-has-its-own-switch-off-in-the-parity-composition/alternatives-considered:
   en: 2f38cb0f9e0e7031
   zh: d18db77d1ee3e741
 /agent-note-each-model-visible-delorun-addition-has-its-own-switch-off-in-the-parity-composition/acceptance-criteria:
   en: 6956f7e43aa97f21
-  zh: 0c8fefe9ff70d444
+  zh: 0a48c42772e4db4d
 /agent-note-each-model-visible-delorun-addition-has-its-own-switch-off-in-the-parity-composition/risks:
   en: d5bbad4b44149e9f
   zh: 3cf45395e288d4fc

@@ -55,7 +55,7 @@ The requirements and denial tests below that this list names as not built or rea
 ### Parties
 
 - **Relay.** The relay data plane in `delorun/apps/relay/`: a Node service that accepts browser connections on TCP port 443 and tunnels from homes. It stores no traffic, holds no studio key and terminates TLS only for its own tunnel host.
-- **Token issuer.** The party that issues tunnel tokens. For the self-hosted relay it is the relay process itself, with a token key it generates at its first start. For the Delorun relay it is relay control on Delo Run.
+- **Token issuer.** The party that issues tunnel tokens. For the self-hosted relay it is the relay process itself, with a token key it generates at its first start. For the Delorun relay it is relay control in the [hosted service](../reference/glossary.md#hosted-service).
 - **Relay client.** The home's side in `delorun/packages/reach/`. It obtains a token, opens the tunnel, answers the challenge, and passes each stream to the `reach-self-hosted-relay` listener of [C4](c04-admission.md#listeners), where TLS ends.
 
 Every byte string is base64url without padding, and every signed object is signed over its RFC 8785 serialisation without its `signature` field. The home key and home key id are those of [C5](c05-device-approval.md#keys-and-storage).
@@ -199,7 +199,7 @@ A running home with own-domain reach watches public Certificate Transparency log
 <a id="delorun-relay"></a>
 ### Delorun relay
 
-The Delorun relay, on `delo.run` names with relay control on Delo Run, is not part of Delorun, which contains no Delorun relay client and no relay control ([roadmap](../guide/roadmap.md)). The relay data plane, the frames, SNI routing, the handshake and the limits above apply to it unchanged, with relay control as the token issuer. These rules also bind it:
+The Delorun relay, on `delo.run` names with relay control in the hosted service, is not part of Delorun, which contains no Delorun relay client and no relay control ([roadmap](../guide/roadmap.md)). The relay data plane, the frames, SNI routing, the handshake and the limits above apply to it unchanged, with relay control as the token issuer. These rules also bind it:
 
 - A name is never reassigned to another account, and a random name is never reused.
 - Rebinding needs the bound key's signature; there is no forced rebind.

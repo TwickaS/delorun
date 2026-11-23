@@ -1,4 +1,4 @@
-# Agent Note: Delo 的检查分层运行，完整的未缓存运行是正确性证据
+# Agent Note: Delorun 的检查分层运行，完整的未缓存运行是正确性证据
 
 Status: proposed
 
@@ -10,10 +10,10 @@ Status: proposed
 
 ## 提案
 
-Delo 的检查将分为四个层级。
+Delorun 的检查将分为四个层级。
 
 - pre-commit 将只检查暂存的文件，且耗时不超过 5 秒。
-- `pnpm check` 将运行改动所涉及的检查。Delo 的检查运行器将提供此命令，并维护一份以每项检查的已声明输入为键的本地通过缓存。
+- `pnpm check` 将运行改动所涉及的检查。Delorun 的检查运行器将提供此命令，并维护一份以每项检查的已声明输入为键的本地通过缓存。
 - `pnpm check:full`、green-base gate 与 CI 将以未缓存的方式运行每一项检查，CI 以分片（shard）的方式运行它们。
 - `--plan` 将显示将运行哪些检查、每项检查运行的原因以及每项的成本。
 
@@ -23,7 +23,7 @@ Delo 的检查将分为四个层级。
 
 [本地门禁提速决策](../../implemented/process/2026-10-12-local-gate-speedups.zh.md) 在缩短本地运行的同时，保持每项检查的输出不变。分层将决定哪些检查在本地运行，并使用这些命令。
 
-上游的 [lefthook.yml](../../../../lefthook.yml) 中，stock 的 pre-commit 钩子还会运行仓库范围的校验器。本提案将把 Delo 的 pre-commit 层级设定为仅检查暂存文件，因此 Delo 的钩子组成将与 stock 的不同。
+上游的 [lefthook.yml](../../../../lefthook.yml) 中，stock 的 pre-commit 钩子还会运行仓库范围的校验器。本提案将把 Delorun 的 pre-commit 层级设定为仅检查暂存文件，因此 Delorun 的钩子组成将与 stock 的不同。
 
 [构建产物与构建检查分离决策](../../implemented/process/2026-10-11-build-artifacts-check-split.zh.md) 区分了聚合检查所运行的命令，检查运行器将使用这些命令。
 

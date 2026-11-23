@@ -1,12 +1,42 @@
-# DeepSeek Harness Brand Asset Usage Guidelines
+# Delorun brand guidelines
 
 English | [中文](BRAND_GUIDELINES.zh.md)
 
-To maintain the long\-term healthy development of the DeepSeek Harness ecosystem, avoid user confusion, and facilitate the retrieval and identification of related resources, we have established these specifications and hope that everyone will adhere to them:
+These guidelines say how to write Delorun's name, how to use its mark and colours, what a fork or a plugin may call itself, and how Delorun names its upstream. The colour values come from [`@delorun/brand`](delorun/packages/brand/README.md), which is their one source.
 
-- In your project's descriptive text, you may use "DeepSeek Harness" to truthfully and accurately describe your project's relationship with DeepSeek Harness, for example, "built on DeepSeek Harness" or "compatible with DeepSeek Harness\." Such descriptions comply with license requirements and help users understand your project's positioning\.
-- If you wish your project name to reflect its association with the DeepSeek Harness ecosystem, we recommend using the abbreviated "DSH" designation for naming, which is both clear and facilitates communication within the community\.
-- When naming your project, please avoid using the full "DeepSeek Harness" trademark directly\. "DeepSeek Harness" is a registered trademark of DeepSeek\. Unauthorized use in project names can easily lead to user misunderstanding and confusion, thereby affecting the clarity of the entire ecosystem\. It may also involve trademark infringement\.
-- Additionally, please avoid using official brand materials in your promotions or presentations in a way that could cause misunderstanding, so as not to give users the false impression of official endorsement, cooperation, or authorization\.
+## The name
 
-We believe that a clear and orderly community environment will make every developer's efforts more visible and more readily recognized\. For the few cases that do not comply with the above specifications, we may contact the relevant parties to make appropriate adjustments in order to maintain the overall order of the ecosystem\. Thank you for your understanding and support—let us work together to build a more friendly and sustainable open\-source community\.
+- The name is "Delorun": one word, a capital D, the rest lower case.
+- The command is `delorun`, in code font.
+- Never write "Delo", "Delo Run", "Delo-Run" or "DeloRun".
+- "Delorun" names the product, the project and the hosted service at delorun.com alike.
+
+## The mark and colours
+
+- The mark is the hex mark: a nut that takes the text colour and a plug that takes the brand colour. Use the files and the `Mark` component from `@delorun/brand`; do not redraw it.
+- The brand colour is peach, `#E5734A`: fills, focus rings and the mark's plug. Text on a peach fill is `#111110`, because white on peach reaches only 3.05:1.
+- Links and accent text on a light page use the text-safe peach, `#B84A1B`, which reaches 5.21:1 on white. On a dark page, peach itself reaches 6.19:1 on `#111110`.
+- Text is set in Schibsted Grotesk and code in JetBrains Mono.
+
+Do:
+
+- Show the mark with the nut in the text colour and the plug in peach.
+- Keep the contrast ratios above.
+
+Do not:
+
+- Stretch, rotate, outline, recolour or add effects to the mark.
+- Set body text in peach `#E5734A` on a light page.
+- Replace the typefaces with look-alikes in material that presents itself as Delorun's.
+
+## Forks and plugins
+
+- "For Delorun" and "works with Delorun" are fine in a plugin's or a project's description.
+- A fork must not use "Delorun" in its name, its command, its package scope or its icon, and must not look official, endorsed or authorised by Delorun.
+- A plugin's own name and icon are its own; they do not use the Delorun mark.
+
+## Naming the upstream
+
+Delorun is a community fork of DeepSeek Harness. Delorun says so in truthful words: "Built on DeepSeek Harness", "Import from DSH", "compared with DeepSeek Harness". It never uses "DeepSeek Harness", "DSH" or DeepSeek's own brand material as or inside Delorun's name, and nothing it publishes suggests that DeepSeek endorses, cooperates in or authorises Delorun.
+
+A project that describes its relationship to DeepSeek Harness follows [DeepSeek's own guidelines](https://github.com/deepseek-ai/deepseek-harness/blob/master/BRAND_GUIDELINES.md) for that name.

@@ -208,7 +208,7 @@ Funnel 始终以它自己的监听器 `reach-tailscale-funnel` 为目标，该�
 <a id="delorun-relay-client"></a>
 ### Delorun 中继客户端
 
-Delorun 不包含 Delorun 中继（Delorun relay）客户端（[路线图](../guide/roadmap.zh.md)）：它不注册任何 `delorun-relay` 提供方，setup 也不提供该方式。这样的提供方通过同一个 Service Definition 以方式 id `delorun-relay` 注册，发布一份写明 Delo Run 能看到什么、能做什么的可见性说明，其中包括 Delorun 可以为某个 `delo.run` 名称获取一张公开记录的证书，并遵循 [C6 中关于 Delorun 中继的规则](c06-relay-protocol.zh.md#delorun-relay)。
+Delorun 不包含 Delorun 中继（Delorun relay）客户端（[路线图](../guide/roadmap.zh.md)）：它不注册任何 `delorun-relay` 提供方，setup 也不提供该方式。这样的提供方通过同一个 Service Definition 以方式 id `delorun-relay` 注册，发布一份写明托管服务能看到什么、能做什么的可见性说明，其中包括 Delorun 可以为某个 `delo.run` 名称获取一张公开记录的证书，并遵循 [C6 中关于 Delorun 中继的规则](c06-relay-protocol.zh.md#delorun-relay)。
 
 <a id="consumers"></a>
 ## 消费方

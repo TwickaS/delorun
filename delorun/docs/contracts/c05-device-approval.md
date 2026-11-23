@@ -44,7 +44,7 @@ The requirements and denial tests below that this list names as not built or rea
   - [Alerts](#alerts)
   - [Limits](#limits)
   - [Errors](#errors)
-  - [Delo Run mailbox](#delo-run-mailbox)
+  - [Delorun mailbox](#delorun-mailbox)
 - [Consumers](#consumers)
 - [Compatibility](#compatibility)
 - [Security](#security)
@@ -279,10 +279,10 @@ Every home delivers every alert through all of these channels; a home with no sc
 | `HOME_KEY_MISMATCH` | Desktop refusal | A home key other than the one an earlier approval committed to. |
 | `APPROVALS_CLOSED` | 403 | An approval request on a `tailnet-membership` listener while no approval window is open. |
 
-<a id="delo-run-mailbox"></a>
-### Delo Run mailbox
+<a id="delorun-mailbox"></a>
+### Delorun mailbox
 
-The Delo Run mailbox, which carries device-signed approvals between devices through Delo Run, is not part of Delorun ([roadmap](../guide/roadmap.md)). Every approval reaches the home directly, as an admitted request of the approving device's live session. A mailbox would carry only messages it cannot forge, and would refuse an approval that arrives only through it, outside a live session.
+The Delorun mailbox, which carries device-signed approvals between devices through the [hosted service](../reference/glossary.md#hosted-service), is not part of Delorun ([roadmap](../guide/roadmap.md)). Every approval reaches the home directly, as an admitted request of the approving device's live session. A mailbox would carry only messages it cannot forge, and would refuse an approval that arrives only through it, outside a live session.
 
 <a id="consumers"></a>
 ## Consumers

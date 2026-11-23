@@ -4,22 +4,22 @@
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/process/2026-11-06-delorun-never-less-safe-than-stock.md
 /agent-note-delorun-never-moves-an-approval-refusal-or-escalation-toward-less-safety:
   en: c00548675bf30e3a
-  zh: d1ef41a4f4915b31
+  zh: a57d86a5bbbb643c
 /agent-note-delorun-never-moves-an-approval-refusal-or-escalation-toward-less-safety/problem:
   en: 63da020c5ab5b0a5
-  zh: 389311a8368fe2da
+  zh: fb6c342e00d75b97
 /agent-note-delorun-never-moves-an-approval-refusal-or-escalation-toward-less-safety/decision:
   en: 80df6d740452e684
-  zh: 7da499e0dad3e2a3
+  zh: cacb68f85c4a1178
 /agent-note-delorun-never-moves-an-approval-refusal-or-escalation-toward-less-safety/verification:
   en: 9068e5b3309cc729
   zh: 811b68662dee7acd
 /agent-note-delorun-never-moves-an-approval-refusal-or-escalation-toward-less-safety/related:
   en: 70a29056e833c017
-  zh: e42a26f906584c6d
+  zh: 1605648840eed6bb
 /agent-note-delorun-never-moves-an-approval-refusal-or-escalation-toward-less-safety/alternatives-considered:
   en: 79855c2f13cc6612
   zh: ebf95f60e4e58ea3
 /agent-note-delorun-never-moves-an-approval-refusal-or-escalation-toward-less-safety/consequences:
   en: ce5e23460f9835ae
-  zh: 1418526f8db216d9
+  zh: 52d05dc54dc2c98b

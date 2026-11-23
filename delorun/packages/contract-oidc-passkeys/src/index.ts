@@ -67,7 +67,7 @@ export const RELYING_PARTY_NAME = 'Delorun' as const
 /** Path of the redirect URI of the person's provider, after `https://<address>`. */
 export const OIDC_CALLBACK_PATH = '/auth/oidc/callback' as const
 
-/** Path of the Delo Run issuer's redirect URI, a fast-follow. */
+/** Path of the Delorun issuer's redirect URI, a fast-follow. */
 export const DELORUN_CALLBACK_PATH = '/auth/oidc/callback/delorun' as const
 
 /** Routes an enrolment session is admitted to. */
@@ -224,7 +224,7 @@ export const IDENTITY_LIMITS = {
   fetchTimeoutMs: 10 * SECOND_MS,
   refreshIntervalMs: 24 * 60 * MINUTE_MS,
   unknownKidRefreshIntervalMs: 5 * MINUTE_MS,
-  /** Delo Run issuer, a fast-follow: a key is published this long before first use and kept this long after last use. */
+  /** Delorun issuer, a fast-follow: a key is published this long before first use and kept this long after last use. */
   delorunKeyOverlapMs: 24 * 60 * MINUTE_MS,
 } as const
 

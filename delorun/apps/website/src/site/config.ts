@@ -30,7 +30,7 @@ export const SITEMAP_PATHS: readonly string[] = ['/', '/privacy', '/notices']
 export const UPDATES_EMAIL = 'updates@delorun.com'
 
 /** The trading name that signs the site's messages. */
-export const TRADING_NAME = 'Delo Run'
+export const TRADING_NAME = 'Delorun'
 
 /** The platforms the desktop app is planned for, in the order the button offers them when the visitor's is unknown. */
 export const DESKTOP_PLATFORMS = ['macos', 'windows'] as const

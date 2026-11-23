@@ -46,7 +46,7 @@ home 只把浏览器或桌面应用作为受信任设备（trusted device）接�
   - [告警](#alerts)
   - [限制](#limits)
   - [错误](#errors)
-  - [Delo Run 信箱](#delo-run-mailbox)
+  - [Delorun 信箱](#delorun-mailbox)
 - [消费方](#consumers)
 - [兼容性](#compatibility)
 - [安全](#security)
@@ -281,10 +281,10 @@ home 把请求绑定到该监听器的 studio 地址，并以 `201` 作答，返
 | `HOME_KEY_MISMATCH` | 桌面端拒绝 | 不同于之前某次批准所承诺的 home 密钥的 home 密钥。 |
 | `APPROVALS_CLOSED` | 403 | 在没有批准窗口打开期间，`tailnet-membership` 监听器上收到的批准请求。 |
 
-<a id="delo-run-mailbox"></a>
-### Delo Run 信箱
+<a id="delorun-mailbox"></a>
+### Delorun 信箱
 
-Delo Run 信箱经由 Delo Run 在设备之间传递由设备签名的批准，它不属于 Delorun（[路线图](../guide/roadmap.zh.md)）。每个批准都作为批准方设备实时会话中一个已接纳的请求，直接到达 home。信箱只会传递它无法伪造的消息，并会拒绝只经由它、在实时会话之外到达的批准。
+Delorun 信箱经由[托管服务](../reference/glossary.zh.md#hosted-service)在设备之间传递由设备签名的批准，它不属于 Delorun（[路线图](../guide/roadmap.zh.md)）。每个批准都作为批准方设备实时会话中一个已接纳的请求，直接到达 home。信箱只会传递它无法伪造的消息，并会拒绝只经由它、在实时会话之外到达的批准。
 
 <a id="consumers"></a>
 ## 消费方

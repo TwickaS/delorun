@@ -37,7 +37,7 @@ const store = new RuntimeStore({ home, platform: 'linux-x64', logger })
 const plan = await store.prepareLaunch({ launcher: SUPPORTED, root: anchoredRoot, mode: 'warn', profile: 'default', args })
 ```
 
-`home` 是来自 [`@delorun/home`](../home/README.zh.md) 的已解析 Delo home，`anchoredRoot` 是 `trust/root.json` 所保存、并已锚定在启动器携带的根上的根（[启动检查](#the-start-check)），`platform` 是本机的运行时平台（C2 的 `process.platform` 与 `process.arch` 以连字符相连），`logger` 是供保留策略记录失败的 [`@delorun/logs`](../logs/README.zh.md) 日志器。每个失败都是一个 `RuntimeStoreError`，携带 `code`、其涉及的 `path`、`detail`，以及启动器提供的 `remedies`。
+`home` 是来自 [`@delorun/home`](../home/README.zh.md) 的已解析 Delorun home，`anchoredRoot` 是 `trust/root.json` 所保存、并已锚定在启动器携带的根上的根（[启动检查](#the-start-check)），`platform` 是本机的运行时平台（C2 的 `process.platform` 与 `process.arch` 以连字符相连），`logger` 是供保留策略记录失败的 [`@delorun/logs`](../logs/README.zh.md) 日志器。每个失败都是一个 `RuntimeStoreError`，携带 `code`、其涉及的 `path`、`detail`，以及启动器提供的 `remedies`。
 
 <a id="pointers-and-switching"></a>
 

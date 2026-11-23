@@ -4,25 +4,25 @@
 #   pnpm run verify-translation-pairing --write delorun/packages/plugin-workspaces/README.md
 /:
   en: 9b5c7d589e2e39b0
-  zh: 0045077061dfaece
+  zh: c59aca273af81da0
 /delorun-plugin-workspaces:
   en: f77e105aed18c144
   zh: 704428f1ab9de7ac
 /delorun-plugin-workspaces/summary:
   en: 777987c350396bb8
-  zh: 5151edb8c3b78f85
+  zh: 633dc76f99d5551b
 /delorun-plugin-workspaces/contents:
   en: 856049dfd6a2638b
   zh: 2fb5356ebc723c6d
 /delorun-plugin-workspaces/contract:
   en: 72ddf68cd4f33125
-  zh: 09811df8e55d5567
+  zh: 2ca0cf56cf12dbfa
 /delorun-plugin-workspaces/configuration:
   en: bb14da62adfc5dc1
   zh: d10a51e991258f12
 /delorun-plugin-workspaces/carry-forward-review:
   en: db497b6fe76d4be4
-  zh: a52b4f98908c727a
+  zh: 41169a9128e9fd40
 /delorun-plugin-workspaces/known-limitations:
   en: 74ff77563a11a24a
   zh: cb06cad937a2e63b

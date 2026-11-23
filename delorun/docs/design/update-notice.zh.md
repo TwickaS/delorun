@@ -52,7 +52,7 @@ description: "更新通知的设计：验证渠道最新发布版本且不发送
 
 9. 检查是 `@delorun/bundle-local` 的 `delorun-update-check` 行。它的 Config 包含 `enabled`（C16 的开关 `update_check`）、`intervalHours`（至少为 1，默认 24）和 `timeoutSeconds`。该行提供 `delorunUpdateCheck` 服务，`delorun` 在 profile 启动之后把检查附加到它上面，仅当运行时从存储中运行时才这样做。
 10. 该行在启动时查看一次，然后按挂钟时间每小时一次，所以休眠过的机器会在第一次唤醒时检查。当上一次检查至少已有间隔那么久时它才检查；失败之后，它在一小时后重试，然后是两小时、四小时，依此类推，但绝不晚于间隔。启动从不等待它。
-11. Delo Run 不保持与任何安装的连接，也不推送任何东西；每次检查都从这台机器上开始。
+11. Delorun 项目不保持与任何安装的连接，也不推送任何东西；每次检查都从这台机器上开始。
 
 ### 它在哪里显示
 

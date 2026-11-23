@@ -4,19 +4,19 @@
 #   pnpm run verify-translation-pairing --write delorun/packages/logs/README.md
 /:
   en: 438f26a06a1f1f05
-  zh: 6d1bbb18877461d1
+  zh: d4a4c8d77be8c89d
 /delorun-logs:
   en: d4355de60d4b4d66
   zh: 85bdbd1cb747679b
 /delorun-logs/summary:
   en: 9e1706f19eb5b80e
-  zh: 2487923d47140426
+  zh: 7debd32344b77535
 /delorun-logs/contents:
   en: 51de0e39c5efc656
   zh: 9c3a19d6b4bd3eea
 /delorun-logs/writing-a-surface-s-log:
   en: 6dc60ddbd297824a
-  zh: 25ee277e9bfcb056
+  zh: 618d0f0f6fe52933
 /delorun-logs/records-and-keys:
   en: 7fca61e3ce19a928
   zh: ef9ed1ef6fc70446
@@ -34,7 +34,7 @@
   zh: e122b7c070ce1aac
 /delorun-logs/the-denial-suite:
   en: d5e02b05488e9c8f
-  zh: 219d0b9d3532d91b
+  zh: 9b8307a6cb3db94a
 /delorun-logs/tests:
   en: c9378401817fe119
   zh: 3f114666c8975cf3

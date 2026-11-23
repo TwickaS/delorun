@@ -4,7 +4,7 @@
 #   pnpm run verify-translation-pairing --write delorun/packages/contract-home-process/README.md
 /:
   en: 60c0246b694928d9
-  zh: 883b8c12cc4068d3
+  zh: f99e2b6f54f3dceb
 /delorun-contract-home-process:
   en: 3ab6b65242d23db8
   zh: c783693eeee9b350

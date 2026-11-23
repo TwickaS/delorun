@@ -4,13 +4,13 @@
 #   pnpm run verify-translation-pairing --write delorun/packages/release-formats/README.md
 /:
   en: 3e253c8a6f85f994
-  zh: da41822295a0939d
+  zh: 7fbf3e496aad792e
 /delorun-release-formats:
   en: 11c205e3245c8360
   zh: f1dfcfd5868ad9fa
 /delorun-release-formats/summary:
   en: f3719451f0ebad5d
-  zh: 79768c4fc86760ce
+  zh: 9c479d4555b8313f
 /delorun-release-formats/modules:
   en: 608877a2193e0748
   zh: a7c4b5aa73d4ddac

@@ -4,7 +4,7 @@
 #   pnpm run verify-translation-pairing --write docs/upgrade-guide/v0.2.2-rc.1/delorun-update-lower-version/guide.md
 /:
   en: 9fba31adb7e184ce
-  zh: d66a2e336202aa4b
+  zh: c71edd34aeb07e14
 /delorun-update-refuses-a-lower-release:
   en: 7c1e48d2c310abe1
   zh: ef79c88f9bb17421

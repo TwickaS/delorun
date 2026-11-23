@@ -76,7 +76,7 @@ description: "spike 报告：tailscale serve 是否转发到模式为 0600 的 U
 - **其他平台。** 未测试 macOS；Windows 没有 Unix socket 目标。
 - **tailnet 上的其他设备。** 请求经由 `tailscale nc` 来自节点自身，而非来自其他设备上的浏览器。
 - **其他本地用户。** 以 uid 65534 运行的容器代替了其他用户；未使用第二个宿主机账户。
-- **Delo 的沙箱 profile。** 它们尚未构建，由 `bwrap` 调用代替。
+- **Delorun 的沙箱 profile。** 它们尚未构建，由 `bwrap` 调用代替。
 
 ## 命令
 

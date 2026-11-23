@@ -4,13 +4,13 @@
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/process/2026-11-06-delorun-bilingual-documentation.md
 /agent-note-delorun-s-documentation-is-english-and-chinese-with-a-consistency-record-per-page:
   en: 2ae14887e0c095ae
-  zh: b7116fbd2e0f2b4c
+  zh: ac330c439f1f13a7
 /agent-note-delorun-s-documentation-is-english-and-chinese-with-a-consistency-record-per-page/problem:
   en: 593570f36f70f504
-  zh: 02a976ed6a6c33da
+  zh: 29fac8389621c338
 /agent-note-delorun-s-documentation-is-english-and-chinese-with-a-consistency-record-per-page/decision:
   en: f86c685e47d28100
-  zh: 88b2c009e0af3e70
+  zh: ef40d7e4fdbb94e9
 /agent-note-delorun-s-documentation-is-english-and-chinese-with-a-consistency-record-per-page/verification:
   en: bb03f52031bfe4c0
   zh: 9e14fff5f764ff54
@@ -19,7 +19,7 @@
   zh: 6ff1bc1369332831
 /agent-note-delorun-s-documentation-is-english-and-chinese-with-a-consistency-record-per-page/alternatives-considered:
   en: 2abadd65de1e262c
-  zh: dbb52cf25ee47fdf
+  zh: 2452ec449171cf55
 /agent-note-delorun-s-documentation-is-english-and-chinese-with-a-consistency-record-per-page/consequences:
   en: d00f5c0671652adc
   zh: 4fd9faaec2e3e306

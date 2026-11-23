@@ -46,7 +46,7 @@ An update is the person's choice: `delorun update` and the studio's Update now s
 
 9. The check is the `delorun-update-check` row of `@delorun/bundle-local`. Its Config holds `enabled`, the C16 switch `update_check`; `intervalHours`, at least 1 and 24 by default; and `timeoutSeconds`. The row provides the `delorunUpdateCheck` service, and `delorun` attaches the check to it once the profile boots, only when the runtime runs from the store.
 10. The row looks at start and then each hour, by the wall clock, so a machine that slept checks at its first wake. It checks when the last check is at least the interval old; after a failure it tries again after one hour, then two, four and so on, never later than the interval. A start never waits for it.
-11. Delo Run keeps no connection to an installation and pushes nothing; every check starts on the machine.
+11. The Delorun project keeps no connection to an installation and pushes nothing; every check starts on the machine.
 
 ### Where it shows
 

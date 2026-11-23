@@ -4,22 +4,22 @@
 #   pnpm run verify-translation-pairing --write .agents/notes/proposed/feature/2026-11-06-delorun-opt-in-data-sharing.md
 /agent-note-anything-leaving-the-machine-is-opt-in-and-delorun-has-no-telemetry-of-its-own:
   en: 7732fc5882c4346d
-  zh: 79ec1c27d9cd4f07
+  zh: adff73330742b4d0
 /agent-note-anything-leaving-the-machine-is-opt-in-and-delorun-has-no-telemetry-of-its-own/problem:
   en: 81962a839dac450a
-  zh: 744c944ab2cd0ee9
+  zh: f1be5557f6454a0c
 /agent-note-anything-leaving-the-machine-is-opt-in-and-delorun-has-no-telemetry-of-its-own/proposal:
   en: e99d02f09b176bf5
-  zh: 0f71ba70a1950611
+  zh: da8fdfa3569ece16
 /agent-note-anything-leaving-the-machine-is-opt-in-and-delorun-has-no-telemetry-of-its-own/related:
   en: 37b3706e7a0d3e8a
-  zh: e925d0488afeb6d5
+  zh: 0f3a32f039af8544
 /agent-note-anything-leaving-the-machine-is-opt-in-and-delorun-has-no-telemetry-of-its-own/alternatives-considered:
   en: a07c4a39e5b050c2
-  zh: ebeb7f57d50faa2e
+  zh: d3bcde4228abb82b
 /agent-note-anything-leaving-the-machine-is-opt-in-and-delorun-has-no-telemetry-of-its-own/acceptance-criteria:
   en: ffeffb27eec23c25
-  zh: 1261b701ab47f30c
+  zh: 5f9b6871fa167b1f
 /agent-note-anything-leaving-the-machine-is-opt-in-and-delorun-has-no-telemetry-of-its-own/risks:
   en: 58ddb70df4226164
-  zh: dd1f650a770929bf
+  zh: ee56391c05d9bb45

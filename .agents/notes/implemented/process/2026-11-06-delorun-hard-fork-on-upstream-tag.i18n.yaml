@@ -4,13 +4,13 @@
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/process/2026-11-06-delorun-hard-fork-on-upstream-tag.md
 /agent-note-delorun-is-a-hard-fork-rooted-on-an-upstream-release-tag:
   en: 1692829fdba1ed2f
-  zh: ed21bac1f1657c08
+  zh: 0ee424742b35cbff
 /agent-note-delorun-is-a-hard-fork-rooted-on-an-upstream-release-tag/problem:
   en: 29226fcc32bb5683
-  zh: 5789bf5cffb6657c
+  zh: 92735c44da9503a6
 /agent-note-delorun-is-a-hard-fork-rooted-on-an-upstream-release-tag/decision:
   en: d6bbc4a23f6bc6a3
-  zh: 31bb7af855a0310a
+  zh: 2d7f6995f6e281ba
 /agent-note-delorun-is-a-hard-fork-rooted-on-an-upstream-release-tag/verification:
   en: 3a7d941dd864b1c8
   zh: c5dc725b00d186fd
@@ -19,7 +19,7 @@
   zh: 2f55254a613f8ce3
 /agent-note-delorun-is-a-hard-fork-rooted-on-an-upstream-release-tag/alternatives-considered:
   en: d06cffee6349bf8f
-  zh: aabf2bd61a6f4630
+  zh: d5ab99c8c6e6010e
 /agent-note-delorun-is-a-hard-fork-rooted-on-an-upstream-release-tag/consequences:
   en: 696de4e589ccb1dc
-  zh: 02e0679544e63837
+  zh: 8b71bb6d08975232

@@ -40,7 +40,7 @@ warn  Command sandbox: This machine enforces workspace-write only in part, such 
 
 `ok` 表示通过；`warn` 表示能工作但不如预期；`FAIL` 表示无法工作，其所在行会说明该怎么做。profile 在首次使用时从内置的 `doctor` 模板初始化，即 `dsh-base` bundle 加本包的 bundle。
 
-应用的 `doctor` 开关会开启检查运行。它是一个经过校验的 Config 字段，默认关闭，这是 Delo C16 的对等值；内置的 `doctor` profile 会将其设为开启。未挂载该开关的应用不运行任何检查，向 stderr 写入一行并以退出码 1 结束。
+应用的 `doctor` 开关会开启检查运行。它是一个经过校验的 Config 字段，默认关闭，这是 Delorun C16 的对等值；内置的 `doctor` profile 会将其设为开启。未挂载该开关的应用不运行任何检查，向 stderr 写入一行并以退出码 1 结束。
 
 沙箱检查不会启动它所限制的命令。它对一个空操作命令调用 `confine`，取部署默认模式下的限制，并读取 enforcement。在 Linux 上，沙箱的第一次 `confine` 调用会运行它自己的功能探测（每个 provider 生命周期执行一次），即在 `bwrap` 或 Landlock launcher 下运行 `true`，以选择 runner。
 

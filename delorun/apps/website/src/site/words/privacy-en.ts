@@ -21,7 +21,7 @@ export const PRIVACY_EN = {
   forget: 'Forget my package manager choice',
   forgotten: 'Forgotten. The page shows the default command again.',
   hostHeading: 'What the host logs',
-  host: 'The site is served by Cloudflare. As any web host does, Cloudflare receives each request your browser makes, which includes your IP address, the address you asked for and your browser’s request headers, and it keeps request logs and traffic figures under its own policies. Apart from the sign-up routes below, the site serves files, and Delo Run may see the request counts that Cloudflare shows the account owner but has no way to tell visitors apart.',
+  host: 'The site is served by Cloudflare. As any web host does, Cloudflare receives each request your browser makes, which includes your IP address, the address you asked for and your browser’s request headers, and it keeps request logs and traffic figures under its own policies. Apart from the sign-up routes below, the site serves files, and Delorun may see the request counts that Cloudflare shows the account owner but has no way to tell visitors apart.',
   updatesHeading: 'Release news by email',
   updates: [
     'If you sign up, we store the email address you give, the first name if you give one, the time and page of your sign-up, the version of the consent sentence you ticked, and whether you have confirmed or unsubscribed. We store no IP address and no browser details with it.',
@@ -42,5 +42,5 @@ export const PRIVACY_EN = {
     { text: 'Model providers, which receive what you send to a model', href: `${DOCS_URL}/guide/get-started/providers` },
   ],
   contactHeading: 'Questions',
-  contact: `Write to ${SUPPORT_EMAIL}. Delo Run is the trading name of the project that publishes Delorun.`,
+  contact: `Write to ${SUPPORT_EMAIL}. Delorun is published by Vadim Alexeev, trading as Delorun.`,
 } as const

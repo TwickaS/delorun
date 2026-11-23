@@ -1,5 +1,5 @@
 ---
-description: "Delo 发布 manifest 约定（C2）的类型与固定值，供发布构建、安装程序、运行时仓库与桌面更新器使用：签名信封、根、时间戳与 manifest 文件、运行时文件列表、重建记录与安全公告接受记录。"
+description: "Delorun 发布 manifest 约定（C2）的类型与固定值，供发布构建、安装程序、运行时仓库与桌面更新器使用：签名信封、根、时间戳与 manifest 文件、运行时文件列表、重建记录与安全公告接受记录。"
 kind: "package-library"
 ---
 
@@ -11,7 +11,7 @@ kind: "package-library"
 
 ## 摘要
 
-`@delorun/contract-release-manifest` 定义 Delo 发布的文件：Ed25519 签名信封、根与时间戳元数据及其密钥角色、发布 manifest（元数据清单）、运行时文件列表、重建记录与安全公告接受记录，并以常量形式给出有效期与大小上限。本包只包含导出的类型与只读常量，没有运行时代码，因此它从不改变进程的行为；约定页面 [C2 发布 manifest 与签名](../../docs/contracts/c02-release-manifest.zh.md)是权威依据，本包遵循它。其入口是 `src/index.ts`，导出为 `.`。
+`@delorun/contract-release-manifest` 定义 Delorun 发布的文件：Ed25519 签名信封、根与时间戳元数据及其密钥角色、发布 manifest（元数据清单）、运行时文件列表、重建记录与安全公告接受记录，并以常量形式给出有效期与大小上限。本包只包含导出的类型与只读常量，没有运行时代码，因此它从不改变进程的行为；约定页面 [C2 发布 manifest 与签名](../../docs/contracts/c02-release-manifest.zh.md)是权威依据，本包遵循它。其入口是 `src/index.ts`，导出为 `.`。
 
 ## 目录
 

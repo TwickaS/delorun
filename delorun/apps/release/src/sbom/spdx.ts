@@ -186,7 +186,7 @@ export function spdxDocument(version: string, epoch: number, toolchain: Toolchai
     SPDXID: 'SPDXRef-DOCUMENT',
     name: `delorun-${version}`,
     documentNamespace: `${RELEASE_REPOSITORY_URL}/releases/download/v${version}/delorun-${version}.spdx.json`,
-    creationInfo: { created: `${new Date(epoch * 1000).toISOString().slice(0, 19)}Z`, creators: ['Organization: Delo Run', 'Tool: @delorun/release'] },
+    creationInfo: { created: `${new Date(epoch * 1000).toISOString().slice(0, 19)}Z`, creators: ['Organization: Delorun', 'Tool: @delorun/release'] },
     packages: [...packages.keys()].sort().map(id => packages.get(id)!),
     relationships: unique.sort((a, b) => `${a.spdxElementId} ${a.relationshipType} ${a.relatedSpdxElement}`.localeCompare(`${b.spdxElementId} ${b.relationshipType} ${b.relatedSpdxElement}`, 'en')),
   }

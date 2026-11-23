@@ -57,18 +57,10 @@ describe('pairing keys', () => {
     expect(violationKey('delorun/a.zh.md:12: link', new Map([['delorun/a', 'delorun/a']]))).toBe('delorun/a.zh.md: link')
   })
 
-  it('compares a violation whose text names renamed paths with the same violation under the old names', () => {
-    const before = 'delorun/apps/cli/README.zh.md:42: link target "../../docs/contracts/c22-delorun-plugin-interface.md" uses the wrong locale'
-    const after = 'delorun/apps/cli/README.zh.md:42: link target "../../docs/contracts/c22-delorun-plugin-interface.md" uses the wrong locale'
-    const verdict = compareViolations([after], [before], new Map([['delorun/apps/cli/README', 'delorun/apps/cli/README']]))
-    expect(verdict).toEqual({ added: [], existing: [after] })
-  })
-
-  it('matches a violation whose quoted value the rename lengthened so that the checker now cuts it', () => {
+  it('matches a violation whose quoted value the checker now cuts where it was whole before', () => {
     const value = 'dsh-translation-target:delorun/docs/contracts/c04-admission.md#sessions'
-    const grown = value.replaceAll('delorun', 'delorun')
     const before = `delorun/a.md ↔ delorun/a.zh.md: link target #3 diverges between the pair: "${value}" vs "#requirements"`
-    const after = `delorun/a.md ↔ delorun/a.zh.md: link target #3 diverges between the pair: "${grown.slice(0, 70)}… vs "#requirements"`
+    const after = `delorun/a.md ↔ delorun/a.zh.md: link target #3 diverges between the pair: "${value.slice(0, 70)}… vs "#requirements"`
     expect(compareViolations([after], [before], new Map([['delorun/a', 'delorun/a']])).added).toEqual([])
   })
 
@@ -87,19 +79,6 @@ describe('staged renames', () => {
     repo.commit(files)
     repo.run(['mv', 'old', 'new'])
     expect(stagedRenames(repo.root).get('new/a.md')).toBe('old/a.md')
-  })
-})
-
-describe('staged renames by name', () => {
-  it('maps a file whose content changed too much for git to see a rename back through the rename rules', (test) => {
-    const repo = scratchRepo(test)
-    repo.commit({ 'delo/docs/a.md': '# Delo\n\nOne line.\n', 'delo/docs/delo-b.md': 'x\n' })
-    repo.run(['rm', '-rq', 'delo'])
-    repo.write({ 'delorun/docs/a.md': '# Something else entirely\n\nNothing in common with the old text.\n', 'delorun/docs/delorun-b.md': 'y\n' })
-    repo.run(['add', '-A'])
-    const renames = stagedRenames(repo.root)
-    expect(renames.get('delorun/docs/a.md')).toBe('delo/docs/a.md')
-    expect(renames.get('delorun/docs/delorun-b.md')).toBe('delo/docs/delo-b.md')
   })
 })
 

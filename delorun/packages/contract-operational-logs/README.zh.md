@@ -1,5 +1,5 @@
 ---
-description: "Delo 运行日志约定（C20）的类型与常量，供日志器、每个写日志的入口、delorun logs 与清除使用。"
+description: "Delorun 运行日志约定（C20）的类型与常量，供日志器、每个写日志的入口、delorun logs 与清除使用。"
 ---
 
 # @delorun/contract-operational-logs

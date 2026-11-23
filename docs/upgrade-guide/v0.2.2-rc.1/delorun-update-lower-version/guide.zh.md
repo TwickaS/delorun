@@ -1,6 +1,6 @@
 ---
 kind: upgrade-guide
-description: "delorun update 与更新通道拒绝低于正在运行的 Delo 发布版本的目标。"
+description: "delorun update 与更新通道拒绝低于正在运行的 Delorun 发布版本的目标。"
 ---
 
 # `delorun update` 拒绝更低的发布版本

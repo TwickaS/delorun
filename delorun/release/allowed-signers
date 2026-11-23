@@ -1,4 +1,4 @@
-# The SSH keys allowed to sign Delo release tags, in git's allowed-signers format (gpg.ssh.allowedSignersFile; see
+# The SSH keys allowed to sign Delorun release tags, in git's allowed-signers format (gpg.ssh.allowedSignersFile; see
 # "ALLOWED SIGNERS" in man ssh-keygen). sign-release.ts verifies the release tag v<version> with this file through
 # git verify-tag and refuses to sign when the tag is lightweight, unsigned, or signed by a key this file does not list.
 #
