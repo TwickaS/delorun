@@ -6,7 +6,7 @@ Use this guide to uninstall DeepSeek Harness Desktop on macOS or Windows. Local 
 
 ## 1. Uninstall the app
 
-Finish any commands using Desktop's bundled CLI. If you installed the `dsh` command through Desktop, first select **Manage dsh Command… → Remove** in the application menu. This removes Desktop's command registration without uninstalling independent CLI programs.
+Finish any commands that use Desktop's bundled runtime before you uninstall. Desktop installs no terminal command of its own.
 
 Quit DeepSeek Harness, then uninstall it using your platform's procedure:
 

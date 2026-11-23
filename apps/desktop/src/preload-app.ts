@@ -102,7 +102,7 @@ if (location.protocol === `${SCHEME}:` && location.hostname === 'app') {
   // Where the home runs: a value only, never a credential. The studio reads it to choose what to show; the home's own
   // checks stay the authority.
   const homeKind = parseDesktopHomeKind(ipcRenderer.sendSync(DESKTOP_IPC.homeKind))
-  if (homeKind !== undefined) contextBridge.exposeInMainWorld('__DSH_HOME_KIND__', homeKind)
+  if (homeKind !== undefined) contextBridge.exposeInMainWorld('delorunDesktop', Object.freeze({ homeKind }))
   // The native dialog browses this PC's Windows paths, which a home in WSL or on another machine cannot open, so only
   // the bundled Host gets it; the studio's own browse picker serves every other home.
   if (homeKind === 'bundled') {

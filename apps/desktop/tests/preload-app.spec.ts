@@ -316,7 +316,7 @@ it.each(['bundled', 'wsl', 'remote'] as const)('tells the application document t
   answerMain(kind)
   vi.stubGlobal('location', new URL('dsh-app://app/'))
   await import('../src/preload-app.ts')
-  expect(exposed('__DSH_HOME_KIND__')).toBe(kind)
+  expect((exposed('delorunDesktop') as { homeKind: string }).homeKind).toBe(kind)
   expect(electron.ipcRenderer.sendSync).toHaveBeenCalledWith(DESKTOP_IPC.homeKind)
 })
 
@@ -324,14 +324,14 @@ it.each([undefined, null, 'local', 7, { kind: 'wsl' }])('exposes no home kind wh
   answerMain(answer)
   vi.stubGlobal('location', new URL('dsh-app://app/'))
   await import('../src/preload-app.ts')
-  expect(electron.contextBridge.exposeInMainWorld.mock.calls.some(([name]) => name === '__DSH_HOME_KIND__')).toBe(false)
+  expect(exposed('delorunDesktop')).toBeUndefined()
   expect(exposed('__DSH_DIRECTORY_PICKER__')).toBeUndefined()
 })
 
 it.each(['dsh-app://shell/startup.html', 'https://example.com/'])('asks main for no home kind from %s', async (url) => {
   vi.stubGlobal('location', new URL(url))
   await import('../src/preload-app.ts')
-  expect(electron.contextBridge.exposeInMainWorld.mock.calls.some(([name]) => name === '__DSH_HOME_KIND__')).toBe(false)
+  expect(electron.contextBridge.exposeInMainWorld.mock.calls.some(([name]) => name === 'delorunDesktop')).toBe(false)
   expect(electron.ipcRenderer.sendSync).not.toHaveBeenCalled()
 })
 
@@ -370,4 +370,20 @@ it('reports a path of this PC to no home that is not on it, and never a non-text
   answerMain('wsl', () => 42)
   await import('../src/preload-app.ts')
   expect((exposed('__DSH_HOST_PATHS__') as { pathFor(file: File): string }).pathFor(new File(['x'], 'notes.md'))).toBe('')
+})
+
+it.each(['bundled', 'wsl', 'remote'] as const)('exposes the %s home kind read-only, as a lone text value with no credential', async (kind) => {
+  answerMain(kind)
+  vi.stubGlobal('location', new URL('dsh-app://app/'))
+  await import('../src/preload-app.ts')
+  const calls = electron.contextBridge.exposeInMainWorld.mock.calls.filter(([name]) => name === 'delorunDesktop')
+  expect(calls).toHaveLength(1)
+  const api = calls[0]![1] as Record<string, unknown>
+  expect(Object.isFrozen(api)).toBe(true)
+  expect(Object.keys(api)).toEqual(['homeKind'])
+  expect(api.homeKind).toBe(kind)
+  expect(() => { (api as { homeKind: string }).homeKind = 'wsl' }).toThrow(TypeError)
+  expect(() => { (api as { cookie?: string }).cookie = 'x' }).toThrow(TypeError)
+  expect(api.homeKind).toBe(kind)
+  expect(JSON.stringify(api)).toBe(`{"homeKind":"${kind}"}`)
 })
