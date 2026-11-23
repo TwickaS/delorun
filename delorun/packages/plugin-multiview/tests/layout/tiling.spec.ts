@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   applyShape, arrangeLayout, autoChoice, buildPreset, cycleChoice, DEFAULT_LAYOUT_LIMITS, DEFAULT_PRESET, DEFAULT_PRESET_OPTIONS,
-  fitsMinimums, fitToMinimums, LAYOUT_CHOICE_IDS, LAYOUT_CHOICES, LAYOUT_IDS, layoutProblem, neighbourPane, panesOf, placeLeaves,
+  fitsMinimums, fitToMinimums, LAYOUT_CHOICE_IDS, LAYOUT_CHOICES, LAYOUT_IDS, layoutProblem, neighbourPane, paneCount, panesOf, placeLeaves,
   resizePaneShare, shapeOf, shapeProblem, slotOrder, type ChatArrangement, type LayoutArea, type LayoutModel, type PaneId,
 } from '../../src/layout/index.ts'
 import { A, B, C, D, MAIN, pane, show, sizesSumTo100 } from './helpers.ts'
@@ -221,5 +221,26 @@ describe('keyboard moves', () => {
   it('keeps the slot order of panes that remain and appends new pins', () => {
     expect(slotOrder([A, MAIN, B], MAIN, [B, C, A])).toEqual([A, MAIN, B, C])
     expect(slotOrder(undefined, MAIN, [A, B])).toEqual([MAIN, A, B])
+  })
+})
+
+describe('the space between panes in the layout', () => {
+  it('places leaves with the gap between them and around the edge, sharing what the gaps leave', () => {
+    const model = buildPreset('side-by-side', MAIN, [A])
+    const placed = placeLeaves(model, { width: 1000, height: 600 }, 20)
+    expect(placed.map(entry => entry.rect)).toEqual([
+      { x: 20, y: 20, width: 470, height: 560 },
+      { x: 510, y: 20, width: 470, height: 560 },
+    ])
+    expect(placeLeaves(model, { width: 1000, height: 600 }).map(entry => entry.rect.width)).toEqual([500, 500])
+  })
+
+  it('keeps the least pane size with the gap: a pane that the gap makes too small becomes a tab', () => {
+    const area = { width: 1080, height: 900 }
+    const threeColumns = buildPreset('side-by-side', MAIN, [A, B])
+    expect(fitsMinimums(threeColumns, limits, area)).toBe(true)
+    expect(fitsMinimums(threeColumns, { ...limits, paneGap: 16 }, area)).toBe(false)
+    expect(paneCount(fitToMinimums(threeColumns, { ...limits, paneGap: 16 }, area))).toBe(3)
+    expect(placeLeaves(fitToMinimums(threeColumns, { ...limits, paneGap: 16 }, area), area, 16)).toHaveLength(2)
   })
 })

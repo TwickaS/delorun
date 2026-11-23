@@ -20,7 +20,7 @@ export function isTextField(element: EventTarget | null): boolean {
   if (!(element instanceof HTMLElement)) return false
   if (element.isContentEditable) return true
   if (element instanceof HTMLTextAreaElement) return true
-  if (element instanceof HTMLInputElement) return !['button', 'checkbox', 'radio', 'range', 'submit', 'reset', 'color', 'file', 'image'].includes(element.type)
+  if (element instanceof HTMLInputElement) return !['button', 'checkbox', 'radio', 'range', 'submit', 'reset', 'color', 'file', 'image'].includes(element.type) // us-spelling: quoted output (HTML input types)
   return false
 }
 

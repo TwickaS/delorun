@@ -260,7 +260,13 @@ export function PaneLayout(props: PaneLayoutProps): JSX.Element {
   const workspaceStyles = useMemo(() => ({ tabList: tabListStyle }), [tabListStyle])
 
   return (
-    <div ref={root} className={[styles.root, props.className].filter(Boolean).join(' ')} role="region" aria-label={labels.region}>
+    <div
+      ref={root}
+      className={[styles.root, props.className].filter(Boolean).join(' ')}
+      style={paneGapStyle(limits.paneGap)}
+      role="region"
+      aria-label={labels.region}
+    >
       <Workspace<PaneTabData>
         workspaceRef={workspace}
         className={styles.workspace}
@@ -279,4 +285,9 @@ export function PaneLayout(props: PaneLayoutProps): JSX.Element {
       />
     </div>
   )
+}
+
+/** The custom property the style sheet spaces the panes and the edge with. */
+function paneGapStyle(gap: number | undefined): CSSProperties & Record<`--${string}`, string> {
+  return { '--mv-pane-gap': `${String(Math.max(0, gap ?? 0))}px` }
 }

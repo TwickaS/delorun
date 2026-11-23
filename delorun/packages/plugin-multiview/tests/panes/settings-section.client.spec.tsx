@@ -91,6 +91,21 @@ describe('the Multiview section of Settings', () => {
     expect(set).toHaveBeenCalledWith('mainShare', 75)
   })
 
+  it('sets the space between panes with the slider, written when it is let go, or with the number beside it', () => {
+    const { set } = setup()
+    const slider = screen.getByRole('slider', { name: en['section.paneGap'] })
+    expect(slider).toHaveProperty('value', '0')
+    fireEvent.change(slider, { target: { value: '12' } })
+    expect(set).not.toHaveBeenCalledWith('paneGap', 12)
+    expect(screen.getByRole('spinbutton', { name: en['section.paneGap'] })).toHaveProperty('value', '12')
+    fireEvent.pointerUp(slider)
+    expect(set).toHaveBeenCalledWith('paneGap', 12)
+    const field = screen.getByRole('spinbutton', { name: en['section.paneGap'] })
+    fireEvent.change(field, { target: { value: '40' } })
+    fireEvent.blur(field)
+    expect(set).toHaveBeenCalledWith('paneGap', 32)
+  })
+
   it('keeps a draft that is not a number from being written', () => {
     const { set } = setup()
     const field = screen.getByRole('spinbutton', { name: en['section.keepChats'] })

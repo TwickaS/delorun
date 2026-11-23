@@ -103,6 +103,7 @@ function LayoutView({ choice, count }: { choice: LayoutChoiceId; count: number }
   const slots = ids.slice(0, count)
   const [main, ...others] = slots as [PaneId, ...PaneId[]]
   const area = { width: innerWidth, height: innerHeight }
+  const limits = { ...DEFAULT_LAYOUT_LIMITS, paneGap: Number(params.get('gap') ?? '0') }
   const activity = new Map<PaneId, PaneActivity>(slots.map((slot, index): [PaneId, PaneActivity] => [slot, status(index) === 'Working' ? 'large' : 'small']))
   const shape = choice === 'yours'
     ? shapeOf(buildPreset('main-stack', main, others, { mainSide: 'right', stackStyle: 'grid' }), [main, ...others])
@@ -111,8 +112,8 @@ function LayoutView({ choice, count }: { choice: LayoutChoiceId; count: number }
     arrangement: choice,
     slots,
     shape,
-    options: { ...DEFAULT_PRESET_OPTIONS, area, limits: DEFAULT_LAYOUT_LIMITS, ...(choice === 'mosaic' ? { activity } : {}) },
-    limits: DEFAULT_LAYOUT_LIMITS,
+    options: { ...DEFAULT_PRESET_OPTIONS, area, limits, ...(choice === 'mosaic' ? { activity } : {}) },
+    limits,
   })
   const agentOf = (id: PaneId): { agent: Agent; index: number } => { const index = ids.indexOf(id); return { agent: AGENTS[index]!, index } }
   return (
@@ -120,7 +121,7 @@ function LayoutView({ choice, count }: { choice: LayoutChoiceId; count: number }
       <PaneLayout
         model={model}
         main={main}
-        limits={DEFAULT_LAYOUT_LIMITS}
+        limits={limits}
         onModelChange={() => {}}
         labels={{ separator: 'Resize panes', region: 'Multiview', tabList: 'Panes', grip: 'Move pane' }}
         renderPane={id => <PaneBody agent={agentOf(id).agent} />}

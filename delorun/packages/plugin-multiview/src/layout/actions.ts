@@ -62,7 +62,7 @@ export interface UsePaneLayoutActionsOptions {
 }
 
 /**
- * The bound actions for a menu rendered outside the layout (the Layout menu, the pin button). The returned object is stable
+ * The bound actions for a control rendered outside the layout (the layout picker, the pin button). The returned object is stable
  * for the life of the component and always acts on the latest layout, limits and area.
  * @param options - the current layout, main pane, limits, area and change handler.
  * @returns the actions.

@@ -2,7 +2,7 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { useState, type JSX } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { buildPreset, fitLayout, layoutOf, leafOf, splitOf, type LayoutArea } from '../../src/layout/index.ts'
+import { buildPreset, DEFAULT_LAYOUT_LIMITS, fitLayout, layoutOf, leafOf, splitOf, type LayoutArea } from '../../src/layout/index.ts'
 import { A, B, C, D, MAIN, show } from './helpers.ts'
 import { LayoutHarness, type Harness } from './harness.tsx'
 
@@ -188,5 +188,19 @@ describe('PaneLayout restoring after a drag', () => {
     act(() => { fireEvent.pointerDown(screen.getByTestId('input-a')) })
     act(() => { document.dispatchEvent(new Event('pointerup', { bubbles: true })) })
     expect(frame.mock.calls.length).toBe(base)
+  })
+})
+
+describe('the space between panes', () => {
+  afterEach(() => { cleanup() })
+
+  it('spaces the panes by the gap setting, none by default, and changes it without a remount', () => {
+    const rec = record()
+    const view = render(<LayoutHarness initial={buildPreset('main-column', MAIN, [A, B])} main={MAIN} record={rec} />)
+    const root = screen.getByRole('region', { name: 'Multiview' })
+    expect(root.style.getPropertyValue('--mv-pane-gap')).toBe('0px')
+    view.rerender(<LayoutHarness initial={buildPreset('main-column', MAIN, [A, B])} main={MAIN} record={rec} overrides={{ limits: { ...DEFAULT_LAYOUT_LIMITS, paneGap: 12 } }} />)
+    expect(screen.getByRole('region', { name: 'Multiview' }).style.getPropertyValue('--mv-pane-gap')).toBe('12px')
+    expect([...rec.mounts.values()].every(count => count === 1)).toBe(true)
   })
 })

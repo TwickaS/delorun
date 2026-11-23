@@ -57,14 +57,14 @@ Every layout only places the panes the pins name; none opens or closes one. The 
 | Tabs | Every pane as a tab of one leaf; unrelated to the header's focus key. |
 | Yours | The person's own arrangement, kept as a shape of slots (slot 0 the main chat, then pin order, unless a swap changed it) rather than chat ids, so it applies to any chat's agents. |
 
-- **The least pane size.** A pane that would be narrower than `minPaneWidth` or lower than `minPaneHeight` joins its nearest neighbour as a tab, the smallest first; no pane is hidden.
+- **The least pane size.** A pane that would be narrower than `minPaneWidth` or lower than `minPaneHeight`, after the `paneGap` space around it, joins its nearest neighbour as a tab, the smallest first; no pane is hidden.
 - **When Auto rearranges.** On a pin or unpin at once, and on a resize of the area 200 ms after it settles. Not while the pointer is down in the layout or within 1.5 s of a key typed in a pane's text field ([`src/panel/busy.ts`](src/panel/busy.ts)); the layout keys are not typing.
 - **Motion.** A layout change glides each pane from its old to its new place by a transform only, for 240 ms, interruptible ([`flip.ts`](src/layout/flip.ts)). Reduced motion turns it off, and `mosaicMotion` `reduced` turns it off for the mosaic.
 - **Yours.** Moving a pane (and resizing, unless `saveOn` is `move`) saves the arrangement as Yours for the `rememberScope` and makes it the default. A toast says "Saved as your default layout · Undo", naming the workspace or the chat for those scopes; Undo restores the previous default and the chat's previous arrangement. Reset to Auto clears Yours and the default at the studio and in the chat's workspace. Choosing a layout in the picker also makes it the default for new Multiviews; a chat already arranged keeps its own until the person chooses for it.
 
 ## Settings
 
-Settings has a Multiview page (`settings.section` `delorun-multiview`, order 18, after Browser) with four groups, each option with one sentence and the default layout with thumbnails: **Layout** (`defaultLayout`, `mainSide`, `stackStyle`, `mainShare`, `autoColumns`, `mosaicMotion`), **Your arrangement** (`rememberScope`, `saveOn`, and Reset to Auto), **Panes** (`maxPanes`, `minPaneWidth`, `minPaneHeight`, `compactComposer`) and **Behaviour** (`autoOpen`, `reopenOnReturn`, `keepChats`). The page writes through `configForms`, and the Plugins page's row form edits the same fields. The studio and workspace defaults are Host settings, so every device of the studio shares them; which workspace a chat belongs to comes from `ctx.workspaces`. The narrowest scope that has a value wins: the chat's own arrangement, then its workspace's, then the studio's.
+Settings has a Multiview page (`settings.section` `delorun-multiview`, order 18, after Browser) with four groups, each option with one sentence and the default layout with thumbnails: **Layout** (`defaultLayout`, `mainSide`, `stackStyle`, `mainShare`, `autoColumns`, `mosaicMotion`), **Your arrangement** (`rememberScope`, `saveOn`, and Reset to Auto), **Panes** (`maxPanes`, `minPaneWidth`, `minPaneHeight`, `paneGap` as a slider with its number, `compactComposer`) and **Behaviour** (`autoOpen`, `reopenOnReturn`, `keepChats`). The page writes through `configForms`, and the Plugins page's row form edits the same fields. The studio and workspace defaults are Host settings, so every device of the studio shares them; which workspace a chat belongs to comes from `ctx.workspaces`. The narrowest scope that has a value wins: the chat's own arrangement, then its workspace's, then the studio's.
 
 ## Keyboard
 
@@ -80,6 +80,7 @@ Host 行 `delorun-multiview` 有七个易变字段（[`src/config.ts`](src/confi
 | `maxPanes` | `6` | 最多的窗格数，包含主对话（2 到 12）。 |
 | `minPaneWidth` | `340` | 窗格的最小宽度，单位为 CSS 像素（240 到 1200）；较窄的窗口容纳的窗格更少。 |
 | `minPaneHeight` | `240` | 窗格的最小高度，单位为 CSS 像素（160 到 1200）。 |
+| `paneGap` | `0` | The space between panes and around the layout's edge in CSS pixels (0 to 32), changed live; the least pane size and the divider hit areas (at least 12 px, 24 px under a finger) still hold. |
 | `compactComposer` | `true` | 窗格是否显示单行的回复框。为 `false` 时每个窗格都显示完整的输入框。该层读取它。 |
 | `reopenOnReturn` | `true` | 打开过 Multiview 的对话在返回时是否重新打开它。 |
 | `keepChats` | `50` | 此浏览器中保留多少个对话的已固定智能体和布局（1 到 500）；多保存一个，就会忘掉保存时间最久的那个对话。 |

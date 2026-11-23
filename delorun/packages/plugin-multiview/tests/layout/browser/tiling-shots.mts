@@ -3,7 +3,8 @@
  * Multiview scratch port and, in headless Chromium, takes every layout choice at 1440x900 with 2, 3, 5 and 7 panes
  * (`layout-<id>-<n>.png`, skipping a choice that does not apply to that many panes), the layout picker in the light and dark
  * themes at 800x700 (`picker-light.png`, `picker-dark.png`) and the Settings section in both themes, 1100 px wide and full height
- * (`settings-light.png`, `settings-dark.png`). Run from the repository root:
+ * (`settings-light.png`, `settings-dark.png`), and Auto with a 12 px pane gap at 3 and 5 panes (`gap-12-auto-<n>.png`). Run from the
+ * repository root:
  * `[MVT_PORT=<port>] node --import tsx/esm delorun/packages/plugin-multiview/tests/layout/browser/tiling-shots.mts <shots-dir> [name-prefix]`;
  * a prefix such as `settings` takes only the pictures whose names start with it.
  * It keeps nothing outside `/tmp/mvt-shots-*` and the shots directory.
@@ -63,6 +64,7 @@ for (const id of LAYOUT_CHOICE_IDS) {
     views.push({ name: `layout-${id}-${panes}`, width: 1440, height: 900, query: `layout=${id}&panes=${panes}&theme=light`, theme: 'light' })
   }
 }
+for (const panes of [3, 5]) views.push({ name: `gap-12-auto-${panes}`, width: 1440, height: 900, query: `layout=auto&panes=${panes}&gap=12&theme=light`, theme: 'light' })
 for (const theme of ['light', 'dark'] as const) views.push({ name: `picker-${theme}`, width: 800, height: 700, query: `layout=picker&theme=${theme}`, theme })
 for (const theme of ['light', 'dark'] as const) views.push({ name: `settings-${theme}`, width: 1100, height: 900, query: `layout=settings&theme=${theme}`, theme, fullPage: true })
 

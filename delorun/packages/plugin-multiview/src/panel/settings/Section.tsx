@@ -2,7 +2,7 @@
  * The Multiview section of Settings: the layout, the person's own arrangement, the panes and the behaviour.
  * @module @delorun/plugin-multiview/panel/settings/Section
  */
-import { useId, useState, useSyncExternalStore, type JSX } from 'react'
+import { useId, useState, useSyncExternalStore, type CSSProperties, type JSX } from 'react'
 import { Button, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, Translate } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
@@ -10,7 +10,7 @@ import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { cardCss, ChoiceGroup, SettingRow, SettingsCard, TileGroup } from '@delorun/settings-controls'
 import type { MultiviewService } from '../../client/contract.ts'
 import {
-  AUTO_COLUMNS_RANGE, DEFAULT_MULTIVIEW_SETTINGS, KEPT_CHATS_RANGE, MAX_PANES_RANGE, MIN_PANE_SIZE_RANGE, MOSAIC_MOTIONS, REMEMBER_SCOPES, SAVE_TRIGGERS,
+  AUTO_COLUMNS_RANGE, DEFAULT_MULTIVIEW_SETTINGS, KEPT_CHATS_RANGE, MAX_PANES_RANGE, MIN_PANE_SIZE_RANGE, MOSAIC_MOTIONS, PANE_GAP_RANGE, REMEMBER_SCOPES, SAVE_TRIGGERS,
   type MultiviewSettings,
 } from '../../config.ts'
 import { LayoutThumb } from '../../layout/LayoutThumb.tsx'
@@ -75,6 +75,34 @@ function NumberField({ label, value, min, max, unit, disabled, onCommit }: {
         onBlur={commit}
         onKeyDown={(event) => { if (event.key === 'Enter') commit(); else if (event.key === 'Escape') setDraft(null) }} />
       {unit !== undefined && <span className={css.unit} aria-hidden="true">{unit}</span>}
+    </span>
+  )
+}
+
+/** A slider with the number beside it: the slider writes when it is let go, the number when it is left or Enter is pressed. */
+function SliderField({ label, value, min, max, unit, disabled, onCommit }: {
+  readonly label: string
+  readonly value: number
+  readonly min: number
+  readonly max: number
+  readonly unit: string
+  readonly disabled: boolean
+  readonly onCommit: (next: number) => void
+}): JSX.Element {
+  const [draft, setDraft] = useState<number | null>(null)
+  const shown = draft ?? value
+  const commit = (): void => {
+    if (draft !== null && draft !== value) onCommit(draft)
+    setDraft(null)
+  }
+  const fill: CSSProperties & Record<`--${string}`, string> = { '--range-fill': `${String(((shown - min) / (max - min)) * 100)}%` }
+  return (
+    <span className={css.slider}>
+      <input type="range" className={css.range} aria-label={label} aria-valuetext={`${String(shown)} ${unit}`} min={min} max={max} step={1}
+        value={shown} disabled={disabled} style={fill}
+        onChange={(event) => { setDraft(Number(event.currentTarget.value)) }}
+        onPointerUp={commit} onKeyUp={commit} onBlur={commit} />
+      <NumberField label={label} value={shown} min={min} max={max} unit={unit} disabled={disabled} onCommit={onCommit} />
     </span>
   )
 }
@@ -166,6 +194,10 @@ export function MultiviewSettingsSection({ multiview, form, t, mainChat }: Multi
         </SettingRow>
         <SettingRow title={t('section.minPaneHeight')} description={t('section.minPaneHeight.lead')} failure={failure('minPaneHeight')}>
           {numeric('minPaneHeight', MIN_PANE_SIZE_RANGE.height, t('section.unit.px'))}
+        </SettingRow>
+        <SettingRow title={t('section.paneGap')} description={t('section.paneGap.lead')} failure={failure('paneGap')}>
+          <SliderField label={t('section.paneGap')} value={settings.paneGap} min={PANE_GAP_RANGE.min} max={PANE_GAP_RANGE.max} unit={t('section.unit.px')}
+            disabled={disabled} onCommit={(next) => { save('paneGap', next) }} />
         </SettingRow>
         <SettingRow title={t('section.compactComposer')} description={t('section.compactComposer.lead')} failure={failure('compactComposer')}>
           {toggle('compactComposer')}

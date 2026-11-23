@@ -34,10 +34,10 @@ export interface MultiviewStoreOptions {
 /**
  * The limits the settings give.
  * @param settings - the multiview settings.
- * @returns the pane count and the minimum pane size they allow.
+ * @returns the pane count, the minimum pane size and the space between panes they allow.
  */
 export function limitsOf(settings: MultiviewSettings): LayoutLimits {
-  return { maxPanes: settings.maxPanes, minPaneWidth: settings.minPaneWidth, minPaneHeight: settings.minPaneHeight }
+  return { maxPanes: settings.maxPanes, minPaneWidth: settings.minPaneWidth, minPaneHeight: settings.minPaneHeight, paneGap: settings.paneGap }
 }
 
 /** Writes settings the layout picker and a drag change, on the Host; resolves false when the Host refused. */

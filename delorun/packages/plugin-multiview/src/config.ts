@@ -6,7 +6,7 @@
  */
 import type { Volatile } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
-import { DEFAULT_MAX_PANES, DEFAULT_MIN_PANE_HEIGHT, DEFAULT_MIN_PANE_WIDTH } from './layout/limits.ts'
+import { DEFAULT_MAX_PANES, DEFAULT_MIN_PANE_HEIGHT, DEFAULT_MIN_PANE_WIDTH, DEFAULT_PANE_GAP } from './layout/limits.ts'
 import {
   AUTO_COLUMNS_UP_TO, DEFAULT_PRESET, LAYOUT_CHOICE_IDS, MAIN_SHARE, MAIN_SHARE_RANGE, MAIN_SIDES, STACK_STYLES,
   type LayoutChoiceId, type MainSide, type StackStyle,
@@ -21,6 +21,9 @@ export const MAX_PANES_RANGE = { min: 2, max: 12 } as const
 
 /** The smallest pane Config accepts, in CSS pixels. */
 export const MIN_PANE_SIZE_RANGE = { width: { min: 240, max: 1200 }, height: { min: 160, max: 1200 } } as const
+
+/** The space between panes, in CSS pixels. */
+export const PANE_GAP_RANGE = { min: 0, max: 32 } as const
 
 /** The most chats whose saved Multiview state is kept, least recent first to go; Config accepts a count in this range. */
 export const KEPT_CHATS_RANGE = { min: 1, max: 500 } as const
@@ -68,6 +71,8 @@ export interface MultiviewSettings {
   minPaneWidth: number
   /** The least height of a pane, in CSS pixels. */
   minPaneHeight: number
+  /** The space between panes and around the layout's edge, in CSS pixels. */
+  paneGap: number
   /** Whether a pane shows the compact reply box (one line, no model or permission controls) instead of the full composer. */
   compactComposer: boolean
   /** Whether a chat that had Multiview open reopens it when the person comes back to the chat. */
@@ -102,6 +107,7 @@ export const DEFAULT_MULTIVIEW_SETTINGS: MultiviewSettings = {
   maxPanes: DEFAULT_MAX_PANES,
   minPaneWidth: DEFAULT_MIN_PANE_WIDTH,
   minPaneHeight: DEFAULT_MIN_PANE_HEIGHT,
+  paneGap: DEFAULT_PANE_GAP,
   compactComposer: true,
   reopenOnReturn: true,
   keepChats: 50,
@@ -127,6 +133,8 @@ export interface Config {
   minPaneWidth: Volatile<number>
   /** The least pane height in CSS pixels; default 240. */
   minPaneHeight: Volatile<number>
+  /** The space between panes and around the layout's edge in CSS pixels, 0 to 32; default 0, panes edge to edge. */
+  paneGap: Volatile<number>
   /** Whether panes show the compact reply box; off shows the full composer in every pane; default on. */
   compactComposer: Volatile<boolean>
   /** Whether a chat that had Multiview open reopens it on return; default on. */
@@ -192,6 +200,7 @@ export const Config = z.object({
   maxPanes: z.natural().min(MAX_PANES_RANGE.min).max(MAX_PANES_RANGE.max).description('Panes Multiview holds at most, the main chat included; the pin button is disabled when the limit is reached.').default(DEFAULT_MULTIVIEW_SETTINGS.maxPanes).volatile(),
   minPaneWidth: z.natural().min(MIN_PANE_SIZE_RANGE.width.min).max(MIN_PANE_SIZE_RANGE.width.max).description('The least width of a pane in CSS pixels; panes that would be narrower become tabs.').default(DEFAULT_MULTIVIEW_SETTINGS.minPaneWidth).volatile(),
   minPaneHeight: z.natural().min(MIN_PANE_SIZE_RANGE.height.min).max(MIN_PANE_SIZE_RANGE.height.max).description('The least height of a pane in CSS pixels; panes that would be shorter become tabs.').default(DEFAULT_MULTIVIEW_SETTINGS.minPaneHeight).volatile(),
+  paneGap: z.natural().min(PANE_GAP_RANGE.min).max(PANE_GAP_RANGE.max).description('The space between panes and around the edge of the layout in CSS pixels; 0 puts panes edge to edge.').default(DEFAULT_MULTIVIEW_SETTINGS.paneGap).volatile(),
   compactComposer: z.boolean().description('Show a one-line reply box in each pane; off shows the full composer, with its model and permission controls, in every pane.').default(DEFAULT_MULTIVIEW_SETTINGS.compactComposer).volatile(),
   reopenOnReturn: z.boolean().description('Reopen Multiview when the person returns to a chat that had it open.').default(DEFAULT_MULTIVIEW_SETTINGS.reopenOnReturn).volatile(),
   keepChats: z.natural().min(KEPT_CHATS_RANGE.min).max(KEPT_CHATS_RANGE.max).description('How many chats keep their pinned agents and layout in this browser; the chat saved longest ago is forgotten first.').default(DEFAULT_MULTIVIEW_SETTINGS.keepChats).volatile(),

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { AUTO_COLUMNS_RANGE, Config, DEFAULT_MULTIVIEW_SETTINGS, KEPT_CHATS_RANGE, MAX_PANES_RANGE, MIN_PANE_SIZE_RANGE } from '../../src/config.ts'
+import { AUTO_COLUMNS_RANGE, Config, PANE_GAP_RANGE, DEFAULT_MULTIVIEW_SETTINGS, KEPT_CHATS_RANGE, MAX_PANES_RANGE, MIN_PANE_SIZE_RANGE } from '../../src/config.ts'
 import { buildPreset, DEFAULT_MAX_PANES, DEFAULT_MIN_PANE_HEIGHT, DEFAULT_MIN_PANE_WIDTH, MAIN_SHARE_RANGE, shapeOf, type PaneId } from '../../src/layout/index.ts'
 import { limitsOf } from '../../src/entry/state.ts'
 
@@ -12,6 +12,7 @@ function plain(input: Record<string, unknown>) {
     keepChats: config.keepChats.get(), defaultLayout: config.defaultLayout.get(), mainSide: config.mainSide.get(), stackStyle: config.stackStyle.get(),
     mainShare: config.mainShare.get(), autoColumns: config.autoColumns.get(), mosaicMotion: config.mosaicMotion.get(),
     rememberScope: config.rememberScope.get(), saveOn: config.saveOn.get(), yours: config.yours.get(), workspaceLayouts: config.workspaceLayouts.get(),
+    paneGap: config.paneGap.get(),
   }
 }
 
@@ -20,7 +21,7 @@ describe('Config', () => {
     expect(plain({})).toEqual({
       autoOpen: true, maxPanes: 6, minPaneWidth: 340, minPaneHeight: 240, compactComposer: true, reopenOnReturn: true, keepChats: 50,
       defaultLayout: 'auto', mainSide: 'left', stackStyle: 'rows', mainShare: 56, autoColumns: 3, mosaicMotion: 'on',
-      rememberScope: 'studio', saveOn: 'move-or-resize', yours: undefined, workspaceLayouts: {},
+      rememberScope: 'studio', saveOn: 'move-or-resize', yours: undefined, workspaceLayouts: {}, paneGap: 0,
     })
     expect(DEFAULT_MULTIVIEW_SETTINGS).toEqual(plain({}))
     expect([DEFAULT_MAX_PANES, DEFAULT_MIN_PANE_WIDTH, DEFAULT_MIN_PANE_HEIGHT]).toEqual([6, 340, 240])
@@ -51,7 +52,7 @@ describe('Config', () => {
   })
 
   it('gives the layout its limits from the settings', () => {
-    expect(limitsOf({ ...DEFAULT_MULTIVIEW_SETTINGS, maxPanes: 4, minPaneWidth: 400, minPaneHeight: 300 })).toEqual({ maxPanes: 4, minPaneWidth: 400, minPaneHeight: 300 })
+    expect(limitsOf({ ...DEFAULT_MULTIVIEW_SETTINGS, maxPanes: 4, minPaneWidth: 400, minPaneHeight: 300 })).toEqual({ maxPanes: 4, minPaneWidth: 400, minPaneHeight: 300, paneGap: 0 })
   })
 
   it('the layout fields take a layout of the picker or yours, a side, a stack style and the motion, and nothing else', () => {
@@ -85,5 +86,13 @@ describe('Config', () => {
     const workspaceLayouts = { 'ws-1': { defaultLayout: 'yours', yours: shape, mainSide: 'right' } }
     expect(plain({ workspaceLayouts }).workspaceLayouts).toEqual(workspaceLayouts)
     expect(() => plain({ workspaceLayouts: { 'ws-1': { stackStyle: 'cascade' } } })).toThrow()
+  })
+
+  it('the space between panes takes a whole number of pixels from 0 to 32, none by default, and reaches the layout limits', () => {
+    expect(plain({}).paneGap).toBe(0)
+    expect(plain({ paneGap: PANE_GAP_RANGE.min }).paneGap).toBe(0)
+    expect(plain({ paneGap: PANE_GAP_RANGE.max }).paneGap).toBe(32)
+    for (const bad of [-1, 33, 4.5, '8']) expect(() => plain({ paneGap: bad })).toThrow()
+    expect(limitsOf({ ...DEFAULT_MULTIVIEW_SETTINGS, paneGap: 12 }).paneGap).toBe(12)
   })
 })

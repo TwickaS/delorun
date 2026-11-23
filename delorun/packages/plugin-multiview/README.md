@@ -57,14 +57,14 @@ Every layout only places the panes the pins name; none opens or closes one. The 
 | Tabs | Every pane as a tab of one leaf; unrelated to the header's focus key. |
 | Yours | The person's own arrangement, kept as a shape of slots (slot 0 the main chat, then pin order, unless a swap changed it) rather than chat ids, so it applies to any chat's agents. |
 
-- **The least pane size.** A pane that would be narrower than `minPaneWidth` or lower than `minPaneHeight` joins its nearest neighbour as a tab, the smallest first; no pane is hidden.
+- **The least pane size.** A pane that would be narrower than `minPaneWidth` or lower than `minPaneHeight`, after the `paneGap` space around it, joins its nearest neighbour as a tab, the smallest first; no pane is hidden.
 - **When Auto rearranges.** On a pin or unpin at once, and on a resize of the area 200 ms after it settles. Not while the pointer is down in the layout or within 1.5 s of a key typed in a pane's text field ([`src/panel/busy.ts`](src/panel/busy.ts)); the layout keys are not typing.
 - **Motion.** A layout change glides each pane from its old to its new place by a transform only, for 240 ms, interruptible ([`flip.ts`](src/layout/flip.ts)). Reduced motion turns it off, and `mosaicMotion` `reduced` turns it off for the mosaic.
 - **Yours.** Moving a pane (and resizing, unless `saveOn` is `move`) saves the arrangement as Yours for the `rememberScope` and makes it the default. A toast says "Saved as your default layout · Undo", naming the workspace or the chat for those scopes; Undo restores the previous default and the chat's previous arrangement. Reset to Auto clears Yours and the default at the studio and in the chat's workspace. Choosing a layout in the picker also makes it the default for new Multiviews; a chat already arranged keeps its own until the person chooses for it.
 
 ## Settings
 
-Settings has a Multiview page (`settings.section` `delorun-multiview`, order 18, after Browser) with four groups, each option with one sentence and the default layout with thumbnails: **Layout** (`defaultLayout`, `mainSide`, `stackStyle`, `mainShare`, `autoColumns`, `mosaicMotion`), **Your arrangement** (`rememberScope`, `saveOn`, and Reset to Auto), **Panes** (`maxPanes`, `minPaneWidth`, `minPaneHeight`, `compactComposer`) and **Behaviour** (`autoOpen`, `reopenOnReturn`, `keepChats`). The page writes through `configForms`, and the Plugins page's row form edits the same fields. The studio and workspace defaults are Host settings, so every device of the studio shares them; which workspace a chat belongs to comes from `ctx.workspaces`. The narrowest scope that has a value wins: the chat's own arrangement, then its workspace's, then the studio's.
+Settings has a Multiview page (`settings.section` `delorun-multiview`, order 18, after Browser) with four groups, each option with one sentence and the default layout with thumbnails: **Layout** (`defaultLayout`, `mainSide`, `stackStyle`, `mainShare`, `autoColumns`, `mosaicMotion`), **Your arrangement** (`rememberScope`, `saveOn`, and Reset to Auto), **Panes** (`maxPanes`, `minPaneWidth`, `minPaneHeight`, `paneGap` as a slider with its number, `compactComposer`) and **Behaviour** (`autoOpen`, `reopenOnReturn`, `keepChats`). The page writes through `configForms`, and the Plugins page's row form edits the same fields. The studio and workspace defaults are Host settings, so every device of the studio shares them; which workspace a chat belongs to comes from `ctx.workspaces`. The narrowest scope that has a value wins: the chat's own arrangement, then its workspace's, then the studio's.
 
 ## Keyboard
 
@@ -72,7 +72,7 @@ The commands register in `ctx.shortcuts` with no keys, so the person binds them 
 
 ## Configuration
 
-The Host row `delorun-multiview` has seventeen volatile fields ([`src/config.ts`](src/config.ts)), validated when the configuration loads and changeable while the studio runs.
+The Host row `delorun-multiview` has eighteen volatile fields ([`src/config.ts`](src/config.ts)), validated when the configuration loads and changeable while the studio runs.
 
 | Field | Default | Meaning |
 | --- | --- | --- |
@@ -80,6 +80,7 @@ The Host row `delorun-multiview` has seventeen volatile fields ([`src/config.ts`
 | `maxPanes` | `6` | Panes at most, the main chat included (2 to 12). |
 | `minPaneWidth` | `340` | The least width of a pane in CSS pixels (240 to 1200); a narrow window holds fewer panes. |
 | `minPaneHeight` | `240` | The least height of a pane in CSS pixels (160 to 1200). |
+| `paneGap` | `0` | The space between panes and around the layout's edge in CSS pixels (0 to 32), changed live; the least pane size and the divider hit areas (at least 12 px, 24 px under a finger) still hold. |
 | `compactComposer` | `true` | Whether a pane shows the one-line reply box. With `false` every pane shows the full composer. The layer reads it. |
 | `reopenOnReturn` | `true` | Whether a chat that had Multiview open reopens it on return. |
 | `keepChats` | `50` | How many chats keep their pinned agents and layout in this browser (1 to 500); saving one more forgets the chat saved longest ago. |
