@@ -26,8 +26,9 @@ export const REQUIREMENT_FIELDS = {
  * One axis's evaluation. `met`: the range is satisfied, with prereleases taking part.
  * `unmet`: not satisfied, or an empty, `workspace:` or invalid range. `unreadable`: the
  * declaration is not a string; treated as unmet. `none`: nothing declared on that axis.
+ * `not-checked`: the upstream axis of a plugin that declares `engines.delorun`, which decides alone on Delorun.
  */
-export type AxisStatus = 'met' | 'unmet' | 'unreadable' | 'none'
+export type AxisStatus = 'met' | 'unmet' | 'unreadable' | 'none' | 'not-checked'
 
 /** One axis's result for one plugin. */
 export interface AxisResult {

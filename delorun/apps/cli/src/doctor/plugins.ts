@@ -239,8 +239,9 @@ function versionLine(
   const dshRanges = Object.entries(issue.requirements).map(([field, range]) => `${JSON.stringify(range)} (${field === 'engines.dsh' ? field : `peer ${field}`})`)
   const reasons: string[] = []
   if (dshRanges.length > 0) reasons.push(`${key} requires DSH ${dshRanges.join(', ')}, and this is DSH ${issue.runtimeVersion}`)
-  if (issue.delorun?.status === 'unmet') reasons.push(`${key} requires Delorun ${JSON.stringify(issue.delorun.requirement ?? '')} (engines.delorun), and this is Delorun ${issue.delorun.delorunVersion}`)
-  if (issue.delorun?.status === 'unreadable') reasons.push(`${key} declares engines.delorun in a form Delorun cannot read`)
+  // A plugin with engines.delorun is decided on that range alone (A567), so no DSH reason is given beside it.
+  if (issue.delorun?.status === 'unmet') reasons.push(`${key} requires Delorun ${JSON.stringify(issue.delorun.requirement ?? '')} (engines.delorun), and this is Delorun ${issue.delorun.delorunVersion}; its DSH ranges are not checked on Delorun`)
+  if (issue.delorun?.status === 'unreadable') reasons.push(`${key} declares engines.delorun in a form Delorun cannot read; its DSH ranges are not checked on Delorun`)
   if (issue.exempted) {
     return pluginLine(subject, 'warn', `${reasons.join('; ')}; it loads under the exact-version exemption in ${PROFILE_COMPATIBILITY_FILENAME}, which accepts the risk of crashes or data loss.`)
   }
