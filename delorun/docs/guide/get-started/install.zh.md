@@ -127,7 +127,7 @@ Delorun 在 Windows 中通过 WSL2 运行，WSL2 是 Windows 的一项功能，�
 <summary>边界情况</summary>
 
 - 如果日志与发布版本相矛盾，那么安装会停止。不要绕过它；请见[安装与发布检查](../help/troubleshooting.zh.md#installs-and-release-checks)。
-- If a copy on 0.1.0-preview.2.7 or earlier cannot update, then reinstall once with `npx delorun@latest`: your home, chats and settings stay. Releases from 0.1.0-preview.3 are verified under release root 2, which such a copy cannot read.
+- If a copy on 0.1.0-preview.2.7 or earlier cannot update, then run `npx delorun@latest repair` once: your home, chats and settings stay. Releases from 0.1.0-preview.3 are verified under release root 2, which such a copy cannot read.
 - 如果你想在每次启动时进行更严格的完整文件检查，请把 `DELORUN_RUNTIME_FULL_CHECK_DAYS` 设为 `0`。默认至少每 7 天对每个文件计算一次哈希；最大值是 30。
 
 </details>
