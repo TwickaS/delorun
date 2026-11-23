@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { buildPreset, layoutProblem, LAYOUT_PRESETS, panesOf, DEFAULT_PRESET } from '../../src/layout/index.ts'
+import { buildPreset, layoutProblem, LAYOUT_IDS, panesOf, DEFAULT_PRESET, type LayoutPreset, type LegacyLayoutPreset } from '../../src/layout/index.ts'
+
+/** Every preset, and the one saved before Auto existed. */
+const PRESETS: readonly (LayoutPreset | LegacyLayoutPreset)[] = [...LAYOUT_IDS, 'main-column']
 import { A, B, C, D, MAIN, pane, show, sizesSumTo100 } from './helpers.ts'
 
 describe('layout presets', () => {
@@ -26,11 +29,11 @@ describe('layout presets', () => {
   })
 
   it('shows the main chat alone when there are no agents, in every preset', () => {
-    for (const preset of LAYOUT_PRESETS) expect(show(buildPreset(preset, MAIN, []))).toBe('main:100')
+    for (const preset of PRESETS) expect(show(buildPreset(preset, MAIN, []))).toBe('main:100')
   })
 
   it('keeps every pane exactly once with sizes summing to 100 in every preset and for one to six panes', () => {
-    for (const preset of LAYOUT_PRESETS) {
+    for (const preset of PRESETS) {
       for (let others = 0; others <= 5; others += 1) {
         const agents = Array.from({ length: others }, (_, index) => pane(`agent-${index}`))
         const model = buildPreset(preset, MAIN, agents)

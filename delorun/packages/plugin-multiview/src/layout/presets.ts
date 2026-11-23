@@ -37,12 +37,6 @@ export const LAYOUT_CHOICE_IDS: readonly LayoutChoiceId[] = [...LAYOUT_IDS, 'you
 /** The arrangement saved before Auto existed: the main chat on the left beside a column of the others. It reads as Main and stack. */
 export type LegacyLayoutPreset = 'main-column'
 
-/**
- * The four arrangements the header's Layout menu offered before the layout picker, in that menu's order.
- * @deprecated Use {@link LAYOUT_IDS}; kept for the old Layout menu until the agents list's picker replaces it.
- */
-export const LAYOUT_PRESETS: readonly (LegacyLayoutPreset | 'side-by-side' | 'grid' | 'main-top')[] = ['main-column', 'side-by-side', 'grid', 'main-top']
-
 /** The preset a new layout and "Reset to Auto" use. */
 export const DEFAULT_PRESET: LayoutPreset = 'auto'
 
