@@ -16,7 +16,7 @@ import { LogStandIn, WitnessStandIn } from './standin.ts'
 
 const MANIFEST = Buffer.from('{"signed":{"schema":"delorun.release-manifest/1"},"signatures":[]}\n')
 
-async function serve(test: TestContext, log: LogStandIn, cosign: (checkpoint: string, poll: number) => string, tamper: (path: string, tile: Buffer | undefined) => Buffer | undefined = (_, tile) => tile, refuse: (request: HashedRekordRequest) => { status: number, body: string } | undefined = () => undefined, submitted: string[] = []): Promise<LogEndpoints> {
+async function serve(test: TestContext, log: LogStandIn, cosign: (checkpoint: string, poll: number) => string, tamper: (path: string, tile: Buffer | undefined) => Buffer | undefined = (_, tile) => tile, refuseTile: (path: string) => { status: number, body: string } | undefined = () => undefined, refuse: (request: HashedRekordRequest) => { status: number, body: string } | undefined = () => undefined, submitted: string[] = []): Promise<LogEndpoints> {
   let polls = 0
   const server = createServer((request, response) => {
     const chunks: Buffer[] = []
@@ -40,6 +40,10 @@ async function serve(test: TestContext, log: LogStandIn, cosign: (checkpoint: st
         polls++
         response.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' })
         response.end(cosign(log.checkpoint(), polls))
+      } else if (url.pathname.startsWith('/tiles/') && refuseTile(url.pathname.slice('/tiles/'.length)) !== undefined) {
+        const refused = refuseTile(url.pathname.slice('/tiles/'.length))
+        response.writeHead(refused?.status ?? 500, { 'content-type': 'text/plain' })
+        response.end(refused?.body)
       } else {
         const tile = url.pathname.startsWith('/tiles/') ? tamper(url.pathname.slice('/tiles/'.length), log.tile(url.pathname.slice('/tiles/'.length))) : undefined
         response.writeHead(tile === undefined ? 404 : 200, { 'content-type': 'application/octet-stream' })
@@ -96,6 +100,23 @@ describe('logRelease', () => {
     const endpoints = await serve(test, log, checkpoint => stranger.cosign(checkpoint, 1_793_981_760))
     await expect(logRelease(endpoints, root, 'delorun-0.1.0.manifest.json', MANIFEST, '0.1.0', entry, 3, async () => {})).rejects.toThrow(/after 3 attempts; the release is not published/u)
   })
+
+  it('quotes the body of a tile the log refuses with a 500', async (test) => {
+    const { log, witness, root, entry } = setup()
+    log.grow(300)
+    const endpoints = await serve(test, log, checkpoint => witness.cosign(checkpoint, 1_793_981_760), (_, tile) => tile, () => ({ status: 500, body: 'tile store unavailable' }))
+    await expect(logRelease(endpoints, root, 'delorun-0.1.0.manifest.json', MANIFEST, '0.1.0', entry, 1, async () => {})).rejects.toThrow(`${endpoints.tiles}tile/0/001.p/45 answered HTTP 500: tile store unavailable`)
+  })
+
+  it('still reads a 404 for a tile as not served, whatever the body says', async (test) => {
+    const { log, witness, root, entry } = setup()
+    log.grow(300)
+    const endpoints = await serve(test, log, checkpoint => witness.cosign(checkpoint, 1_793_981_760), (_, tile) => tile, () => ({ status: 404, body: 'no such tile' }))
+    const error: unknown = await logRelease(endpoints, root, 'delorun-0.1.0.manifest.json', MANIFEST, '0.1.0', entry, 1, async () => {}).then(() => undefined, (failure: unknown) => failure)
+    expect(error).toBeInstanceOf(Error)
+    expect((error as Error).message).toMatch(/the log serves neither tile\/0\/001\.p\/45 nor tile\/0\/001/u)
+    expect((error as Error).message).not.toMatch(/answered HTTP|no such tile/u)
+  })
 })
 
 describe('logging pre-signed entry requests in the root\'s order, as log-release does', () => {
@@ -120,7 +141,7 @@ describe('logging pre-signed entry requests in the root\'s order, as log-release
   it('log-release-fallback-on-type-refusal: submits the next request only after the log refuses the first one\'s key type, and its bundle verifies', async (test) => {
     const { log, witness, root, entries } = ordered()
     const submitted: string[] = []
-    const endpoints = await serve(test, log, checkpoint => witness.cosign(checkpoint, 1_793_981_760), undefined, request => (request.hashedRekordRequestV002.signature.verifier.keyDetails === ECDSA ? TYPE_REFUSAL : undefined), submitted)
+    const endpoints = await serve(test, log, checkpoint => witness.cosign(checkpoint, 1_793_981_760), undefined, undefined, request => (request.hashedRekordRequestV002.signature.verifier.keyDetails === ECDSA ? TYPE_REFUSAL : undefined), submitted)
     const warnings: string[] = []
     const logged = await logFirstAccepted(endpoints, root, 'delorun-0.1.0.manifest.json', MANIFEST, '0.1.0', entries, 1, async () => {}, 'manifest', line => warnings.push(line))
     expect(submitted).toEqual([ECDSA, 'PKIX_ED25519_PH'])
@@ -133,7 +154,7 @@ describe('logging pre-signed entry requests in the root\'s order, as log-release
     for (const answer of [{ status: 400, body: JSON.stringify({ code: 3, message: 'invalid argument' }) }, { status: 500, body: TYPE_REFUSAL.body }]) {
       const { log, witness, root, entries } = ordered()
       const submitted: string[] = []
-      const endpoints = await serve(test, log, checkpoint => witness.cosign(checkpoint, 1_793_981_760), undefined, () => answer, submitted)
+      const endpoints = await serve(test, log, checkpoint => witness.cosign(checkpoint, 1_793_981_760), undefined, undefined, () => answer, submitted)
       await expect(logFirstAccepted(endpoints, root, 'delorun-0.1.0.manifest.json', MANIFEST, '0.1.0', entries, 1, async () => {}, 'manifest', () => undefined)).rejects.toThrow(`answered HTTP ${String(answer.status)}`)
       expect(submitted).toEqual([ECDSA])
     }
@@ -142,7 +163,7 @@ describe('logging pre-signed entry requests in the root\'s order, as log-release
   it('log-release-refuses-other-digest: submits no request that does not verify under the root: one for another file\'s digest, or by a key the root does not list', async (test) => {
     const { keys, log, witness, root } = ordered()
     const submitted: string[] = []
-    const endpoints = await serve(test, log, checkpoint => witness.cosign(checkpoint, 1_793_981_760), undefined, () => undefined, submitted)
+    const endpoints = await serve(test, log, checkpoint => witness.cosign(checkpoint, 1_793_981_760), undefined, undefined, () => undefined, submitted)
     const otherFile = entryRequest(Buffer.from('another manifest'), keys.targets, 'PKIX_ED25519_PH')
     await expect(logFirstAccepted(endpoints, root, 'delorun-0.1.0.manifest.json', MANIFEST, '0.1.0', [otherFile], 1, async () => {}, 'manifest', () => undefined)).rejects.toThrow(/does not verify under root 1, so it was not submitted: .*digest/u)
     await expect(logFirstAccepted(endpoints, root, 'delorun-0.1.0.packs.json', MANIFEST, '0.1.0', [otherFile], 1, async () => {}, 'packs', () => undefined)).rejects.toThrow('does not verify under root 1, so it was not submitted')
@@ -180,12 +201,44 @@ describe('logRelease when the log refuses the entry', () => {
   })
 
   it('quotes at most the first 500 characters, with control and format characters shown as spaces', async (test) => {
-    const endpoints = await refusing(test, 400, `\u001B[31mrefused\r\n\u202Eby\u0007the log ${'x'.repeat(10_000)}`)
+    const endpoints = await refusing(test, 400, `\u001B[31mrefused\r\n\u202Eby\u0007the log a\u009B[0mb\u2066c\u2028d\uFEFFe ${'x'.repeat(10_000)}`)
     const message = await refusalOf(endpoints)
     const excerpt = message.slice(`${endpoints.submit} answered HTTP 400: `.length)
-    expect(excerpt.startsWith('[31mrefused by the log x')).toBe(true)
+    expect(excerpt.startsWith('[31mrefused by the log a [0mb c d e x')).toBe(true)
     expect([...excerpt]).toHaveLength(REFUSAL_EXCERPT_CHARACTERS)
-    expect(message).not.toMatch(/[\p{Cc}\p{Cf}]/u)
+    expect(message).not.toMatch(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u)
+  })
+
+  it('stops reading an endless body at 4 KiB, cancels it, and rejects with a 500-character excerpt well inside the timeout', async (test) => {
+    let sent = 0
+    let cancelled: () => void = () => {}
+    const closed = new Promise<void>((resolve) => { cancelled = resolve })
+    const server = createServer((request, response) => {
+      request.resume()
+      request.on('end', () => {
+        response.writeHead(400, { 'content-type': 'text/plain' })
+        response.on('close', cancelled)
+        // Chunks without end(): only the client closing the connection stops the loop.
+        const pump = (): void => {
+          if (response.destroyed || response.writableEnded) return
+          sent += 1024
+          response.write('x'.repeat(1024))
+          setImmediate(pump)
+        }
+        pump()
+      })
+    })
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
+    test.onTestFinished(() => new Promise<void>((resolve) => { server.closeAllConnections(); server.close(() => resolve()) }))
+    const origin = `http://127.0.0.1:${String((server.address() as AddressInfo).port)}`
+    const endpoints: LogEndpoints = { submit: `${origin}/api/v2/log/entries`, checkpoint: `${origin}/checkpoint`, tiles: `${origin}/tiles/` }
+    const started = Date.now()
+    const message = await refusalOf(endpoints)
+    expect(Date.now() - started).toBeLessThan(5_000)
+    expect(message).toBe(`${endpoints.submit} answered HTTP 400: ${'x'.repeat(REFUSAL_EXCERPT_CHARACTERS)}`)
+    // The client's cancel closes the connection, so the server sees it close while it still has more to write.
+    await closed
+    expect(sent).toBeGreaterThan(0)
   })
 
   it('ends at the status when the body is empty', async (test) => {
