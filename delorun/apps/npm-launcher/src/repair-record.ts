@@ -112,19 +112,68 @@ async function readMark(home: string): Promise<ReadMark | undefined> {
 /**
  * Remove the mark only when it still holds the text that was read. A repair that started after that read replaces the
  * file with its own mark, which must stay.
+ *
+ * A read followed by a remove leaves a gap in which a repair can link its own mark, so the removal claims the file
+ * first: it moves the file to a name of its own with `rename`, which is atomic, and compares what it moved. A match is
+ * removed. A mismatch is a newer mark, which goes back with `link`: `link` fails when a later mark already sits at the
+ * path, and then that later mark stays and the moved one is dropped. The mark is absent from its path only between the
+ * move and the link, and only when the file changed after the read above, which is the case this guards.
  * @param home - the resolved Delorun home.
  * @param text - the mark's text as the caller read or wrote it.
  * @returns `true` when the file is gone, `false` when it holds other text and was left.
  */
 async function removeUnchanged(home: string, text: string): Promise<boolean> {
-  const now = await readFile(repairRecordPath(home), 'utf8').catch((error: unknown) => {
+  const path = repairRecordPath(home)
+  const now = await readFile(path, 'utf8').catch((error: unknown) => {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
     throw error
   })
   if (now === undefined) return true
+  // Most changes are seen here, and leave the mark in place.
   if (now !== text) return false
-  await rm(repairRecordPath(home), { force: true })
-  return true
+  const claimed = `${path}.claim-${randomBytes(8).toString('hex')}`
+  try {
+    await rename(path, claimed)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return true
+    throw error
+  }
+  let moved: string
+  try {
+    moved = await readFile(claimed, 'utf8')
+  } catch (error) {
+    // The claim is the only copy of whichever mark was there: it goes back before the error is raised.
+    await putBack(claimed, path).catch(() => undefined)
+    throw error
+  }
+  if (moved === text) {
+    await rm(claimed, { force: true })
+    return true
+  }
+  // A newer mark was in the path when it was claimed: put it back, and once more if that failed, before the error is raised.
+  try {
+    await putBack(claimed, path)
+  } catch (error) {
+    await putBack(claimed, path).catch(() => undefined)
+    throw error
+  }
+  return false
+}
+
+/**
+ * Put a claimed mark back at the mark's path with `link`, which fails when a mark is there, and drop the claim.
+ * @param claimed - the unique name the mark was moved to.
+ * @param path - the mark's path.
+ * @throws {Error} when `link` fails other than because a newer mark is there; the claim is then left in place.
+ */
+async function putBack(claimed: string, path: string): Promise<void> {
+  try {
+    await link(claimed, path)
+  } catch (error) {
+    // EEXIST: a newer mark than the claimed one sits at the path. It wins.
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+  }
+  await rm(claimed, { force: true })
 }
 
 /**
