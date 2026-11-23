@@ -8,13 +8,12 @@ import { createPortal } from 'react-dom'
 import {
   IconCloseOutlineRegular, IconPinFillRegular, IconPinOutlineRegular, MenuSurface, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
-import type { HostObservable, InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type { HostObservable, InjectFace, PropsLocale, PropsRuntime, Translate as TranslateOf } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import type { CapacityRefusal } from '../layout/index.ts'
+import { LayoutPicker, type CapacityRefusal, type LayoutsLocaleKey } from '../layout/index.ts'
 import type { MULTIVIEW_NS } from '../client/contract.ts'
 import { EMPTY_CHAT_MULTIVIEW, type ChatMultiview, type MultiviewService } from '../client/contract.ts'
 import type { HintPreference } from './hint.ts'
-import { LayoutPicker } from './picker.tsx'
 import { catalogOf, ownerOf, runningAgentsOf } from './read.ts'
 import css from './Entry.module.css'
 
@@ -22,6 +21,8 @@ import css from './Entry.module.css'
 export interface EntryInjected {
   /** The pins, layouts and open state. */
   readonly multiview: MultiviewService
+  /** The layout copy for the layout picker: `ctx.locale.bind(LAYOUTS_NS)`. */
+  readonly layoutsT: TranslateOf<LayoutsLocaleKey>
   /** The keys bound to the focus command, empty while it is unbound or the studio has no keyboard settings. */
   readonly focusKeys?: HostObservable<readonly string[]>
   /** Whether the one-time hint has been shown; without it the hint never shows. */
@@ -93,7 +94,7 @@ export type FooterProps = PropsRuntime<'conversation.session.header.actions.suba
  * @param props - the chat, the services and the dictionary.
  * @returns the footer.
  */
-export function Footer({ sessionId, useSessions, multiview, t }: FooterProps) {
+export function Footer({ sessionId, useSessions, multiview, layoutsT, t }: FooterProps) {
   const { pins, open: shown } = useChat(multiview, sessionId)
   const settings = useSyncExternalStore(listener => multiview.settings.subscribe(listener), () => multiview.settings.getSnapshot())
   const running = useSessions(state => runningAgentsOf(state, sessionId).join('\n'))
@@ -107,7 +108,7 @@ export function Footer({ sessionId, useSessions, multiview, t }: FooterProps) {
   const openDisabled = !shown && pins.length === 0 && unpinnedRunning.length === 0
   return (
     <div className={css.footer} role="group" aria-label={t('button')}>
-      <LayoutPicker chat={sessionId} multiview={multiview} variant="row" t={t} />
+      <div className={css.picker}><LayoutPicker chat={sessionId} multiview={multiview} variant="row" t={layoutsT} /></div>
       <span className={css.status}>{status}</span>
       <Tooltip label={pinRunningReason ?? ''} disabled={pinRunningReason === undefined} side="top" delayMs={500} portal>
         <button
@@ -163,7 +164,7 @@ const LONG_PRESS_SLOP = 8
  * @param props - the chat, the services and the dictionary.
  * @returns the toggle, or null when the chat has nothing for Multiview.
  */
-export function MultiviewToggle({ sessionId, useSessions, useSessionStatus, multiview, focusKeys, hint, t }: ToggleProps) {
+export function MultiviewToggle({ sessionId, useSessions, useSessionStatus, multiview, layoutsT, focusKeys, hint, t }: ToggleProps) {
   const { pins, open: shown } = useChat(multiview, sessionId)
   const keys = useSyncExternalStore(listener => focusKeys?.subscribe(listener) ?? noop, () => focusKeys?.getSnapshot() ?? NO_KEYS)
   const waiting = useSessionStatus(statuses => pins.some(pin => statuses.get(pin)?.pendingInteraction !== undefined))
@@ -215,7 +216,7 @@ export function MultiviewToggle({ sessionId, useSessions, useSessionStatus, mult
       </Tooltip>
       {picker && createPortal(
         <PickerPopover anchorName={anchorName} anchor={buttonRef} onClose={closePicker} label={t('layout')}>
-          <LayoutPicker chat={sessionId} multiview={multiview} variant="grid" onChosen={() => { closePicker(true) }} t={t} />
+          <LayoutPicker chat={sessionId} multiview={multiview} variant="grid" onChosen={() => { closePicker(true) }} t={layoutsT} />
         </PickerPopover>,
         document.body,
       )}

@@ -5,16 +5,23 @@
  * the pane header and body slots, each inside the agent chat's own `multiviewPane` session reference, held here so that moving,
  * paging or hiding a pane never closes its chat.
  */
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { SessionReference } from '@deepseek-ai/dsh-api-session-controller/client'
 import type { InjectFace, PropsLocale, PropsRenderSlots, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import { Toast } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { RememberScope } from '../config.ts'
 import type { MultiviewService } from '../client/contract.ts'
 import { limitsOf } from '../entry/state.ts'
 import {
-  fitLayout, paneCapacity, PaneLayout, reconcileLayout, type LayoutArea, type PaneHeaderControls, type PaneId, type PaneLayoutLabels,
+  drawnPreset, fitToMinimums, mainShareFromDrag, panesOf, PaneLayout, reconcileLayout, selectPane, slotOrder,
+  type LayoutArea, type LayoutChangeReason, type LayoutModel, type LayoutsLocaleKey, type PaneActivity, type PaneHeaderControls, type PaneId,
+  type PaneLayoutLabels,
 } from '../layout/index.ts'
+import type { Translate } from '@deepseek-ai/dsh-client-ui-slots'
+import { useBusy, useHeld } from './busy.ts'
+import type { LayerRegistry } from './keys.ts'
 import type { PANES_NS } from '../panes/locales.ts'
 import { usePaneReferences, type PaneSessions } from '../panes/references.ts'
 import type { PaneHeaderOwnerProps } from '../panes/slots.ts'
@@ -38,7 +45,20 @@ export interface LayerInjected {
   readonly clock: (epochMs: number) => string
   /** Where the pager publishes its position for the dots above each page's reply box. */
   readonly dots: PhoneDotsStore
+  /** The layout copy, for the "Saved as your default layout" notice. */
+  readonly layoutsT: Translate<LayoutsLocaleKey>
+  /** Where the open layer offers itself to the layout keys. */
+  readonly layers: LayerRegistry
 }
+
+/** How long a new area must hold before Auto re-arranges for it, in milliseconds. */
+export const AREA_SETTLE_MS = 200
+
+/** How long a pane's activity must hold before the mosaic re-arranges for it, so a flapping status never shakes the layout. */
+export const ACTIVITY_SETTLE_MS = 700
+
+const sameArea = (left: LayoutArea | undefined, right: LayoutArea | undefined): boolean =>
+  left === right || (left !== undefined && right !== undefined && left.width === right.width && left.height === right.height)
 
 /** Props of the layer entry. */
 export type LayerProps = PropsRuntime<'conversation.main.body'>
@@ -79,19 +99,21 @@ function useObservable<T>(source: { subscribe(listener: () => void): () => void;
 }
 
 const ChatMultiview = memo(function ChatMultiview(props: Omit<LayerProps, 'children'> & { readonly main: SessionId; readonly content: SnapshotStore<ReactNode> }) {
-  const { main, content, multiview, sessions, openFull, clock, dots, t, SessionProvider, renderSlot, useSessions, useSessionStatus } = props
+  const { main, content, multiview, sessions, openFull, clock, dots, layoutsT, layers, t, SessionProvider, renderSlot, useSessions, useSessionStatus } = props
   const mainContent = useMemo(() => <MainContent content={content} />, [content])
   const state = useObservable(multiview.of(main))
   const settings = useObservable(multiview.settings)
+  const defaults = useSyncExternalStore(listener => multiview.defaults.subscribe(listener), () => multiview.defaultsOf(main))
   const limits = useMemo(() => limitsOf(settings), [settings])
+  const root = useRef<HTMLDivElement | null>(null)
+  const busy = useBusy(root)
   const [area, setArea] = useState<LayoutArea | undefined>(undefined)
+  const heldArea = useHeld(area, AREA_SETTLE_MS, busy, sameArea)
   const [focused, setFocused] = useState<PaneId | undefined>(undefined)
   const [active, setActive] = useState<PaneId>(main)
+  const [notice, setNotice] = useState<{ readonly seq: number; readonly scope: RememberScope } | undefined>(undefined)
   const references = usePaneReferences(sessions, useMemo(() => [main, ...state.pins], [main, state.pins]))
-  // Pins are the source of truth; the stored layout only places them, and a window too small for all of them hides the last.
-  const stored = useMemo(() => reconcileLayout(state.layout ?? undefined, main, state.pins), [state.layout, main, state.pins])
-  const fitted = useMemo(() => fitLayout(stored, main, paneCapacity(limits, area)), [stored, main, limits, area])
-  const frame: Frame = { SessionProvider, renderSlot, useSessions, useSessionStatus, t, multiview, sessions, openFull, clock, dots }
+  const frame: Frame = { SessionProvider, renderSlot, useSessions, useSessionStatus, t, multiview, sessions, openFull, clock, dots, layoutsT, layers }
 
   useEffect(() => { if (state.pins.length === 0) multiview.close(main) }, [multiview, main, state.pins.length])
   useEffect(() => () => { multiview.reportArea(undefined) }, [multiview])
@@ -105,18 +127,109 @@ const ChatMultiview = memo(function ChatMultiview(props: Omit<LayerProps, 'child
   const ids = useMemo(() => pageOrder(main, state.pins), [main, state.pins])
   const waitingKey = useSessionStatus(statuses => ids.filter(pane => statuses.get(pane)?.pendingInteraction !== undefined).join('\n'))
   const waitingPanes = useMemo(() => new Set(waitingKey === '' ? [] : waitingKey.split('\n')), [waitingKey])
+  const runningKey = useSessions(list => ids.map(id => (list.byId[id]?.running === true ? '1' : '0')).join(''))
   const labels: PaneLayoutLabels = { separator: t('layout.separator'), region: t('region'), tabList: t('layout.tabs'), grip: t('layout.grip') }
+
+  // The mosaic reads each pane's activity once it has held for a while, and never while the person is busy in the layout.
+  const arrangement = state.arrangement ?? multiview.arrangementOf(main)
+  const activityKey = arrangement === 'mosaic' ? ids.map((id, index) => `${id}=${runningKey[index] === '1' || waitingPanes.has(id) ? 'large' : 'small'}`).join('\n') : ''
+  const heldActivity = useHeld(activityKey, ACTIVITY_SETTLE_MS, busy)
+  const activity = useMemo(() => new Map(heldActivity === '' ? [] : heldActivity.split('\n').map(entry => entry.split('=') as [PaneId, PaneActivity])), [heldActivity])
+
+  const arranged = useMemo(
+    () => multiview.layoutFor(main, heldArea, arrangement === 'mosaic' ? activity : undefined),
+    [multiview, main, state, defaults, limits, heldArea, arrangement, activity],
+  )
+  // While the person is busy in the layout nothing rearranges by itself: a pin that comes or goes is placed in the layout as shown,
+  // and the full arrangement follows once they are done. A change they make (a choice, a tab, a drag) shows at once.
+  const shown = useRef<{ readonly model: LayoutModel; readonly inputs: unknown } | undefined>(undefined)
+  const inputs = useMemo(() => ({ arrangement, shape: state.shape, slots: state.slots, layout: state.layout, defaults, heldArea, activity }), [arrangement, state.shape, state.slots, state.layout, defaults, heldArea, activity])
+  let display = arranged
+  if (busy && shown.current !== undefined && shown.current.inputs === inputs) {
+    const slots = slotOrder(state.slots, main, state.pins)
+    const held = shown.current.model
+    const samePanes = panesOf(held).length === slots.length && slots.every(pane => panesOf(held).includes(pane))
+    display = samePanes ? held : fitToMinimums(reconcileLayout(held, slots[0]!, slots.slice(1)), limits, heldArea)
+  }
+  useLayoutEffect(() => { shown.current = { model: display, inputs } })
+
+  // A resize during a drag is kept until the pointer is released, so a drag of a divider saves once and the notice shows once.
+  const pendingResize = useRef<LayoutModel | undefined>(undefined)
+  const commitResize = useCallback((model: LayoutModel, before: LayoutModel) => {
+    const slots = slotOrder(state.slots, main, state.pins)
+    const preset = drawnPreset(arrangement, slots.length, { area: heldArea, limits, autoColumns: defaults.autoColumns })
+    const share = mainShareFromDrag(before, model, preset, slots[0]!)
+    if (share !== undefined) {
+      multiview.setMainShare(share)
+      return
+    }
+    const result = multiview.adoptArrangement(main, model, 'resize')
+    if (result.saved) setNotice(previous => ({ seq: (previous?.seq ?? 0) + 1, scope: result.scope }))
+  }, [multiview, main, state.slots, state.pins, arrangement, heldArea, limits, defaults.autoColumns])
+  const resizeBase = useRef<LayoutModel | undefined>(undefined)
+  useEffect(() => {
+    if (busy || pendingResize.current === undefined) return
+    const model = pendingResize.current
+    const before = resizeBase.current ?? display
+    pendingResize.current = undefined
+    resizeBase.current = undefined
+    commitResize(model, before)
+  }, [busy, commitResize, display])
+
+  const onModelChange = (model: LayoutModel, reason: LayoutChangeReason): void => {
+    switch (reason) {
+      case 'resize':
+        resizeBase.current ??= display
+        pendingResize.current = model
+        if (!busy) {
+          const before = resizeBase.current
+          pendingResize.current = undefined
+          resizeBase.current = undefined
+          commitResize(model, before)
+        }
+        return
+      case 'move':
+      case 'swap': {
+        const result = multiview.adoptArrangement(main, model, reason)
+        if (result.saved) setNotice(previous => ({ seq: (previous?.seq ?? 0) + 1, scope: result.scope }))
+        return
+      }
+      default:
+        multiview.setLayout(main, model)
+    }
+  }
+
+  // The layout keys act on the open layer: its chat, the focused pane and the layout as drawn.
+  const latest = useRef({ display, focused, heldArea, slots: slotOrder(state.slots, main, state.pins) })
+  latest.current = { display, focused, heldArea, slots: slotOrder(state.slots, main, state.pins) }
+  useEffect(() => layers.offer({
+    main,
+    focused: () => latest.current.focused ?? latest.current.slots[0] ?? main,
+    display: () => latest.current.display,
+    area: () => latest.current.heldArea,
+    focusPane: (pane) => {
+      const model = latest.current.display
+      const selected = selectPane(model, pane)
+      if (selected.ok && JSON.stringify(selected.model) !== JSON.stringify(model)) multiview.setLayout(main, selected.model)
+      setFocused(pane)
+      const body = [...(root.current?.querySelectorAll<HTMLElement>('[data-pane]') ?? [])].find(element => element.dataset.pane === pane)
+      const target = body?.querySelector<HTMLElement>('textarea, [contenteditable="true"], input:not([type="hidden"])') ?? body
+      if (body !== null && body !== undefined && !body.hasAttribute('tabindex')) body.tabIndex = -1
+      target?.focus({ preventScroll: true })
+    },
+  }), [layers, main, multiview])
 
   const split = (
     <PaneLayout
-      model={fitted.model}
+      model={display}
       main={main}
       limits={limits}
       labels={labels}
       focusedPane={focused}
       onFocusPane={setFocused}
       onAreaChange={onAreaChange}
-      onModelChange={(model) => { multiview.setLayout(main, model) }}
+      onModelChange={onModelChange}
+      animate={arrangement !== 'mosaic' || defaults.mosaicMotion === 'on'}
       renderTab={pane => <TabLabel useSessions={useSessions} pane={pane} waiting={waitingPanes.has(pane)} label={t('pager.attention')} />}
       renderHeader={(pane, paneState, controls) => (
         <HeaderSlot
@@ -133,19 +246,22 @@ const ChatMultiview = memo(function ChatMultiview(props: Omit<LayerProps, 'child
       renderPane={pane => <BodySlot frame={frame} reference={references.get(pane)} content={pane === main ? mainContent : undefined} compact={settings.compactComposer} waiting={waitingPanes.has(pane)} />}
     />
   )
-  const hiddenWaiting = fitted.hidden.filter(pane => waitingPanes.has(pane)).length
-  const hidden = fitted.hidden.length === 0 ? null : (
-    <div className={css.hidden} role="status" data-waiting={hiddenWaiting > 0 || undefined}>
-      {fitted.hidden.length === 1 ? t('layout.hidden.one') : t('layout.hidden', { count: String(fitted.hidden.length) })}
-      {hiddenWaiting > 0 && ` ${hiddenWaiting === 1 ? t('layout.hidden.waiting.one') : t('layout.hidden.waiting', { count: String(hiddenWaiting) })}`}
-    </div>
-  )
   const phone = (
     <Pager frame={frame} main={main} content={mainContent} ids={ids} references={references} active={active} onActive={setActive} stop={stop} compact={settings.compactComposer} waiting={waitingPanes} />
   )
   return (
-    <div className={css.root} data-multiview-panel={main}>
-      <PhoneSwitch phone={phone} split={<>{hidden}<div className={css.layout}>{split}</div></>} />
+    <div ref={root} className={css.root} data-multiview-panel={main}>
+      <PhoneSwitch phone={phone} split={<div className={css.layout}>{split}</div>} />
+      {notice !== undefined && (
+        <Toast
+          key={notice.seq}
+          tone="success"
+          holdMs={6000}
+          text={layoutsT(`saved.${notice.scope}`)}
+          actions={[{ label: layoutsT('saved.undo'), prefix: ' · ', onClick: () => { multiview.undoDefault(); setNotice(undefined) } }]}
+          onDone={() => { setNotice(current => (current?.seq === notice.seq ? undefined : current)) }}
+        />
+      )}
     </div>
   )
 })

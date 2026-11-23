@@ -225,3 +225,36 @@ describe('storage that is blocked or full', () => {
     expect(warn).toHaveBeenCalledTimes(2)
   })
 })
+
+describe('the saved state across the layout picker', () => {
+  it('loads a value saved before the picker unchanged, with no arrangement, so the chat keeps its layout', () => {
+    const layout = buildPreset('main-column', CHAT, [id('a')])
+    localStorage.setItem(key, JSON.stringify({ v: 1, pins: ['a'], layout, open: true }))
+    expect(persistence().load(CHAT)).toEqual({ pins: [id('a')], layout, open: true })
+  })
+
+  it('round-trips the arrangement, the slot order and the chat’s own shape', () => {
+    const value: ChatMultiview = {
+      ...state(),
+      arrangement: 'yours',
+      slots: [id('b'), CHAT, id('a')],
+      shape: { version: 1, root: { kind: 'split', orientation: 'horizontal', size: 100, children: [
+        { kind: 'leaf', slots: [0], active: 0, size: 60 }, { kind: 'leaf', slots: [1, 2], active: 2, size: 40 },
+      ] } },
+    }
+    persistence().save(CHAT, value, KEEP)
+    expect(persistence().load(CHAT)).toEqual(value)
+  })
+
+  it('discards an unknown arrangement, a slot twice and a shape that is not well formed', () => {
+    for (const extra of [
+      { arrangement: 'cascade' },
+      { slots: ['a', 'a'] },
+      { shape: { version: 1, root: { kind: 'leaf', slots: [0, 0], active: 0, size: 100 } } },
+    ]) {
+      localStorage.setItem(key, JSON.stringify({ ...savedJson(null, ['a']), ...extra }))
+      expect(persistence().load(CHAT)).toBeUndefined()
+      expect(localStorage.getItem(key)).toBeNull()
+    }
+  })
+})

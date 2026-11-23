@@ -5,7 +5,7 @@
  * @module @delorun/plugin-multiview/layout/PaneLayout
  */
 
-import { useCallback, useEffect, useMemo, useRef, type CSSProperties, type JSX, type ReactNode } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, type CSSProperties, type JSX, type ReactNode } from 'react'
 import {
   Separator,
   TabsetDragHandle,
@@ -20,12 +20,16 @@ import {
 import { fromWorkspaceModel, toWorkspaceModel, type PaneTabData } from './convert.ts'
 import { createPaneLayoutActions } from './actions.ts'
 import { StateKeeper } from './keep.ts'
+import { measurePanes, playFlip, type PaneRects } from './flip.ts'
 import { panesOf, type LayoutModel, type PaneId } from './model.ts'
 import { moveOptions } from './ops.ts'
 import styles from './PaneLayout.module.css'
 import type { LayoutChangeReason, PaneLayoutProps, PaneState } from './props.ts'
 
 type Meta = WorkspaceChangedMeta
+
+/** A pane's frame, the element the layout glide moves. */
+const FRAME_SELECTOR = `.${styles.tabset ?? 'tabset'}`
 
 /** Frames to wait after a pointer release for the library to apply a drop. */
 const DROP_WAIT_FRAMES = 15
@@ -47,6 +51,12 @@ function GripGlyph(): JSX.Element {
       {[3, 8, 13].flatMap(y => [2.5, 7.5].map(x => <circle key={`${x}-${y}`} cx={x} cy={y} r="1.25" fill="currentColor" />))}
     </svg>
   )
+}
+
+/** Runs after every commit of the pane it sits in, so a pending glide starts before the browser paints the new layout. */
+function CommitProbe({ onCommit }: { readonly onCommit: () => void }): null {
+  useLayoutEffect(() => { onCommit() })
+  return null
 }
 
 /**
@@ -106,13 +116,29 @@ export function PaneLayout(props: PaneLayoutProps): JSX.Element {
     }
   }, [])
 
-  useEffect(() => {
+  // A layout replaced from outside (a choice, Auto, the mosaic) glides from the old places to the new ones; the panes are measured
+  // before the change and moved once the engine has drawn it, from wherever an unfinished glide had them.
+  const pendingFlip = useRef<PaneRects | undefined>(undefined)
+  const runFlip = useCallback((): void => {
+    const before = pendingFlip.current
+    const element = root.current
+    if (before === undefined || element === null) return
+    pendingFlip.current = undefined
+    playFlip(element, FRAME_SELECTOR, before)
+  }, [])
+  useLayoutEffect(() => {
     if (sameModel(shown.current, model)) return
     shown.current = model
+    const element = root.current
+    if (latest.current.animate === true && element !== null) {
+      pendingFlip.current = measurePanes(element, FRAME_SELECTOR)
+      // Whichever comes first: the engine's next draw of a pane (the probe below) or the next frame.
+      element.ownerDocument.defaultView?.requestAnimationFrame(runFlip)
+    }
     keeper.current?.freeze()
     workspace.current?.setModel(toWorkspaceModel(model))
     keeper.current?.release()
-  }, [model, workspace])
+  }, [model, workspace, runFlip])
 
   useEffect(() => {
     const element = root.current
@@ -173,6 +199,7 @@ export function PaneLayout(props: PaneLayoutProps): JSX.Element {
           onPointerDownCapture={() => latest.current.onFocusPane?.(pane)}
         >
           {renderPane(pane, stateOf(pane, leafSizeOf(pane), selectedOf(pane)))}
+          <CommitProbe onCommit={runFlip} />
         </div>
       )
     },
@@ -184,7 +211,7 @@ export function PaneLayout(props: PaneLayoutProps): JSX.Element {
       const pane = (tabset.selectedId ?? tabset.tabs[0]?.id) as PaneId | undefined
       if (pane === undefined) return null
       const state = stateOf(pane, tabset.tabs.length, true)
-      return renderHeader(pane, state, {
+      return <div className={styles.toolbarFill} data-flip-pane={pane}>{renderHeader(pane, state, {
         grip: (
           <TabsetDragHandle className={styles.grip} title={labels.grip} aria-label={labels.grip}>
             <GripGlyph />
@@ -194,7 +221,7 @@ export function PaneLayout(props: PaneLayoutProps): JSX.Element {
         swapCandidates: panesOf(model).filter(candidate => candidate !== pane),
         moveOptions: moveOptions(model, pane),
         canClose: pane !== main,
-      })
+      })}</div>
     },
     [renderHeader, labels.grip, actions, model, main, focusedPane],
   )
@@ -226,7 +253,10 @@ export function PaneLayout(props: PaneLayoutProps): JSX.Element {
     [],
   )
   // A leaf with one pane has no tab strip: the pane header takes its place.
-  const tabListStyle = useCallback((tabset: TabsetNode<PaneTabData>): CSSProperties => (tabset.tabs.length < 2 ? { display: 'none' } : {}), [])
+  // One row of tabs that scrolls sideways when it is longer than the leaf, above the pane header's row.
+  const tabListStyle = useCallback((tabset: TabsetNode<PaneTabData>): CSSProperties => (
+    tabset.tabs.length < 2 ? { display: 'none' } : { display: 'flex', flex: '1 0 100%', flexWrap: 'nowrap', overflowX: 'auto', scrollbarWidth: 'thin', minWidth: 0 }
+  ), [])
   const workspaceStyles = useMemo(() => ({ tabList: tabListStyle }), [tabListStyle])
 
   return (

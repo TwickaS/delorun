@@ -12,6 +12,7 @@ import { SessionId } from '@deepseek-ai/dsh-session/types'
 import { DEFAULT_MULTIVIEW_SETTINGS } from '../../../src/config.ts'
 import { Footer, MultiviewToggle, PinButton, type EntryInjected } from '../../../src/entry/Entry.tsx'
 import { en } from '../../../src/entry/locales.ts'
+import { layoutsEn } from '../../../src/layout/index.ts'
 import { MultiviewStore } from '../../../src/entry/state.ts'
 import css from './page.module.css'
 
@@ -69,7 +70,9 @@ const statuses = createSnapshotStore(new Map(AGENTS.filter(agent => agent.waitin
 
 const t = (key: keyof typeof en, vars: Record<string, string> = {}): string =>
   Object.entries(vars).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), en[key])
-const injected: EntryInjected = { multiview: store }
+const layoutsT = (key: keyof typeof layoutsEn, vars: Record<string, string> = {}): string =>
+  Object.entries(vars).reduce((text, [name, value]) => text.replaceAll(`{${name}}`, value), layoutsEn[key])
+const injected: EntryInjected = { multiview: store, layoutsT }
 const useSessions = <S,>(select: (state: ReturnType<typeof list.getSnapshot>) => S): S => useSyncExternalStore(listener => list.subscribe(listener), () => select(list.getSnapshot()))
 const useSessionStatus = <S,>(select: (state: ReturnType<typeof statuses.getSnapshot>) => S): S => useSyncExternalStore(listener => statuses.subscribe(listener), () => select(statuses.getSnapshot()))
 const useSession = <S,>(select: (state: { subagent: null }) => S): S => select({ subagent: null })

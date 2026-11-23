@@ -12,6 +12,8 @@ import { createContext, useContext, useEffect, useSyncExternalStore, type ReactN
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PaneBody, type PaneBodyProps } from '../../src/panes/PaneBody.tsx'
 import { MultiviewLayer, type LayerProps } from '../../src/panel/Layer.tsx'
+import { layoutsEn } from '../../src/layout/index.ts'
+import { createLayerRegistry } from '../../src/panel/keys.ts'
 import { createPhoneDots } from '../../src/panel/dots.tsx'
 import { en } from '../../src/panes/locales.ts'
 import { A, B, CHAT, makeStore } from '../entry/fixtures.ts'
@@ -70,7 +72,7 @@ function setup(body: (chat: string, pending: Pending) => ReactNode) {
     useSessionStatus: <S,>(select: (state: ReturnType<typeof statuses.getSnapshot>) => S): S => useSyncExternalStore(statuses.subscribe, () => select(statuses.getSnapshot())),
     SessionProvider: ({ session, children }: { session: { sessionId: string }; children: ReactNode }) => <ChatContext.Provider value={session.sessionId}>{children}</ChatContext.Provider>,
     renderSlot: (key: string): ReactNode => (key === 'multiview.pane.body' ? <Body body={body} pending={pending} /> : <div data-header />),
-    multiview: made.store, sessions, openFull: vi.fn(), clock: String, dots: createPhoneDots(), t: makeTranslate(en),
+    multiview: made.store, sessions, openFull: vi.fn(), clock: String, dots: createPhoneDots(), t: makeTranslate(en), layoutsT: makeTranslate(layoutsEn), layers: createLayerRegistry(),
   }
   render(<MultiviewLayer {...(props as never as LayerProps)} />)
   return { pending }

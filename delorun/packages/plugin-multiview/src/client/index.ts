@@ -37,7 +37,7 @@ export { browserStorage, localPersistence, MULTIVIEW_INDEX_NAME, MULTIVIEW_PERSI
 export const name = 'delorun-multiview'
 
 /** Services every registration needs. */
-export const inject = ['slots', 'locale', 'sessions', 'configForms', 'uiWorkspace']
+export const inject = ['slots', 'locale', 'sessions', 'configForms', 'uiWorkspace', 'workspaces', 'shortcuts']
 
 /**
  * Mount the entry points.

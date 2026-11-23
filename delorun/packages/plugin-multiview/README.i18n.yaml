@@ -12,23 +12,32 @@
   en: 116ac6a39eedea0e
   zh: bd6fa24ab7b4b04e
 /delorun-plugin-multiview/contents:
-  en: b31330b88153d44a
-  zh: 934a47b842080573
+  en: 817a73557b0ceb64
+  zh: 9909d2f168c7e9b4
 /delorun-plugin-multiview/using-it:
-  en: ea6c0f3ca42d6b94
+  en: 6b62454ba8665718
   zh: e0a0d940d97dadb6
 /delorun-plugin-multiview/panes:
-  en: 18ee385d33fe9cad
+  en: 1db9893e50e381a8
   zh: b082117d0852f402
+/delorun-plugin-multiview/layouts:
+  en: ad0bec38faac1d66
+  zh: ad0bec38faac1d66
+/delorun-plugin-multiview/settings:
+  en: 7395d9f4c0c11980
+  zh: 7395d9f4c0c11980
+/delorun-plugin-multiview/keyboard:
+  en: a8e226859e21c3b6
+  zh: a8e226859e21c3b6
 /delorun-plugin-multiview/configuration:
-  en: 54725edbb0642b4a
-  zh: 6f33415319fe3b97
+  en: 6824d496ed41d8e0
+  zh: cf1855af0cf59ff8
 /delorun-plugin-multiview/contract:
-  en: 0fc328fc87ab3621
-  zh: 0f0b263ea91710e4
+  en: d8e536916a34d38e
+  zh: 5ffaa2bd6a552ae4
 /delorun-plugin-multiview/limits:
   en: 707fe6e287a05070
   zh: 6e7394bfa4248e76
 /delorun-plugin-multiview/tests:
-  en: 4640e3845b3596f0
-  zh: e304e7e97d097bd7
+  en: d5a2b8399ab743e1
+  zh: 710278aa2cec9f8a

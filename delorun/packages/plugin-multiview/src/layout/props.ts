@@ -132,4 +132,9 @@ export interface PaneLayoutProps {
   readonly labels: PaneLayoutLabels
   /** A class for the layout's root element. */
   readonly className?: string | undefined
+  /**
+   * Whether a layout replaced through `model` glides to its new places (transforms only, under 300 ms, interruptible). It never
+   * animates with reduced motion, and a change the person made by dragging is already in place, so it does not move again.
+   */
+  readonly animate?: boolean | undefined
 }

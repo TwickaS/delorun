@@ -3,8 +3,8 @@ import { buildPreset, layoutProblem, LAYOUT_PRESETS, panesOf, DEFAULT_PRESET } f
 import { A, B, C, D, MAIN, pane, show, sizesSumTo100 } from './helpers.ts'
 
 describe('layout presets', () => {
-  it('puts the main chat on the left and the agents stacked on the right by default', () => {
-    expect(DEFAULT_PRESET).toBe('main-column')
+  it('defaults to Auto, and still reads the arrangement saved before it: the main chat left, the agents stacked right', () => {
+    expect(DEFAULT_PRESET).toBe('auto')
     expect(show(buildPreset('main-column', MAIN, [A, B]))).toBe('H(main:56, V(a:50, b:50):44):100')
   })
 

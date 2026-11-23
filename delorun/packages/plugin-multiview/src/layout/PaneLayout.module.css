@@ -35,6 +35,8 @@
 
 .header {
   display: flex;
+  /* A leaf with tabs puts its tab strip on a row of its own above the pane header, so neither squeezes the other. */
+  flex-wrap: wrap;
   align-items: stretch;
   min-width: 0;
   background: var(--dsw-alias-bg-layer-1);
@@ -43,7 +45,7 @@
 
 .toolbar {
   display: flex;
-  flex: 1 1 auto;
+  flex: 1 1 0;
   align-items: center;
   min-width: 0;
 }
@@ -75,7 +77,9 @@
 
 .tab {
   display: inline-flex;
+  flex: none;
   align-items: center;
+  white-space: nowrap;
   min-height: 32px;
   padding: 0 var(--delorun-space-3, 8px);
   color: var(--dsw-alias-label-secondary);
@@ -202,4 +206,12 @@
   border: 1px solid var(--dsw-alias-border-l3);
   border-radius: var(--dsw-radius-md);
   pointer-events: none;
+}
+
+/* The pane header's wrapper, which names the pane for the layout glide; it fills the toolbar as the header did. */
+.toolbarFill {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  min-width: 0;
 }

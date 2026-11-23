@@ -9,7 +9,8 @@
     "src/index.ts",
     "src/config.ts",
     "src/layout/limits.ts",
-    "src/layout/model.ts"
+    "src/layout/model.ts",
+    "src/layout/presets.ts"
   ],
   "references": [
     {

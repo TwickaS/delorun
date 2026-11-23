@@ -9,7 +9,9 @@ function plain(input: Record<string, unknown>) {
   return {
     autoOpen: config.autoOpen.get(), maxPanes: config.maxPanes.get(), minPaneWidth: config.minPaneWidth.get(),
     minPaneHeight: config.minPaneHeight.get(), compactComposer: config.compactComposer.get(), reopenOnReturn: config.reopenOnReturn.get(),
-    keepChats: config.keepChats.get(),
+    keepChats: config.keepChats.get(), defaultLayout: config.defaultLayout.get(), mainSide: config.mainSide.get(), stackStyle: config.stackStyle.get(),
+    mainShare: config.mainShare.get(), autoColumns: config.autoColumns.get(), mosaicMotion: config.mosaicMotion.get(),
+    rememberScope: config.rememberScope.get(), saveOn: config.saveOn.get(), yours: config.yours.get(), workspaceLayouts: config.workspaceLayouts.get(),
   }
 }
 
@@ -17,6 +19,8 @@ describe('Config', () => {
   it('defaults: auto-open on (MV9), six panes (MV10), compact composer (MV8), reopen on return (MV11)', () => {
     expect(plain({})).toEqual({
       autoOpen: true, maxPanes: 6, minPaneWidth: 340, minPaneHeight: 240, compactComposer: true, reopenOnReturn: true, keepChats: 50,
+      defaultLayout: 'auto', mainSide: 'left', stackStyle: 'rows', mainShare: 56, autoColumns: 3, mosaicMotion: 'on',
+      rememberScope: 'studio', saveOn: 'move-or-resize', yours: undefined, workspaceLayouts: {},
     })
     expect(DEFAULT_MULTIVIEW_SETTINGS).toEqual(plain({}))
     expect([DEFAULT_MAX_PANES, DEFAULT_MIN_PANE_WIDTH, DEFAULT_MIN_PANE_HEIGHT]).toEqual([6, 340, 240])
