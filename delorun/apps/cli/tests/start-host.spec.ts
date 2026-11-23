@@ -130,7 +130,7 @@ describe('runningHost', () => {
     const reachRow = (config: unknown): BootedRow => ({ id: 'delorun-reach', name: '@delorun/reach', disabled: false, state: 'active', config })
     // @delorun/bundle-local's row, which the Host booted with before `delorun reach on` wrote the profile's own.
     const boot = { enabled: true, tailscalePrivate: { enabled: false, address: '', servePort: 443 } }
-    const on = { enabled: true, tailscalePrivate: { enabled: true, address: 'https://home.example-tailnet.ts.net', servePort: 443, listenerPort: 31318, serveCheckIntervalMs: 60000, elevationMinutes: 15 } }
+    const on = { enabled: true, tailscalePrivate: { enabled: true, address: 'https://home.example.ts.net', servePort: 443, listenerPort: 31318, serveCheckIntervalMs: 60000, elevationMinutes: 15 } }
     // The profile's patch holds the reach row in every case, so the Host marks it `personEdited` at boot and after an apply (H3 derives no change for it).
     const inPatch = (rows: readonly BootedRow[]): ReturnType<typeof bootRowsOf> => bootRowsOf(rows, new Set(['delorun-reach']))
     const homes: string[] = []
@@ -161,7 +161,7 @@ describe('runningHost', () => {
       const { host, restarted } = reachHost([{ id: 'delorun-reach', config: on }], [{ option: 'tailscale-private', state: 'ready' }])
       expect(host.rows()).toEqual(inPatch([manager, reachRow(boot)]))
       await host.reach?.apply()
-      expect(restarted.map(rows => rows.tailscalePrivate?.address)).toEqual(['https://home.example-tailnet.ts.net'])
+      expect(restarted.map(rows => rows.tailscalePrivate?.address)).toEqual(['https://home.example.ts.net'])
       expect(host.rows()).toEqual(inPatch([manager, reachRow(on)]))
     })
 
