@@ -162,7 +162,7 @@ function localManifest(request: LocalReleaseRequest, runtime: ReadonlyMap<Runtim
     blockmap: absent(`Delorun-${request.version}-${platform}.blockmap`),
   }]))
   const digest = `sha256:${'0'.repeat(64)}`
-  const image = { repository: 'ghcr.io/delo-run/local-release-has-no-image', index: digest, platforms: { 'linux/amd64': digest, 'linux/arm64': digest } }
+  const image = { repository: 'ghcr.io/twickas/local-release-has-no-image', index: digest, platforms: { 'linux/amd64': digest, 'linux/arm64': digest } }
   return ManifestSchema.parse({
     schema: RELEASE_SCHEMAS.manifest,
     version,

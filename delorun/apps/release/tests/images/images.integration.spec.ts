@@ -30,14 +30,14 @@ describe('image digests', () => {
     const index = blob(layout, { schemaVersion: 2, manifests: [{ digest: amd64, platform: { os: 'linux', architecture: 'amd64' } }, { digest: arm64, platform: { os: 'linux', architecture: 'arm64', variant: 'v8' } }] })
     writeFileSync(join(layout, 'index.json'), JSON.stringify({ schemaVersion: 2, manifests: [{ digest: index }] }))
     execFileSync('tar', ['-cf', join(directory, 'image.oci.tar'), '-C', layout, 'index.json', 'blobs'], { timeout: 30_000 })
-    expect(ociImageRef(join(directory, 'image.oci.tar'), 'ghcr.io/delo-run/delorun-workspace-s2')).toEqual({ repository: 'ghcr.io/delo-run/delorun-workspace-s2', index, platforms: { 'linux/amd64': amd64, 'linux/arm64': arm64 } })
+    expect(ociImageRef(join(directory, 'image.oci.tar'), 'ghcr.io/twickas/delorun-workspace-s2')).toEqual({ repository: 'ghcr.io/twickas/delorun-workspace-s2', index, platforms: { 'linux/amd64': amd64, 'linux/arm64': arm64 } })
   })
 
   it('pins the Debian base by digest and names the repositories contract C9 lists', () => {
     const recipe = readImagesRecipe()
     expect(recipe.base).toMatch(/^docker\.io\/library\/debian:bookworm-slim@sha256:[0-9a-f]{64}$/u)
-    expect(recipe.images.s2.repository).toBe('ghcr.io/delo-run/delorun-workspace-s2')
-    expect(recipe.images.s3.repository).toBe('ghcr.io/delo-run/delorun-harness-s3')
+    expect(recipe.images.s2.repository).toBe('ghcr.io/twickas/delorun-workspace-s2')
+    expect(recipe.images.s3.repository).toBe('ghcr.io/twickas/delorun-harness-s3')
   })
 
   it('copies each image\'s committed seccomp profile, Docker\'s default profile, and its licence into the output as release files', async (test) => {
@@ -61,7 +61,7 @@ describe('image digests', () => {
     const out = scratch(test)
     const digest = `sha256:${'d'.repeat(64)}`
     const seccomp = { name: 'delorun-0.1.0.s2.seccomp.json', length: 2, sha256: 'e'.repeat(64) }
-    const image = { repository: 'ghcr.io/delo-run/fixture', index: digest, platforms: { 'linux/amd64': digest, 'linux/arm64': digest } }
+    const image = { repository: 'ghcr.io/twickas/fixture', index: digest, platforms: { 'linux/amd64': digest, 'linux/arm64': digest } }
     expect(await readReleaseImages(out, '0.1.0')).toBeUndefined()
     writeFileSync(join(out, imagesName('0.1.0')), JSON.stringify({ s2: { ...image, seccomp }, s3: image, builder: {}, debian: {} }))
     expect((await readReleaseImages(out, '0.1.0'))?.s2.seccomp).toEqual(seccomp)
@@ -73,10 +73,10 @@ describe('image digests', () => {
     const index = `sha256:${'d'.repeat(64)}`
     const document = spdxDocument('0.1.0', 1_793_981_656, { node: { version: '24.22.0', origin: 'https://nodejs.org/dist/v24.22.0' }, pnpm: { version: '11.28.5', integrity: `sha512-${'B'.repeat(86)}==` }, builder: { packages: [], platforms: [] } }, [], {
       base: `docker.io/library/debian:bookworm-slim@sha256:${'e'.repeat(64)}`,
-      images: { s2: { repository: 'ghcr.io/delo-run/delorun-workspace-s2', index }, s3: { repository: 'ghcr.io/delo-run/delorun-harness-s3', index } },
+      images: { s2: { repository: 'ghcr.io/twickas/delorun-workspace-s2', index }, s3: { repository: 'ghcr.io/twickas/delorun-harness-s3', index } },
       debian: { s2: { 'linux/amd64': [{ name: 'base-files', version: '12.4+deb12u11', architecture: 'amd64' }], 'linux/arm64': [{ name: 'base-files', version: '12.4+deb12u11', architecture: 'arm64' }] }, s3: { 'linux/amd64': [{ name: 'base-files', version: '12.4+deb12u11', architecture: 'amd64' }], 'linux/arm64': [] } },
     }) as { packages: Array<{ name: string, versionInfo: string, externalRefs?: Array<{ referenceLocator: string }> }>, relationships: Array<{ relationshipType: string }> }
-    expect(document.packages.find(item => item.name === 'ghcr.io/delo-run/delorun-workspace-s2')?.versionInfo).toBe(index)
+    expect(document.packages.find(item => item.name === 'ghcr.io/twickas/delorun-workspace-s2')?.versionInfo).toBe(index)
     expect(document.packages.filter(item => item.name === 'base-files').map(item => item.externalRefs?.[0]?.referenceLocator).sort()).toEqual(['pkg:deb/debian/base-files@12.4%2Bdeb12u11?arch=amd64', 'pkg:deb/debian/base-files@12.4%2Bdeb12u11?arch=arm64'])
     expect(document.relationships.filter(item => item.relationshipType === 'DESCENDANT_OF')).toHaveLength(2)
   })
@@ -119,7 +119,7 @@ describe('image builder pin', () => {
 
   it('makes the rebuild comparison fail on images files that differ only in the builder that made them', async (test) => {
     const directory = scratch(test)
-    const image = { repository: 'ghcr.io/delo-run/fixture', index: `sha256:${'a'.repeat(64)}`, platforms: { 'linux/amd64': `sha256:${'b'.repeat(64)}`, 'linux/arm64': `sha256:${'c'.repeat(64)}` } }
+    const image = { repository: 'ghcr.io/twickas/fixture', index: `sha256:${'a'.repeat(64)}`, platforms: { 'linux/amd64': `sha256:${'b'.repeat(64)}`, 'linux/arm64': `sha256:${'c'.repeat(64)}` } }
     for (const [name, buildkit] of [['first', 'v0.34.0'], ['second', 'v0.35.0']] as const) {
       mkdirSync(join(directory, name))
       writeFileSync(join(directory, name, 'delorun-0.1.0.images.json'), `${JSON.stringify({ s2: image, s3: image, builder: { docker: '29.9.2', buildkit } }, undefined, 2)}\n`)

@@ -45,7 +45,7 @@ describe('the Engine API client', () => {
       for (let index = 0; index < 12_000; index += 1) response.write(line)
       response.end(`${JSON.stringify({ status: 'Digest: sha256:x' })}\n`)
     })
-    await expect(engineAt(path, { callMs: 1_000, pullMs: 20_000 }).pull('ghcr.io/delo-run/delorun-workspace-s2', `sha256:${'a'.repeat(64)}`)).resolves.toBeUndefined()
+    await expect(engineAt(path, { callMs: 1_000, pullMs: 20_000 }).pull('ghcr.io/twickas/delorun-workspace-s2', `sha256:${'a'.repeat(64)}`)).resolves.toBeUndefined()
   })
 
   it('fails a pull whose progress stream reports an error', async () => {
@@ -53,6 +53,6 @@ describe('the Engine API client', () => {
       response.writeHead(200)
       response.end(`${JSON.stringify({ status: 'Pulling' })}\n${JSON.stringify({ error: 'manifest unknown', errorDetail: { message: 'manifest unknown' } })}\n`)
     })
-    await expect(engineAt(path, { callMs: 1_000, pullMs: 5_000 }).pull('ghcr.io/delo-run/delorun-workspace-s2', `sha256:${'a'.repeat(64)}`)).rejects.toThrow(/manifest unknown/)
+    await expect(engineAt(path, { callMs: 1_000, pullMs: 5_000 }).pull('ghcr.io/twickas/delorun-workspace-s2', `sha256:${'a'.repeat(64)}`)).rejects.toThrow(/manifest unknown/)
   })
 })

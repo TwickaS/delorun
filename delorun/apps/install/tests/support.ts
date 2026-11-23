@@ -263,7 +263,7 @@ export async function fixtureRelease(options: FixtureOptions = {}): Promise<Fixt
 /** An image reference the fixture manifest carries. */
 function image(): NonNullable<ReleaseManifest['images']>['s2'] {
   return {
-    repository: 'ghcr.io/delo-run/s2',
+    repository: 'ghcr.io/twickas/s2',
     index: brandString<OciDigest>(`sha256:${'c'.repeat(64)}`),
     platforms: { 'linux/amd64': brandString<OciDigest>(`sha256:${'d'.repeat(64)}`), 'linux/arm64': brandString<OciDigest>(`sha256:${'e'.repeat(64)}`) },
   }
