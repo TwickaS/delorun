@@ -92,6 +92,18 @@ description: "约定 C22：Delorun 版本对插件作出的承诺：该承诺涵
 
 当安装程序接纳该插件时它以 0 退出，当它拒绝该插件或无法读取其声明时以 1 退出。
 
+With `--json` it prints one JSON object on one line, and no other output, for tools that must not read English text. Its fields, all always present:
+
+| Field | Meaning |
+| --- | --- |
+| `decidedBy` | `delorun` when `engines.delorun` is declared, else `dsh` when `engines.dsh` is, else `peer` when a `@deepseek-ai/dsh*` peer is, else `none`. |
+| `range` | The range that decided, as written; `null` for `none`. |
+| `checkedAgainst` | The version the range was checked against; `null` for `none`. |
+| `verdict` | `admitted` or `refused`. |
+| `readable` | `false` when a declaration is in a form Delorun cannot read. |
+
+The exit code is the same as without `--json`. The record is the return value of `decidePluginVersion` in `@delorun/update`, a pure function of a parsed manifest, a Delorun version and a DSH version.
+
 <a id="the-patch-rule"></a>
 
 ## 补丁规则

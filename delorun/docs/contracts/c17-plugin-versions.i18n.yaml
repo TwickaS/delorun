@@ -3,16 +3,16 @@
 # After editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write delorun/docs/contracts/c17-plugin-versions.md
 /:
-  en: 6b7a14ac621a4fc0
+  en: 63e33132e4309706
   zh: f33256a390ecdf76
 /c17-plugin-version-requirements:
   en: 0d89a7f03dd30fc7
   zh: 9d74283227142c9e
 /c17-plugin-version-requirements/summary:
-  en: 81f6627a81f06759
+  en: 881877a1dc6cc81c
   zh: 57c897fdf86f366b
 /c17-plugin-version-requirements/status:
-  en: 421bd9a43d733997
+  en: cf17c0d2ca95ebda
   zh: f585eb3a5f0a6372
 /c17-plugin-version-requirements/contents:
   en: 6bd708618fe920c9
@@ -21,19 +21,19 @@
   en: 3cb88b124aa3e29d
   zh: 52fbbc232558709a
 /c17-plugin-version-requirements/declaring-requirements:
-  en: ec639ae842310235
-  zh: 785142cd6ba54149
+  en: 5894653c5b653c62
+  zh: 41dde6f038e9a1f3
 /c17-plugin-version-requirements/evaluation:
-  en: 05ac4e7d0b7b6195
+  en: a107055e1c234249
   zh: e94f2925520bb94e
 /c17-plugin-version-requirements/checking-a-plugin-before-it-is-installed:
-  en: 0f4d0df66225aacd
+  en: 920201bb51ddf216
   zh: da0c3c3e75f1d80f
 /c17-plugin-version-requirements/exemptions:
-  en: 704b494e4387b18e
+  en: bf1a371eb1f1ed29
   zh: c5e9583753b5203e
 /c17-plugin-version-requirements/results-and-messages:
-  en: 884fc2059c8ed345
+  en: 634ce4cb80f960d6
   zh: 7ecdaa921e45cdc7
 /c17-plugin-version-requirements/version-output:
   en: 311a429bc776c254
@@ -42,14 +42,14 @@
   en: b6d0bcd4c128c7f2
   zh: e4da4c0cc4286206
 /c17-plugin-version-requirements/compatibility:
-  en: eaf2937523a6d02b
+  en: 95ba2d7264439ac5
   zh: f34801fa6809e1fd
 /c17-plugin-version-requirements/security:
   en: 52543dba9bf0d349
   zh: bd232096a834cc62
 /c17-plugin-version-requirements/security/requirements:
-  en: b74d77212629f075
+  en: 45d261a122d99169
   zh: 663c70f79fe2b477
 /c17-plugin-version-requirements/security/denial-tests:
-  en: 830d2b209cc41772
-  zh: 5a1e7260cf939099
+  en: 9d2bb448b243a04b
+  zh: 06ddb5400fc5cb4b
