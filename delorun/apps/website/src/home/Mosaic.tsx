@@ -79,6 +79,7 @@ export function MosaicHero({ children, next }: { children: ReactNode; next: stri
   const section = useRef<HTMLElement>(null)
   const stage = useRef<HTMLDivElement>(null)
   const handover = useRef<HTMLDivElement>(null)
+  const cover = useRef<HTMLDivElement>(null)
   const armed = useArmed()
 
   // The zoom's full-size pictures load on the first scroll or input, or once the page has idled after loading.
@@ -100,7 +101,8 @@ export function MosaicHero({ children, next }: { children: ReactNode; next: stri
     const root = section.current
     const frame = stage.current
     const picture = handover.current
-    if (root === null || frame === null || picture === null) return
+    const field = cover.current
+    if (root === null || frame === null || picture === null || field === null) return
     const still = matchMedia('(prefers-reduced-motion: reduce)')
     let pending = 0
     let settle = 0
@@ -186,14 +188,18 @@ export function MosaicHero({ children, next }: { children: ReactNode; next: stri
 
       const tint = String(1 - progress(p, 0.08, 0.4))
       wall.querySelectorAll<SVGElement>('[data-tint]').forEach(layer => { layer.style.opacity = tint })
-      frame.style.setProperty('--words', String(1 - progress(p, 0.03, 0.2)))
+      // Each value goes on the elements that read it. A custom property set on the stage would be inherited by every tile
+      // under it, and the browser would recalculate the style of the whole mosaic on every frame of the zoom.
+      const words = String(1 - progress(p, 0.03, 0.2))
+      frame.querySelectorAll<HTMLElement>('[data-words]').forEach(layer => { layer.style.setProperty('--words', words) })
       frame.toggleAttribute('data-zooming', p > 0.02)
       if (p < 0.02) logged = false
       else if (p > 0.12 && !logged) { logged = true; note('zoom → chat') }
-      frame.style.setProperty('--lit', String(progress(p, 0.01, 0.08) * (1 - progress(p, 0.14, 0.3))))
-      frame.style.setProperty('--swap', String(progress(p, 0.12, 0.28)))
-      frame.style.setProperty('--field-in', String(progress(p, 0.7, 0.84)))
-      frame.style.setProperty('--hero-out', String(progress(p, 0.9, 0.99)))
+      tile.style.setProperty('--lit', String(progress(p, 0.01, 0.08) * (1 - progress(p, 0.14, 0.3))))
+      const swap = String(progress(p, 0.12, 0.28))
+      wall.querySelectorAll<HTMLElement>('[data-swap]').forEach(layer => { layer.style.setProperty('--swap', swap) })
+      field.style.setProperty('--field-in', String(progress(p, 0.7, 0.84)))
+      frame.style.opacity = String(1 - progress(p, 0.9, 0.99))
     }
     const schedule = () => { if (pending === 0) pending = requestAnimationFrame(update) }
     const resized = () => { rest = undefined; schedule() }
@@ -214,10 +220,11 @@ export function MosaicHero({ children, next }: { children: ReactNode; next: stri
   return (
     <section ref={section} className={s.reveal} aria-labelledby="home-hero">
       <div ref={stage} className={s.revealStage}>
+        <div className={s.revealTop} data-words="" aria-hidden="true" />
         <div className={s.mosaicFrame}>
           {LAYOUTS.map(each => <MosaicWall key={each.name} name={each.name} layout={each.layout} />)}
         </div>
-        <div className={s.revealField} aria-hidden="true" />
+        <div ref={cover} className={s.revealField} aria-hidden="true" />
         <div ref={handover} className={s.handover} aria-hidden="true">
           {HANDOVER === undefined ? null : (
             <>
@@ -227,8 +234,8 @@ export function MosaicHero({ children, next }: { children: ReactNode; next: stri
             </>
           )}
         </div>
-        <div className={s.revealShade} aria-hidden="true" />
-        <div className={s.revealWords}>{children}</div>
+        <div className={s.revealShade} data-words="" aria-hidden="true" />
+        <div className={s.revealWords} data-words="">{children}</div>
       </div>
     </section>
   )

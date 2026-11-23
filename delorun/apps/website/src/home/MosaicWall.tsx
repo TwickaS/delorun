@@ -341,7 +341,7 @@ export function MosaicWall({ name, layout }: { name: LayoutName; layout: Layout 
       {HANDOVER === undefined ? null : (
         <>
           <img className={s.pinSwap} data-always="" src={armed ? shotSrc(HANDOVER.dark?.id ?? HANDOVER.id, 'full') : undefined} loading="lazy" alt="" aria-hidden="true" draggable={false} style={{ ['--col' as string]: pin.col, ['--row' as string]: pin.row }} />
-          <img className={`${s.pinSwap} ${s.lightOnly}`} src={armed ? shotSrc(HANDOVER.id, 'full') : undefined} loading="lazy" alt="" aria-hidden="true" draggable={false} style={{ ['--col' as string]: pin.col, ['--row' as string]: pin.row }} />
+          <img className={`${s.pinSwap} ${s.lightOnly}`} data-swap="" src={armed ? shotSrc(HANDOVER.id, 'full') : undefined} loading="lazy" alt="" aria-hidden="true" draggable={false} style={{ ['--col' as string]: pin.col, ['--row' as string]: pin.row }} />
         </>
       )}
       <svg className={s.mosaicShade} data-tint="" viewBox={`0 0 ${cols} ${rows}`} preserveAspectRatio="none" aria-hidden="true">
