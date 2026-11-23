@@ -160,28 +160,36 @@ describe('the guide\'s requests', () => {
     }
   })
 
-  // The desktop app's page host is `app`; its preload's home kind decides, and any other value leaves the host name test as it was.
+  // The desktop app's page host is `app`; its preload's home kind decides there, and only there.
   it.each<readonly [string, unknown, boolean]>([
     ['bundled', { homeKind: 'bundled' }, true],
     ['wsl', { homeKind: 'wsl' }, true],
     ['remote', { homeKind: 'remote' }, false],
-  ])('in the desktop app a %s home decides whether the page is at the computer, whatever the host', async (_, desktop, atComputer) => {
+  ])('in the desktop app a %s home decides whether the page is at the computer', async (_, desktop, atComputer) => {
     const fetch = stub(() => json({ options: [{ state: 'ready' }] }))
     vi.stubGlobal('delorunDesktop', desktop)
-    for (const hostname of ['app', 'localhost', 'laptop.example.test']) {
-      vi.stubGlobal('location', { hostname })
-      expect(pageAtComputer()).toBe(atComputer)
-      expect(await readReach()).toBe(atComputer ? 'set-up' : 'remote')
+    vi.stubGlobal('location', { protocol: 'dsh-app:', hostname: 'app' })
+    expect(pageAtComputer()).toBe(atComputer)
+    expect(await readReach()).toBe(atComputer ? 'set-up' : 'remote')
+    expect(fetch).toHaveBeenCalledTimes(atComputer ? 1 : 0)
+  })
+
+  it('ignores a home kind a script planted on a web page', () => {
+    for (const homeKind of ['bundled', 'wsl', 'remote']) {
+      vi.stubGlobal('delorunDesktop', Object.freeze({ homeKind }))
+      vi.stubGlobal('location', { protocol: 'https:', hostname: 'laptop.example.test' })
+      expect(pageAtComputer()).toBe(false)
+      vi.stubGlobal('location', { protocol: 'http:', hostname: 'localhost' })
+      expect(pageAtComputer()).toBe(true)
     }
-    expect(fetch).toHaveBeenCalledTimes(atComputer ? 3 : 0)
   })
 
   it('leaves the host name test alone when the desktop reports nothing usable', () => {
     for (const desktop of [undefined, null, 'wsl', { homeKind: 'elsewhere' }, { homeKind: 7 }]) {
       vi.stubGlobal('delorunDesktop', desktop)
-      vi.stubGlobal('location', { hostname: 'app' })
+      vi.stubGlobal('location', { protocol: 'dsh-app:', hostname: 'app' })
       expect(pageAtComputer()).toBe(false)
-      vi.stubGlobal('location', { hostname: 'localhost' })
+      vi.stubGlobal('location', { protocol: 'http:', hostname: 'localhost' })
       expect(pageAtComputer()).toBe(true)
     }
   })
