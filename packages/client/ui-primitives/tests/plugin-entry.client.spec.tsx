@@ -20,7 +20,7 @@ describe('PluginEntryCard', () => {
     expect(item.textContent).toBe('AlphaOfficialCounts words.1.0.0 · Delo RunDownloadingInstall')
     // Without artwork the frame shows the default plugin artwork, hidden because the title names the plugin.
     expect(item.querySelector('span[aria-hidden="true"] > svg')).not.toBeNull()
-    expect(item.dataset['openable']).toBeUndefined()
+    expect(item.dataset['static']).toBe('')
     expect(within(item).queryByRole('heading')).toBeNull()
   })
 
@@ -33,7 +33,7 @@ describe('PluginEntryCard', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Install' }))
     expect(onInstall).toHaveBeenCalledOnce()
     expect(onOpen).toHaveBeenCalledOnce()
-    expect(screen.getByRole('listitem').dataset['openable']).toBe('')
+    expect(screen.getByRole('listitem').dataset['static']).toBeUndefined()
   })
 
   it('shows the full text under a heading of the given level when the list has no page to open', () => {
