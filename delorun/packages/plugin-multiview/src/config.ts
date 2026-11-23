@@ -11,7 +11,7 @@ import {
   AUTO_COLUMNS_UP_TO, DEFAULT_PRESET, LAYOUT_CHOICE_IDS, MAIN_SHARE, MAIN_SHARE_RANGE, MAIN_SIDES, STACK_STYLES,
   type LayoutChoiceId, type MainSide, type StackStyle,
 } from './layout/presets.ts'
-import type { LayoutShape } from './layout/model.ts'
+import type { LayoutShape, ShapeNode } from './layout/model.ts'
 
 /** The Loader row id of `@delorun/bundle-local`'s row for this plugin, which names the settings namespace the browser half reads. */
 export const MULTIVIEW_ROW_ID = 'delorun-multiview'
@@ -173,19 +173,46 @@ const ShapeLeaf = z.object({
   size: shapeSize,
 })
 // The schemas below check stored arrangements when the configuration loads; their element types are the readonly `LayoutShape`
-// and `WorkspaceLayoutDefaults` above, which schemastery's mutable inferred types do not express, so they stay unannotated.
-const ShapeNodeSchema: z = z.lazy((): z => z.union([
-  ShapeLeaf,
-  z.object({
-    kind: z.const('split').required(),
-    orientation: z.union(['horizontal', 'vertical'] as const).required(),
-    children: z.array(ShapeNodeSchema).min(2).max(MAX_SHAPE_SLOTS).required(),
-    size: shapeSize,
-  }),
-]))
+// and `WorkspaceLayoutDefaults` above, which schemastery's mutable inferred types do not express, so they stay unannotated. They
+// hold what the browser's saved state holds (store/persist.ts): at most MAX_SHAPE_SLOTS - 1 nested splits, each slot once.
+
+/** A shape node of at most `depth` nested splits; built level by level, so a deeper value fails before it is walked. */
+function shapeNodeWithin(depth: number): z {
+  if (depth <= 0) return ShapeLeaf
+  return z.union([
+    ShapeLeaf,
+    z.object({
+      kind: z.const('split').required(),
+      orientation: z.union(['horizontal', 'vertical'] as const).required(),
+      children: z.array(shapeNodeWithin(depth - 1)).min(2).max(MAX_SHAPE_SLOTS).required(),
+      size: shapeSize,
+    }),
+  ])
+}
+
+/** Whether a shape's tree names a slot in more than one place. */
+function repeatsSlot(root: ShapeNode): boolean {
+  const seen = new Set<number>()
+  const walk = (node: ShapeNode): boolean => {
+    if (node.kind === 'split') return node.children.some(walk)
+    for (const slot of node.slots) {
+      if (seen.has(slot)) return true
+      seen.add(slot)
+    }
+    return false
+  }
+  return walk(root)
+}
 
 /** The schema of a saved arrangement ("Yours"): slots in place of chats, so it applies to any chat's agents. */
-export const ShapeSchema: z = z.object({ version: z.const(1).required(), root: ShapeNodeSchema.required() })
+export const ShapeSchema: z = z.transform(
+  z.object({ version: z.const(1).required(), root: shapeNodeWithin(MAX_SHAPE_SLOTS - 1).required() }),
+  (shape) => {
+    if (repeatsSlot(shape.root)) throw new TypeError('a saved arrangement names a slot twice')
+    return shape
+  },
+  true,
+)
 
 const WorkspaceDefaultsSchema: z = z.object({
   defaultLayout: z.union([...LAYOUT_CHOICE_IDS]),

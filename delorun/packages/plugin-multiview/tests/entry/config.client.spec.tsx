@@ -95,4 +95,16 @@ describe('Config', () => {
     for (const bad of [-1, 33, 4.5, '8']) expect(() => plain({ paneGap: bad })).toThrow()
     expect(limitsOf({ ...DEFAULT_MULTIVIEW_SETTINGS, paneGap: 12 }).paneGap).toBe(12)
   })
+
+  it('refuses a saved arrangement that names a slot twice or nests deeper than the browser keeps', () => {
+    const leaf = (slot: number) => ({ kind: 'leaf', slots: [slot], active: slot, size: 50 })
+    const nested = (splits: number, slot = 0): unknown => splits === 0
+      ? { ...leaf(slot), size: 50 }
+      : { kind: 'split', orientation: slot % 2 === 0 ? 'horizontal' : 'vertical', size: 50, children: [leaf(slot), nested(splits - 1, slot + 1)] }
+    expect(() => plain({ yours: { version: 1, root: nested(11) } })).not.toThrow()
+    expect(() => plain({ yours: { version: 1, root: nested(12) } })).toThrow()
+    const twice = { kind: 'split', orientation: 'horizontal', size: 100, children: [leaf(1), leaf(1)] }
+    expect(() => plain({ yours: { version: 1, root: twice } })).toThrow()
+    expect(() => plain({ workspaceLayouts: { 'ws-1': { yours: { version: 1, root: twice } } } })).toThrow()
+  })
 })
