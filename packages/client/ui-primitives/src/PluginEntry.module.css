@@ -119,6 +119,8 @@
 
 .card[data-clamp='false'] .description {
   display: block;
+  overflow: visible;
+  -webkit-line-clamp: unset;
   overflow-wrap: anywhere;
 }
 

@@ -192,7 +192,7 @@ export function AddableCard({ look = 'card', meta, services, state, reason, pack
   }
   if (look === 'entry') {
     return (
-      <PluginEntryCard title={title} heading={4} icon={icon} iconFallback={<Monogram name={title} size={ENTRY_TILE} />} clamp={false} meta={meta} action={action}
+      <PluginEntryCard title={title} heading={3} icon={icon} iconFallback={<Monogram name={title} size={ENTRY_TILE} />} clamp={false} meta={meta} action={action}
         description={description === undefined ? undefined : <Summary text={description} labels={{ more: t('more'), less: t('less') }} inherit />}>
         {children}
         {progress}
