@@ -76,6 +76,13 @@
   line-clamp: 2;
 }
 
+/* In a market entry the description keeps the entry's own type and colour, and only the cut and More come from here. */
+.summary[data-inherit] {
+  font-size: inherit;
+  line-height: inherit;
+  color: inherit;
+}
+
 .summary[data-open] {
   display: block;
   -webkit-line-clamp: unset;

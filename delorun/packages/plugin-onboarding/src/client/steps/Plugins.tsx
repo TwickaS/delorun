@@ -3,7 +3,7 @@
  * named; a package that declares only connections the person lacks is left out. Packages that are not installed are
  * read from the registry only when the person asks.
  */
-import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, PluginEntryList } from '@deepseek-ai/dsh-client-ui-primitives'
 import { BROWSER_BUNDLE } from '@delorun/browser-setup'
 import { packTitle } from '@delorun/plugin-downloads/row'
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
@@ -12,7 +12,6 @@ import { fits, presentConnections } from '../guide.ts'
 import type { OnboardingLocaleKey } from '../locales.ts'
 import type { StepServices } from '../types.ts'
 import { Notice } from '../ui/Notice.tsx'
-import { StateLine } from '../ui/StateLine.tsx'
 import { BundleCard, RowCard } from './BundleCard.tsx'
 import { readableName, useRefresh, useStore, type StepProps } from './shared.ts'
 import css from './steps.module.css'
@@ -100,20 +99,19 @@ export function PluginsStep({ services, guide }: StepProps): ReactNode {
       )}
       <p className={css.lead}>{t('plugins.lead')}</p>
       {count > 0 && <p className={css.status} data-tone="done" aria-live="polite">{t('ready.plugins.count', { count: String(count) })}</p>}
-      <ul className={css.cards}>
+      <PluginEntryList label={t('step.plugins')}>
         {shown.map(({ name, matches }) => {
           const view = views[name]
           const pack = Object.hasOwn(PACK_CARDS, name) ? PACK_CARDS[name] : undefined
           return (
-            <BundleCard key={name} name={name} services={services}
+            <BundleCard key={name} look="entry" name={name} services={services}
               title={pack !== undefined ? packTitle(name) ?? readableName(name) : view?.title !== undefined ? resolveText(view.title) : !slow && (view === undefined || view.state === 'checking') ? undefined : readableName(name)}
-              description={pack !== undefined ? t(pack) : view?.description !== undefined ? resolveText(view.description) : undefined}>
-              {matches.length > 0 && <StateLine tone="success">{t('plugins.fits', { names: matches.map(id => connectionName(id, t, names)).join(', ') })}</StateLine>}
-            </BundleCard>
+              description={pack !== undefined ? t(pack) : view?.description !== undefined ? resolveText(view.description) : undefined}
+              meta={matches.length > 0 ? t('plugins.fits', { names: matches.map(id => connectionName(id, t, names)).join(', ') }) : undefined} />
           )
         })}
         {optionalRows.map(id => <RowCard key={id} id={id} services={services} />)}
-      </ul>
+      </PluginEntryList>
       <div aria-live="polite">
         {recommendations?.status === 'loading' && <p className={css.status}>{t('plugins.reading')}</p>}
         {shown.length === 0 && optionalRows.length === 0 && <p className={css.status}>{t('plugins.none')}</p>}
