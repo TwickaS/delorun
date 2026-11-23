@@ -54,7 +54,7 @@ afterEach(async () => {
 
 describe('Settings → Devices writing the pairing section', () => {
   it('applies a write from the computer to the running home without a restart', async () => {
-    expect(ctx.homeAuth.pairing()).toMatchObject({ mayAskWithoutWindow: 'own-user', showRequest: 'notice', windowMinutes: 5 })
+    expect(ctx.homeAuth.pairing()).toMatchObject({ mayAskWithoutWindow: 'own-user', showRequest: 'dialog', windowMinutes: 5 })
     const service = ctx.homeAuth
     await ctx.settings.mutate('delorun-home-auth', [{ op: 'set', path: ['pairing', 'mayAskWithoutWindow'], value: 'tailnet' }])
     await ctx.settings.mutate('delorun-home-auth', [{ op: 'set', path: ['pairing', 'windowMinutes'], value: 10 }])

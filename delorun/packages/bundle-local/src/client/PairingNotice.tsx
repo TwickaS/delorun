@@ -1,21 +1,24 @@
 /**
- * The notice and the code box for a device that asks to connect without an approval window (contract C5, "Pop-up
- * pairing"), in `shell.overlay`. At the home's own computer a request that arrived outside a window shows "A device asks
- * to connect" with Enter code and Decline; Enter code opens a box with one field for the 8 digits the device shows,
- * which submits itself at the eighth digit. The notice never takes keyboard focus. With `showRequest: dialog` the box opens
- * by itself, but only while no field is being typed in; otherwise the notice shows and the box opens at the next read.
- * With `showRequest: none` nothing shows here and the request is listed in Settings → Devices. A remote studio never
- * receives requests, so it shows nothing.
+ * The pop-up and the notice for a device that asks to pair without an approval window (contract C5, "Pop-up pairing"),
+ * in `shell.overlay`. At the home's own computer a request opens a dialog titled "A device wants to pair": the device's
+ * details and how long the request has left, one field for the 8 digits the device shows, and a footer with "Not you
+ * making this request?" (which declines it), "Don't show this pop-up again" and Submit. Several waiting requests show one
+ * at a time, oldest first, with "1 of 2". Close, Escape and the dimmed page leave every request waiting; they stay listed in
+ * Settings → Devices.
+ *
+ * The pop-up never takes focus from a field being typed in: while one has focus the quiet notice shows instead, with Enter
+ * code and Decline, and the pop-up opens once the person moves to Enter code or out of the field. With `showRequest:
+ * notice` only the notice shows; with `none` nothing shows here. A remote studio never receives requests, so it shows
+ * nothing.
  */
 import { useEffect, useRef, useState } from 'react'
-import type { ReactNode } from 'react'
-import { Button, IconWarningOutlineRegular, Modal, Toast } from '@deepseek-ai/dsh-client-ui-primitives'
+import type { ClipboardEvent, FormEvent, ReactNode } from 'react'
+import { Button, Checkbox, IconCloseOutlineRegular, IconWarningOutlineRegular, Modal, Toast } from '@deepseek-ai/dsh-client-ui-primitives'
 import { CodeCells } from '@delorun/brand'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { PAIRING_WRONG_CODES } from '@delorun/home-auth/wire'
 import type { PendingDevice } from './devices-api.ts'
 import type { PairingSource } from './pairing-source.ts'
-import { codeDigits } from './pairing-source.ts'
 import { failureSentence } from './host-api.ts'
 import css from './PairingNotice.module.css'
 
@@ -28,8 +31,14 @@ const CODE_LENGTH = 8
 /** The error code of a wrong match code. */
 const CODE_MISMATCH = 'APPROVAL_CODE_MISMATCH'
 
-/** What the plugin supplies the entry: the store and its actions. */
-export type PairingNoticeInjected = PairingSource
+/** How often the countdown redraws. */
+const TICK_MS = 1000
+
+/** What the plugin supplies the entry: the store, its actions, and the switch behind "Don't show this pop-up again". */
+export interface PairingNoticeInjected extends PairingSource {
+  /** Write `pairing.showRequest: notice`, so requests show as the quiet notice from now on. @returns whether it was saved. */
+  readonly showAsNotice: () => Promise<boolean>
+}
 
 /** Props of the `shell.overlay` entry. */
 export type PairingNoticeProps = PropsLocale<'delorunDevices'> & InjectFace<PairingNoticeInjected>
@@ -58,17 +67,45 @@ export function userOf(t: Translate, request: PendingDevice): string {
 }
 
 /**
- * Render the notice and the code box.
- * @param props - the store, its actions and the copy.
- * @returns the notice, the box, the outcome of the last answer, or nothing.
+ * The digits in a pasted or typed code, without the spaces, hyphens or other marks between its groups.
+ * @param text - what was pasted or typed.
+ * @returns at most the code's 8 digits.
  */
-export function PairingNotice({ usePairing, start, openCode, closeCode, quiet, decline, approve, t }: PairingNoticeProps): ReactNode {
+export function pastedDigits(text: string): string {
+  return text.replace(/\D/gu, '').slice(0, CODE_LENGTH)
+}
+
+/**
+ * A time left as minutes and seconds.
+ * @param ms - milliseconds left; none below zero.
+ * @returns such as `4:05`.
+ */
+export function timeLeft(ms: number): string {
+  const seconds = Math.ceil(Math.max(0, ms) / 1000)
+  return `${String(Math.floor(seconds / 60))}:${String(seconds % 60).padStart(2, '0')}`
+}
+
+/**
+ * Render the pop-up, the notice and the outcome of the last answer.
+ * @param props - the store, its actions and the copy.
+ * @returns the pop-up, the notice, the outcome, or nothing.
+ */
+export function PairingNotice({ usePairing, start, openCode, closeCode, quiet, decline, approve, showAsNotice, t }: PairingNoticeProps): ReactNode {
   const pairing = usePairing(current => current)
   const [done, setDone] = useState<{ readonly seq: number; readonly text: string; readonly failed: boolean } | undefined>()
+  const [hideFuture, setHideFuture] = useState(false)
+  /** Requests the pop-up opened for by itself, or that the person closed; it does not open for them again. */
   const autoOpened = useRef(new Set<string>())
+  /** Whether the person asked for no more pop-ups here; holds until the home's choice reads `notice`. */
+  const hidden = useRef(false)
+  /** The request this studio is answering or closing, whose leaving the list needs no sentence. */
+  const settling = useRef<string | undefined>(undefined)
+  const shown = useRef<PendingDevice | undefined>(undefined)
   useEffect(() => start(), [start])
 
-  const mode = pairing.view?.showRequest
+  const chosen = pairing.view?.showRequest
+  if (chosen !== 'dialog') hidden.current = false
+  const mode = hidden.current ? 'notice' : chosen
   const waiting = pairing.place === 'computer' && mode !== 'none' ? pairing.requests : []
   const next = waiting.find(request => !autoOpened.current.has(request.requestId))
   useEffect(() => {
@@ -79,34 +116,67 @@ export function PairingNotice({ usePairing, start, openCode, closeCode, quiet, d
 
   const report = (text: string, failed: boolean): void => { setDone(current => ({ seq: (current?.seq ?? 0) + 1, text, failed })) }
   const open = waiting.find(request => request.requestId === pairing.open)
-  const notice = waiting.find(request => !pairing.quieted.includes(request.requestId))
-  const declineRequest = async (request: PendingDevice): Promise<void> => {
+  // A request that leaves the list while its pop-up shows, without an answer from here, expired or was answered elsewhere.
+  useEffect(() => {
+    const before = shown.current
+    shown.current = open
+    if (before === undefined || open !== undefined || before.requestId === settling.current) return
+    report(t(Date.now() >= before.expiresAt ? 'pairing.box.expiredToast' : 'pairing.box.gone', { label: before.label }), true)
+  }, [open, t])
+  const notice = open === undefined ? waiting.find(request => !pairing.quieted.includes(request.requestId)) : undefined
+  const failed = (failure: Parameters<typeof failureSentence>[0]): string =>
+    failureSentence(failure, { refused: (_code, message) => message, unreachable: t('failed.unreachable'), unreadable: t('failed.unreadable') })
+  /** Close the pop-up, applying "Don't show this pop-up again" when it is ticked. */
+  const closePopUp = (): void => {
+    if (hideFuture) {
+      hidden.current = true
+      setHideFuture(false)
+      void showAsNotice().then((saved) => { if (!saved) report(t('pairing.failed'), true) })
+    }
     closeCode()
+  }
+  /** Close, Escape or the dimmed page: every request stays waiting, quietly, in Settings → Devices. */
+  const dismiss = (): void => {
+    settling.current = pairing.open
+    for (const request of waiting) {
+      autoOpened.current.add(request.requestId)
+      quiet(request.requestId)
+    }
+    closePopUp()
+  }
+  const declineRequest = async (request: PendingDevice): Promise<void> => {
+    settling.current = request.requestId
+    if (open !== undefined) closePopUp()
     const outcome = await decline(request.requestId)
     if (outcome.kind === 'done') report(t('pairing.declined', { label: request.label }), false)
-    else report(failureSentence(outcome.failure, { refused: (_code, message) => message, unreachable: t('failed.unreachable'), unreadable: t('failed.unreadable') }), true)
+    else report(failed(outcome.failure), true)
   }
   const outcomeToast = done === undefined ? null
     : done.failed
       ? <Toast key={done.seq} text={done.text} icon={<IconWarningOutlineRegular />} onDone={() => { setDone(undefined) }} />
       : <Toast key={done.seq} text={done.text} tone="success" onDone={() => { setDone(undefined) }} />
   return <>
-    {open === undefined ? null : <CodeBox key={open.requestId} t={t} request={open}
-      onClose={closeCode} onDecline={() => declineRequest(open)}
+    {open === undefined ? null : <PairingDialog key={open.requestId} t={t} request={open}
+      place={waiting.indexOf(open) + 1} total={waiting.length}
+      hide={chosen === 'dialog' ? { checked: hideFuture, onChange: setHideFuture } : undefined}
+      onClose={dismiss} onDecline={() => declineRequest(open)}
       onApprove={async (typed) => {
+        settling.current = open.requestId
         const outcome = await approve(open.requestId, typed)
         if (outcome.kind === 'done') {
-          closeCode()
+          closePopUp()
           report(t('pairing.connected', { label: open.label }), false)
           return undefined
         }
-        const sentence = failureSentence(outcome.failure, { refused: (_code, message) => message, unreachable: t('failed.unreachable'), unreadable: t('failed.unreadable') })
-        if (!outcome.gone) return sentence
-        closeCode()
-        report(outcome.failure.kind === 'refused' && outcome.failure.code === CODE_MISMATCH ? t('pairing.box.cancelled') : sentence, true)
+        if (!outcome.gone) {
+          settling.current = undefined
+          return failed(outcome.failure)
+        }
+        closePopUp()
+        report(outcome.failure.kind === 'refused' && outcome.failure.code === CODE_MISMATCH ? t('pairing.box.cancelled') : failed(outcome.failure), true)
         return undefined
       }} />}
-    {open !== undefined || notice === undefined ? null
+    {notice === undefined ? null
       : <Toast key={notice.requestId} text={t('pairing.notice', { user: userOf(t, notice), label: notice.label, platform: notice.platform })}
         icon={<IconWarningOutlineRegular />} holdMs={NOTICE_HOLD_MS}
         actions={[
@@ -119,44 +189,122 @@ export function PairingNotice({ usePairing, start, openCode, closeCode, quiet, d
 }
 
 /**
- * The box that takes the 8 digits one device shows.
- * @param props - the copy, the request, and the close, decline and approve actions; approve answers a sentence when the
- *   code was refused and the request still waits.
- * @returns the dialog.
+ * The time now, redrawn every second while mounted.
+ * @returns milliseconds since the epoch.
  */
-export function CodeBox({ t, request, onClose, onDecline, onApprove }: {
+function useNow(): number {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const untilNext = (): number => TICK_MS - (Date.now() % TICK_MS)
+    let timer: ReturnType<typeof setTimeout>
+    const tick = (): void => {
+      setNow(Date.now())
+      timer = setTimeout(tick, untilNext())
+    }
+    timer = setTimeout(tick, untilNext())
+    return () => { clearTimeout(timer) }
+  }, [])
+  return now
+}
+
+/** What {@link PairingDialog} is given. */
+export interface PairingDialogProps {
   readonly t: Translate
   readonly request: PendingDevice
+  /** The request's place among the waiting ones, 1-based. */
+  readonly place: number
+  /** How many requests wait; "1 of 2" shows when more than one does. */
+  readonly total: number
+  /** "Don't show this pop-up again", offered while the home shows requests as the pop-up. */
+  readonly hide: { readonly checked: boolean; readonly onChange: (checked: boolean) => void } | undefined
+  /** Close, Escape or the dimmed page; the request stays waiting. */
   readonly onClose: () => void
+  /** "Not you making this request?", which declines it. */
   readonly onDecline: () => Promise<void>
+  /** Submit the code; answers a sentence when the code was refused and the request still waits. */
   readonly onApprove: (typed: string) => Promise<string | undefined>
-}): ReactNode {
+}
+
+/**
+ * The pop-up for one request: its details, the code field, and the footer.
+ * @param props - see {@link PairingDialogProps}.
+ * @returns the dialog.
+ */
+export function PairingDialog({ t, request, place, total, hide, onClose, onDecline, onApprove }: PairingDialogProps): ReactNode {
   const [typed, setTyped] = useState('')
   const [busy, setBusy] = useState(false)
   const [failure, setFailure] = useState<string | undefined>()
-  const submit = async (digits: string): Promise<void> => {
+  const now = useNow()
+  const left = request.expiresAt - now
+  const expired = left <= 0
+  const ready = typed.length === CODE_LENGTH && !busy && !expired
+  const submit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
+    event.preventDefault()
+    if (!ready) return
     setBusy(true)
     setFailure(undefined)
-    const sentence = await onApprove(digits)
+    const sentence = await onApprove(typed)
     setBusy(false)
     if (sentence !== undefined) { setFailure(sentence); setTyped('') }
   }
-  const change = (value: string): void => {
-    const digits = codeDigits(value).replace(/\D/g, '').slice(0, CODE_LENGTH)
+  const paste = (event: ClipboardEvent<HTMLDivElement>): void => {
+    // The field holds 8 characters, so a browser would cut a grouped code such as `1234 5678` short before reading it.
+    const digits = pastedDigits(event.clipboardData.getData('text'))
+    if (digits === '') return
+    event.preventDefault()
     setTyped(digits)
-    if (digits.length === CODE_LENGTH && !busy) void submit(digits)
   }
-  return <Modal open onClose={onClose} title={t('pairing.box.title')} closeLabel={t('pairing.box.close')}
-    footer={<Button variant="outline" disabled={busy} onClick={() => { void onDecline() }}>{t('pairing.box.decline')}</Button>}>
-    <p className={css.who}>{t('pairing.box.user', { user: userOf(t, request) })}</p>
-    <p className={css.device}>{t('pairing.box.device', { label: request.label, platform: request.platform })}</p>
-    <p className={css.explain}>{t('pairing.box.explain', { label: request.label })}</p>
-    <CodeCells label={t('pairing.box.code')} length={CODE_LENGTH} value={typed} onChange={change} autoComplete="one-time-code" disabled={busy}
-      inputProps={{ 'data-modal-autofocus': true }} />
-    {busy ? <p className={css.line} role="status">{t('pairing.box.checking')}</p> : null}
-    {request.wrongCodes > 0
-      ? <p className={css.failed} role="alert">{t('pairing.box.wrong', { count: String(request.wrongCodes), max: String(PAIRING_WRONG_CODES) })}</p>
-      : null}
-    {failure === undefined || request.wrongCodes > 0 ? null : <p className={css.failed} role="alert">{failure}</p>}
+  const triesLeft = PAIRING_WRONG_CODES - request.wrongCodes
+  const wrong = request.wrongCodes === 0 ? undefined
+    : triesLeft === 1 ? t('pairing.box.wrongLast') : t('pairing.box.wrong', { left: String(triesLeft) })
+  const title = t('pairing.box.title')
+  return <Modal open headless title={title} onClose={onClose} className={css.dialog as string}>
+    <form className={css.frame} onSubmit={(event) => { void submit(event) }} noValidate>
+      <header className={css.header}>
+        <h2 className={css.title}>{title}</h2>
+        {total > 1 ? <span className={css.count} data-pairing-count>{t('pairing.box.count', { n: String(place), total: String(total) })}</span> : null}
+        <button type="button" className={css.close} aria-label={t('pairing.box.close')} onClick={onClose}>
+          <IconCloseOutlineRegular size={14} />
+        </button>
+      </header>
+      <div className={css.body}>
+        <section className={css.device} aria-label={t('pairing.box.details')}>
+          <p className={css.label}>{request.label}</p>
+          {request.platform === '' ? null : <p className={css.platform}>{request.platform}</p>}
+          <dl className={css.facts}>
+            <div data-fact="user">
+              <dt>{t('pairing.box.user')}</dt>
+              <dd>
+                {request.identity === null ? t('pairing.box.noUser') : request.identity.name}
+                {request.identity === null || request.identity.login === request.identity.name ? null : <span className={css.login}>{request.identity.login}</span>}
+              </dd>
+            </div>
+            <div data-fact="address"><dt>{t('pairing.box.address')}</dt><dd>{request.address}</dd></div>
+            <div data-fact="asked">
+              <dt>{t('pairing.box.asked')}</dt>
+              <dd>{new Intl.DateTimeFormat(t('time.locale'), { timeStyle: 'short' }).format(new Date(request.createdAt))}</dd>
+            </div>
+            <div data-fact="left"><dt>{t('pairing.box.left')}</dt><dd className={css.left} role="timer">{timeLeft(left)}</dd></div>
+          </dl>
+        </section>
+        <p className={css.explain}>{t('pairing.box.explain', { label: request.label })}</p>
+        <div onPasteCapture={paste}>
+          <CodeCells label={t('pairing.box.code')} showLabel length={CODE_LENGTH} value={typed} onChange={setTyped} autoComplete="one-time-code"
+            disabled={busy || expired} error={wrong !== undefined && typed === ''} shakeKey={request.wrongCodes}
+            inputProps={{ 'data-modal-autofocus': true }} />
+        </div>
+        {busy ? <p className={css.line} role="status">{t('pairing.box.checking')}</p> : null}
+        {expired ? <p className={css.failed} role="alert">{t('pairing.box.expired')}</p>
+          : wrong !== undefined ? <p className={css.failed} role="alert">{wrong}</p>
+            : failure === undefined ? null : <p className={css.failed} role="alert">{failure}</p>}
+      </div>
+      <footer className={css.footer}>
+        <div className={css.aside}>
+          <button type="button" className={css.notYou} disabled={busy} onClick={() => { void onDecline() }}>{t('pairing.box.notYou')}</button>
+          {hide === undefined ? null : <Checkbox className={css.hide} checked={hide.checked} onChange={hide.onChange} label={t('pairing.box.hide')} />}
+        </div>
+        <Button type="submit" variant="primary" className={css.submit} disabled={!ready}>{t('pairing.box.submit')}</Button>
+      </footer>
+    </form>
   </Modal>
 }

@@ -9,8 +9,8 @@ import type { ReactNode } from 'react'
 import { Button, Input } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
-import { ChoiceGroup, SettingRow, SettingsCard } from '@delorun/settings-controls'
-import { PAIRING_BOUNDS, REQUEST_DISPLAYS, WINDOWLESS_MODES, type PairingConfig, type PairingView } from '@delorun/home-auth/wire'
+import { ChoiceGroup, RadioList, SettingRow, SettingsCard } from '@delorun/settings-controls'
+import { PAIRING_BOUNDS, WINDOWLESS_MODES, type PairingConfig, type PairingView, type RequestDisplay } from '@delorun/home-auth/wire'
 import type { ApprovalRequestId, PendingDevice } from './devices-api.ts'
 import type { OptInMutation } from './opt-in.ts'
 import type { PairingRowSettings } from './pairing-writer.ts'
@@ -26,6 +26,9 @@ const NUMBER_CHOICES = [
   { field: 'requestExpiryMinutes', copy: 'pairing.expiry' },
   { field: 'pendingPerIdentity', copy: 'pairing.per' },
 ] as const
+
+/** The ways a request can show, in screen order: the default first. */
+const DISPLAY_CHOICES: readonly RequestDisplay[] = ['dialog', 'notice', 'none']
 
 /** What the part is given. */
 export interface PairingSettingsProps {
@@ -62,8 +65,8 @@ export function PairingSettings({ t, time, state, form, mutation, set, openCode,
           onChange={(next) => { void set('mayAskWithoutWindow', next) }} />
       </SettingRow>
       <SettingRow title={t('pairing.show.title')} description={t('pairing.show.description')} stacked>
-        <ChoiceGroup label={t('pairing.show.title')} value={shown.showRequest} disabled={disabled} fill
-          options={REQUEST_DISPLAYS.map(value => ({ value, label: t(`pairing.show.${value}`) }))}
+        <RadioList label={t('pairing.show.title')} value={shown.showRequest} disabled={disabled}
+          rows={DISPLAY_CHOICES.map(value => ({ value, label: t(`pairing.show.${value}`) }))}
           onChange={(next) => { void set('showRequest', next) }} />
       </SettingRow>
       {NUMBER_CHOICES.map(({ field, copy }) => <SettingRow key={field} title={t(`${copy}.title`)}
