@@ -1,8 +1,8 @@
 /**
  * The undo notice at the sidebar's foot, after T3 Code's `SidebarThreadUndoNotice`
  * (`apps/web/src/components/sidebar/SidebarThreadUndoNotice.tsx`, MIT,
- * © 2026 T3 Tools Inc.): what the last change was and Undo, in the free space
- * of the foot's row, so it never moves or covers the list. It is the studio's
+ * © 2026 T3 Tools Inc.): what the last change was and Undo, on a line of its
+ * own above the foot's icons, so it never covers the list. It is the studio's
  * alert card (`Alert`, banner row, success), a status that takes no focus.
  */
 import type { InjectFace, OwnerOf, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'

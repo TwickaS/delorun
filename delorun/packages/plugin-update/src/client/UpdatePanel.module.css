@@ -224,8 +224,17 @@
 }
 
 /* On a phone the sheet is the whole screen, with Back in its footer. */
-/* An ongoing state is `@delorun/brand`'s Alert; the sidebar's foot is outside the chat list, so a tall one scrolls inside itself. */
+/*
+ * An ongoing state is `@delorun/brand`'s Alert, on a line of its own above the foot's icons: the one-row foot wraps, and
+ * a foot that lays its icons in a grid gives it every column. The foot is outside the chat list, so a tall one
+ * scrolls inside itself.
+ */
 .pinned {
+  grid-column: 1 / -1;
+  flex: 1 1 100%;
+  order: -1;
+  align-self: stretch;
+  width: 100%;
   max-height: 25vh;
   overflow-y: auto;
 }
