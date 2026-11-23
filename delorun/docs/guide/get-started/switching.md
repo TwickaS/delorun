@@ -36,7 +36,7 @@ Different, in the studio and around it:
 - **Where Delorun runs.** `delorun` runs Delorun in the background and opens the studio; `delorun stop` stops it ([Daily use](../everyday-use/daily-use.md)).
 - **Your home.** Delorun keeps its own home, `~/.delorun`, and never writes `~/.dsh` ([Your Delorun home](../customising/home.md)).
 - **What commands can reach.** Commands the model runs cannot write, or read, Delorun's home, and every new workspace starts on Workspace Write ([What Delorun protects](../safety-and-updates/safety.md)).
-- **Consents.** With setup's default Ask me first, Delorun asks before the model writes instruction files or schedules work, holds a new MCP server that runs a command until you allow it, and asks once before a workspace gets full access ([Consents](../safety-and-updates/safety.md#consents)).
+- **Consents.** With setup's default Ask me first, Delorun asks before the model writes instruction files or schedules work, holds an MCP server that a plugin or your editor brings, and runs a command, until you allow it, and asks once before a workspace gets full access ([Consents](../safety-and-updates/safety.md#consents)).
 - **`web_fetch`.** It does not fetch addresses on your own computer or network ([The web_fetch guard](../safety-and-updates/safety.md#the-web_fetch-guard)).
 - **Data sharing.** DeepSeek's session-log upload is off until you turn it on in Settings → Safety → Privacy.
 - **Updates.** Delorun checks for a newer release once a day, shows what an update would change before you confirm, and can go back ([Updates](../safety-and-updates/updates.md)).

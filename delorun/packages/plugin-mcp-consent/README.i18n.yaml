@@ -9,20 +9,23 @@
   en: a72a2b4804ac4a19
   zh: 3b0edf35918c42cb
 /delorun-plugin-mcp-consent/summary:
-  en: 017dabefcc762a1b
-  zh: 157d3d5f8207f8b0
+  en: aae14406364fe758
+  zh: cae3bc20e4f54334
 /delorun-plugin-mcp-consent/contents:
-  en: dbcc66fdedfde92b
-  zh: 32d619b3c1308fa9
+  en: 24aaf22e91419a73
+  zh: c8050d9aaa1d8c59
 /delorun-plugin-mcp-consent/the-service:
   en: 8f5e5bbf5d64e1bf
   zh: 2bb430e3eceade7f
 /delorun-plugin-mcp-consent/the-acceptance-store:
-  en: f92be31929e242ac
-  zh: cba3eefe2e9db532
+  en: ef5a703f09e78d7a
+  zh: 84e929478f9c8f11
 /delorun-plugin-mcp-consent/reviews:
-  en: fec7f0858f48133b
-  zh: ab0b14a07c88da92
+  en: 552d5272c13f8c0c
+  zh: ebef9c8eba191ceb
+/delorun-plugin-mcp-consent/reviews/origins-and-the-ask-mode:
+  en: af3ce4cb691a01fb
+  zh: b4d2e7d58ea81a5c
 /delorun-plugin-mcp-consent/reviews/pinned-files:
   en: 7507da958850ecf3
   zh: 5f5b6b87f4b65c76
@@ -33,11 +36,11 @@
   en: 433260a6ca4b1d49
   zh: f4ac3a7cb8f82aad
 /delorun-plugin-mcp-consent/pending-reviews:
-  en: ca13cb6901ba242f
-  zh: 429d9a97b33e2591
+  en: 9a4e70de7c6778fa
+  zh: cbdd131fe743d0f1
 /delorun-plugin-mcp-consent/the-mcp-add-consent-switch:
-  en: 3a5dc029dbc4ac15
-  zh: 0c2d0e4c2dc26b4b
+  en: 6b18c80e16889605
+  zh: cf23323799a9ab4a
 /delorun-plugin-mcp-consent/development:
   en: e88f901717c18edc
   zh: b4fbd14ba859b781

@@ -41,7 +41,7 @@ The picture shows who stands between your phone and your computer.
 Delorun shows you what is about to happen, and keeps a way back.
 
 - **Releases are checked before they run.** `npx delorun` verifies the download against the signed release and a public release log ([What the launcher verifies](get-started/install.md#what-the-launcher-verifies)).
-- **Risky steps ask first.** By default Delorun asks before a workspace gets full access, before the model writes instruction files or schedules work, and before a new MCP server runs a command ([Consents](safety-and-updates/safety.md#consents)).
+- **Risky steps ask first.** By default Delorun asks before a workspace gets full access, before the model writes instruction files or schedules work, and before an MCP server from a plugin or your editor runs a command ([Consents](safety-and-updates/safety.md#consents)).
 - **Commands run in a sandbox** that confines file writes and keeps Delorun's own folder and secrets out of reach ([The sandbox](safety-and-updates/safety.md#the-sandbox)).
 - **Changes to Delorun are listed and can be undone.** Turn [changes protection](../reference/glossary.md#changes-protection) on and each one waits for your review ([The protection setting](customising/changing-your-harness.md#the-protection-setting)).
 - **A phone confirms sensitive actions with a passkey.** The passkey stays on the phone and answers only to the phone's own lock, such as Face ID or a fingerprint, so each sensitive action is confirmed by you, on that phone, at that moment. A phone without one uses a PIN ([Confirm with Face ID](everyday-use/reach.md#confirm-with-face-id)).

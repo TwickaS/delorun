@@ -40,7 +40,7 @@ description: "从 DeepSeek Harness 切换到 Delorun：哪些保持不变、哪�
 - **Delorun 在哪里运行。**`delorun` 在后台运行 Delorun 并打开 studio；`delorun stop` 会停止它（见[日常使用](../everyday-use/daily-use.zh.md)）。
 - **你的 home。**Delorun 保有自己的 home `~/.delorun`，从不写入 `~/.dsh`（见[你的 Delorun home](../customising/home.zh.md)）。
 - **命令能触及什么。**模型运行的命令不能写入也不能读取 Delorun 的 home，每个新工作区都以 Workspace Write 开始（见 [Delorun 保护什么](../safety-and-updates/safety.zh.md)）。
-- **同意。**在 setup 默认的 Ask me first 下，Delorun 会在模型写入指令文件或安排工作之前询问，把运行命令的新 MCP 服务器扣住直到你允许，并在工作区获得完全访问之前询问一次（见[同意](../safety-and-updates/safety.zh.md#consents)）。
+- **同意。**在 setup 默认的 Ask me first 下，Delorun 会在模型写入指令文件或安排工作之前询问，holds an MCP server that a plugin or your editor brings, and runs a command, until you allow it，并在工作区获得完全访问之前询问一次（见[同意](../safety-and-updates/safety.zh.md#consents)）。
 - **`web_fetch`。**它不会获取你自己电脑或网络上的地址（见 [web_fetch 防护](../safety-and-updates/safety.zh.md#the-web_fetch-guard)）。
 - **数据共享。**DeepSeek 的会话日志上传在你于“设置”→“安全”→“隐私”中开启之前是关闭的。
 - **更新。**Delorun 每天检查一次是否有更新的发布版本，在你确认之前显示更新会改变什么，并且可以回退（见[更新](../safety-and-updates/updates.zh.md)）。
