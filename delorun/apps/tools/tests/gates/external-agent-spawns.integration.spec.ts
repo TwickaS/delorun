@@ -111,6 +111,26 @@ describe('gates:external-agent-spawns', () => {
     ])
   })
 
+  it('refuses a program behind the options of env, which take a value or stand alone', () => {
+    expect(violations('delorun/packages/home/src/a.ts', [
+      'exec(\'env -i claude\')',
+      'exec(\'env -u FOO claude\')',
+      'exec(\'env --unset=FOO codex exec\')',
+      'exec(\'env -C /tmp claude\')',
+      'exec(\'env -- claude\')',
+      'exec(\'nohup env -i FOO=1 claude\')',
+      'exec(\'env -i make\')',
+      'exec(\'env -u FOO git status\')',
+    ])).toEqual([
+      '1:6 program claude',
+      '2:6 program claude',
+      '3:6 program codex',
+      '4:6 program claude',
+      '5:6 program claude',
+      '6:6 program claude',
+    ])
+  })
+
   it('allows shell command lines whose command words are not the programs', () => {
     expect(violations('delorun/packages/home/src/a.ts', [
       'spawn(\'git log --grep claude\', { shell: true })',

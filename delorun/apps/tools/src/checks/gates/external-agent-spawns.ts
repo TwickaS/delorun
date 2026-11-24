@@ -17,14 +17,15 @@
  *   runs or passes on: the first argument of `spawn`, `spawnSync`, `execFile`, `execFileSync` or `fork`, any element
  *   of an argv array given to those calls or as an `argv` property (so `env claude` is caught), and the command word
  *   of every part of a shell command line, parts being split on `&&`, `||`, `;`, `|`, `&` and newlines, with leading
- *   `exec`, `env`, `nohup` and `NAME=value` words skipped in each part. A shell command line is the command of `exec`
- *   or `execSync`, the element after a `-c` option (as in `sh -c` or `bash -lc`), and the first argument of
- *   `spawn`, `spawnSync`, `execFile`, `execFileSync` or `fork` when it is a literal containing a space or when an
- *   options literal sets `shell` to anything but `false`.
+ *   `exec`, `env`, `nohup` and `NAME=value` words skipped in each part, and `env`'s own options skipped with the value
+ *   of `-u`, `--unset`, `-C` and `--chdir` (so `env -i claude` and `env -u FOO claude` are caught). A shell command
+ *   line is the command of `exec` or `execSync`, the element after a `-c` option (as in `sh -c` or `bash -lc`), and
+ *   the first argument of `spawn`, `spawnSync`, `execFile`, `execFileSync` or `fork` when it is a literal containing
+ *   a space or when an options literal sets `shell` to anything but `false`.
  *
  * Out of scope: an argv or command line held in a variable or built from non-literal parts (the gate reads literals
  * only), command substitution and subshell bodies, and wrappers other than the four skipped words (`sudo`, `time`,
- * `xargs`, `env` with options).
+ * `xargs`).
  *
  * A name built at run time escapes the `sdk`, `codex` and `provider` rules; the `locate` rule covers how a Delorun
  * module finds the pinned programs. Run from anywhere inside the repository:
@@ -69,6 +70,8 @@ const SHELL_SPAWNERS = new Set(['exec', 'execSync'])
 const SHELL_COMMAND_OPTION = /^-[a-z]*c$/u
 const COMMAND_SEPARATOR = /&&|\|\||[;|&\n]/u
 const COMMAND_PREFIX = /^(?:exec|env|nohup|[A-Za-z_][\w]*=.*)$/u
+/** `env` options whose value is the next word, so the word after them is not the command. */
+const ENV_VALUE_OPTIONS = new Set(['-u', '--unset', '-C', '--chdir'])
 const PROGRAM_NAME = /(?:^|[\\/])(?:claude|codex)(?:\.exe)?$/iu
 const EQUALITY = new Set([ts.SyntaxKind.EqualsEqualsEqualsToken, ts.SyntaxKind.ExclamationEqualsEqualsToken, ts.SyntaxKind.EqualsEqualsToken, ts.SyntaxKind.ExclamationEqualsToken])
 
@@ -145,14 +148,55 @@ function programText(text: string | undefined): string | undefined {
 }
 
 /**
+ * The command word of one part of a shell command line.
+ * @param words - the part's words.
+ * @returns the first word that is not `exec`, `env`, `nohup`, `NAME=value`, or an `env` option or its value, without
+ * surrounding brackets and quotes.
+ */
+function commandWord(words: readonly string[]): string | undefined {
+  let index = 0
+  let inEnv = false
+  while (index < words.length) {
+    const word = words[index]!
+    if (word === 'env') {
+      inEnv = true
+      index += 1
+      continue
+    }
+    if (inEnv) {
+      if (word === '--') {
+        inEnv = false
+        index += 1
+        continue
+      }
+      if (ENV_VALUE_OPTIONS.has(word)) {
+        index += 2
+        continue
+      }
+      if (word.startsWith('-') && word.length > 1) {
+        index += 1
+        continue
+      }
+      inEnv = false
+    }
+    if (COMMAND_PREFIX.test(word)) {
+      index += 1
+      continue
+    }
+    return word.replace(/^[({"']+|["')}]+$/gu, '')
+  }
+  return undefined
+}
+
+/**
  * The command word of every part of a shell command line.
  * @param line - the command line.
- * @returns each part's first word that is not `exec`, `env`, `nohup` or `NAME=value`, without surrounding brackets and quotes.
+ * @returns each part's command word.
  */
 function commandWords(line: string): string[] {
   return line.split(COMMAND_SEPARATOR).flatMap((part) => {
-    const word = part.trim().split(/\s+/u).find(candidate => !COMMAND_PREFIX.test(candidate))
-    return word === undefined ? [] : [word.replace(/^[({"']+|["')}]+$/gu, '')]
+    const word = commandWord(part.trim().split(/\s+/u))
+    return word === undefined ? [] : [word]
   })
 }
 
