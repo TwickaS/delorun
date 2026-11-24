@@ -29,6 +29,8 @@ function setup(options: SetupOptions = {}) {
   store.open = (chat) => { opened.push(true); open(chat) }
   const close = store.close.bind(store)
   store.close = (chat) => { opened.push(false); close(chat) }
+  const closeByPerson = store.closeByPerson.bind(store)
+  store.closeByPerson = (chat) => { opened.push(false); closeByPerson(chat) }
   const keys = createSnapshotStore<readonly string[]>(options.keys ?? [])
   const injected: EntryInjected = { multiview: store, layoutsT: makeTranslate(layoutsEn), focusKeys: keys }
   const useSessions = <S,>(selector: (state: ReturnType<typeof list.getSnapshot>) => S): S => selector(list.getSnapshot())
@@ -175,6 +177,13 @@ describe('the popover footer', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close Multiview' }))
     expect(h.opened).toEqual([true, false])
   })
+
+  it('records its close as the person\'s, so a hand-off leaves Multiview closed', () => {
+    const h = setup({ open: true })
+    renderFooter(h)
+    fireEvent.click(screen.getByRole('button', { name: 'Close Multiview' }))
+    expect(h.store.of(CHAT).getSnapshot()).toMatchObject({ open: false, closedByPerson: true })
+  })
 })
 
 describe('the toggle at the end of the agents action', () => {
@@ -211,6 +220,21 @@ describe('the toggle at the end of the agents action', () => {
     expect(h.opened).toEqual([true, false])
     expect(h.store.of(CHAT).getSnapshot()).toMatchObject({ pins: [A, B], open: false })
     expect(button.getAttribute('aria-pressed')).toBe('false')
+  })
+
+  it('records its close as the person\'s, and its open clears that, so a hand-off follows the person', () => {
+    const h = setup()
+    h.store.pinAll(CHAT, [A, B])
+    renderToggle(h)
+    const button = screen.getByRole('button', { name: 'Multiview' })
+    fireEvent.click(button)
+    expect(h.store.of(CHAT).getSnapshot()).toMatchObject({ open: true })
+    expect(h.store.of(CHAT).getSnapshot().closedByPerson).toBeUndefined()
+    fireEvent.click(button)
+    expect(h.store.of(CHAT).getSnapshot()).toMatchObject({ open: false, closedByPerson: true })
+    fireEvent.click(button)
+    expect(h.store.of(CHAT).getSnapshot()).toMatchObject({ open: true })
+    expect(h.store.of(CHAT).getSnapshot().closedByPerson).toBeUndefined()
   })
 
   it('shows an amber dot, and says so, while a pinned agent waits for approval', () => {

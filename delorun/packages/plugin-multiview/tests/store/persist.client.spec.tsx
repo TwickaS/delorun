@@ -63,7 +63,7 @@ describe('the saved Multiview state', () => {
 
   const bad: [string, unknown][] = [
     ['text that is not JSON', 'not json {'],
-    ['another version', { ...savedJson(null), v: 2 }],
+    ['another version', { ...savedJson(null), v: 3 }],
     ['a missing field', { v: 1, pins: [], open: false }],
     ['a pin of the wrong type', savedJson(null, [1 as never])],
     ['an empty pin', savedJson(null, [''])],
@@ -231,6 +231,22 @@ describe('the saved state across the layout picker', () => {
     const layout = buildPreset('main-column', CHAT, [id('a')])
     localStorage.setItem(key, JSON.stringify({ v: 1, pins: ['a'], layout, open: true }))
     expect(persistence().load(CHAT)).toEqual({ pins: [id('a')], layout, open: true })
+  })
+
+  it('round-trips the person\'s manual close, and writes the record version that carries it', () => {
+    persistence().save(CHAT, { ...state(), open: false, closedByPerson: true }, KEEP)
+    expect(persistence().load(CHAT)).toEqual({ ...state(), open: false, closedByPerson: true })
+    expect(JSON.parse(localStorage.getItem(key)!).v).toBe(2)
+  })
+
+  it('loads a version 1 record as it did, with no manual close recorded', () => {
+    localStorage.setItem(key, JSON.stringify({ v: 1, pins: ['a'], layout: null, open: false }))
+    expect(persistence().load(CHAT)).toEqual({ pins: [id('a')], layout: null, open: false })
+  })
+
+  it('drops a manual close that a record pairs with an open Multiview, since it means nothing while it is open', () => {
+    localStorage.setItem(key, JSON.stringify({ v: 2, pins: ['a'], layout: null, open: true, closedByPerson: true }))
+    expect(persistence().load(CHAT)).toEqual({ pins: [id('a')], layout: null, open: true })
   })
 
   it('round-trips the arrangement, the slot order and the chat’s own shape', () => {

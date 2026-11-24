@@ -34,6 +34,12 @@ export interface ChatMultiview {
   readonly slots?: readonly SessionId[] | undefined
   /** The chat's own copy of "Yours", taken when it started following `yours`. */
   readonly shape?: LayoutShape | undefined
+  /**
+   * Set while the person has closed Multiview in this chat and not opened it since: a hand-off pins its agent but does not open
+   * Multiview. It is either `true` or absent, never `false`, and it is absent whenever `open` is true, so a record saved before
+   * this field loads as it did.
+   */
+  readonly closedByPerson?: true | undefined
 }
 
 /** A chat with nothing pinned and Multiview closed. */
@@ -152,15 +158,23 @@ export interface MultiviewService {
    */
   pinAll(chat: SessionId, agents: readonly SessionId[]): { readonly pinned: number; readonly refused: number }
   /**
-   * Open Multiview for a chat: the layer in the chat's content shows the panes, and the choice is kept.
+   * Open Multiview for a chat: the layer in the chat's content shows the panes, and the choice is kept. This is the person's
+   * own open, so a later hand-off opens Multiview again.
    * @param chat - the chat that Multiview belongs to.
    */
   open(chat: SessionId): void
   /**
-   * Close Multiview for a chat: the content shows the normal chat, and the choice is kept.
+   * Close Multiview for a chat: the content shows the normal chat, and the choice is kept. The layer's own reasons close it
+   * this way, recording no choice of the person's, so a later hand-off opens Multiview again.
    * @param chat - the chat that Multiview belongs to.
    */
   close(chat: SessionId): void
+  /**
+   * Close Multiview because the person did, with the toggle, the footer's button or the focus command: a hand-off pins its
+   * agent but does not open Multiview again until the person opens it.
+   * @param chat - the chat that Multiview belongs to.
+   */
+  closeByPerson(chat: SessionId): void
   /**
    * Replace the layout, for the layer's own changes: a drop, a divider, a tab.
    * @param chat - the chat that Multiview belongs to.

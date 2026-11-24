@@ -237,14 +237,21 @@ export class MultiviewStore implements MultiviewService {
     return { pinned, refused }
   }
 
-  /** Open Multiview for a chat. */
+  /** Open Multiview for a chat, which is the person's own open: a later hand-off opens it again. */
   open(chat: SessionId): void {
-    this.#write(chat, { ...this.#store(chat).getSnapshot(), open: true })
+    // The flag is either set or absent, never false, so a chat reads the same in memory as it does after a reload.
+    const { closedByPerson: _closed, ...state } = this.#store(chat).getSnapshot()
+    this.#write(chat, { ...state, open: true })
   }
 
-  /** Return to the normal chat. */
+  /** Return to the normal chat for a reason of the layer's own, which records no choice of the person's. */
   close(chat: SessionId): void {
     this.#write(chat, { ...this.#store(chat).getSnapshot(), open: false })
+  }
+
+  /** Return to the normal chat because the person asked, so a hand-off pins its agent but leaves Multiview closed. */
+  closeByPerson(chat: SessionId): void {
+    this.#write(chat, { ...this.#store(chat).getSnapshot(), open: false, closedByPerson: true as const })
   }
 
   /** Replace the layout without changing what the chat follows: a tab shown, or a layout from elsewhere. */
