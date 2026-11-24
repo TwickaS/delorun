@@ -427,3 +427,50 @@ describe('the plugin\'s network configuration', () => {
     await expect(apply(other, { ...Config(), enabled: true })).rejects.toThrow('another plugin already provides the sandbox network resolver')
   })
 })
+
+describe('a directory inside a registered workspace', () => {
+  it('inherits the workspace network rather than the deployment default', async () => {
+    const { network, work } = await mounted()
+    // The deployment default is open; the workspace is set to off.
+    await network.set(work, { access: 'off', hosts: [] }, false)
+    expect(network.networkOf(work)).toEqual({ access: 'off', hosts: [] })
+    // A session whose cwd is a scratch subdirectory of the workspace resolves the workspace's setting, not the default.
+    const scratch = join(work, 'audit', 'role-1')
+    mkdirSync(scratch, { recursive: true, mode: 0o700 })
+    expect(network.networkOf(scratch)).toEqual({ access: 'off', hosts: [] })
+  })
+
+  it('keeps a nested workspace on its own setting', async () => {
+    const { ctx, network, work } = await mounted()
+    await network.set(work, { access: 'off', hosts: [] }, false)
+    const nested = join(work, 'nested')
+    mkdirSync(nested, { recursive: true, mode: 0o700 })
+    // The registry lists the nested folder as a workspace of its own, which is what makes it the nearest one.
+    const registry = ctx.get('workspaceRegistry') as { list: () => { path: string, title: string }[] }
+    const listed = registry.list()
+    registry.list = () => [...listed, { path: nested, title: 'Nested' }]
+    // Opening the nested workspace loosens what it inherits from its parent, so the person confirms it first.
+    await network.set(nested, { access: 'open', hosts: [] }, true)
+    // The nearest containing workspace wins, so the nested one is open while its parent stays off.
+    expect(network.networkOf(nested)).toEqual({ access: 'open', hosts: [] })
+    expect(network.networkOf(join(nested, 'deeper'))).toEqual({ access: 'open', hosts: [] })
+    expect(network.networkOf(join(work, 'sibling'))).toEqual({ access: 'off', hosts: [] })
+  })
+
+  it('falls back to the default for a directory in no workspace', async () => {
+    const { network } = await mounted()
+    const outside = mkdtempSync(join(tmpdir(), 'dcn-outside-'))
+    roots.push(outside)
+    expect(network.networkOf(outside)).toEqual({ access: 'open', hosts: [] })
+  })
+
+  it('does not treat a sibling whose name starts with the workspace path as inside it', async () => {
+    const { network, work } = await mounted()
+    await network.set(work, { access: 'off', hosts: [] }, false)
+    // /…/work-elsewhere must not inherit /…/work's setting.
+    const sibling = `${work}-elsewhere`
+    mkdirSync(sibling, { recursive: true, mode: 0o700 })
+    roots.push(sibling)
+    expect(network.networkOf(sibling)).toEqual({ access: 'open', hosts: [] })
+  })
+})

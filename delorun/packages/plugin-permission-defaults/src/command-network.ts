@@ -15,7 +15,7 @@
  */
 import { createHash } from 'node:crypto'
 import { mkdir, readdir, rm } from 'node:fs/promises'
-import { join } from 'node:path'
+import { join, sep } from 'node:path'
 import { Service, type Context } from '@deepseek-ai/cordis'
 import type { SandboxNetwork } from '@deepseek-ai/dsh-sandbox'
 import type { SandboxNetworkRequest, SandboxNetworkResolver } from '@deepseek-ai/dsh-sandbox-policy'
@@ -176,13 +176,38 @@ export class CommandNetwork extends Service {
   }
 
   /**
-   * The network a workspace's commands get now.
+   * The network a workspace's commands get now. A directory inside a registered workspace inherits that workspace's
+   * setting, so a session whose cwd is a subdirectory of a workspace set to `off` does not fall through to the
+   * deployment default. The nearest containing workspace wins, so a nested workspace keeps its own setting.
    * @param cwd - the workspace directory, or an empty string for none.
-   * @returns its own setting, the default for a workspace without one, or `off` while the store is refused.
+   * @returns its own setting, the containing workspace's, the default for a directory in no workspace, or `off` while
+   *   the store is refused.
    */
   networkOf(cwd: string): WorkspaceNetwork {
     if (this.problem !== undefined) return { access: 'off', hosts: [] }
-    return this.entries.get(workspaceKey(cwd)) ?? this.settings.defaultNetwork
+    const key = workspaceKey(cwd)
+    const own = this.entries.get(key)
+    if (own !== undefined) return own
+    const containing = this.containingWorkspace(key)
+    return containing === undefined ? this.settings.defaultNetwork : this.entries.get(containing) ?? this.settings.defaultNetwork
+  }
+
+  /**
+   * The nearest registered workspace whose directory contains a path.
+   * @param key - the canonical path to look up.
+   * @returns the containing workspace's key, or `undefined` when the path is in no registered workspace.
+   */
+  private containingWorkspace(key: string): string | undefined {
+    if (key === NO_WORKSPACE) return undefined
+    const registry = this.ctx.get('workspaceRegistry')
+    let best: string | undefined
+    for (const workspace of registry?.list() ?? []) {
+      const root = workspaceKey(workspace.path)
+      // A path is inside a workspace when it is the workspace or sits below it, and the separator keeps /a/bc out of /a/b.
+      if (key !== root && !key.startsWith(root.endsWith(sep) ? root : root + sep)) continue
+      if (best === undefined || root.length > best.length) best = root
+    }
+    return best
   }
 
   /**
