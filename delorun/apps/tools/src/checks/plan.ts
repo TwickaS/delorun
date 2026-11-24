@@ -106,9 +106,9 @@ export interface Check {
    */
   readonly declined?: string
   /**
-   * True when {@link Check.declined} is a limit of this host (no Docker engine answers, or the closure lane on a host
-   * other than `linux-x64`) and not an empty selection. A merge-only check declined for it never ran, so in the merge
-   * tier the run fails instead of passing without it.
+   * True when {@link Check.declined} is a limit of this host (no Docker engine answers, the closure lane on a host
+   * other than `linux-x64`, or the product website without the pictures it builds from) and not an empty selection. A
+   * merge-only check declined for it never ran, so in the merge tier the run fails instead of passing without it.
    */
   readonly declinedByHost?: true
   /** True when the verdict reads commits beyond the tree; a tree pass covers the check only at the same HEAD and range base. */
@@ -294,6 +294,12 @@ export const DOCS_SITE_ID = 'docs-site'
 export const WEBSITE_DIR = 'delorun/apps/website'
 /** The check that builds the product website and its dead-link check. */
 export const WEBSITE_ID = 'website-site'
+/**
+ * The variable that names the folder of the product website's source pictures, which are not in the repository. The
+ * website's own `scripts/pictures-dir.ts` owns the variable and the folder's rules; this names it so the plan can
+ * decline the check on a host that has no pictures to build from.
+ */
+export const WEBSITE_PICTURES_VARIABLE = 'SITE_PICTURES_DIR'
 
 /** The check that the committed `THIRD_PARTY_NOTICES.md` matches what upstream's generator writes from the installed manifests. */
 export const NOTICES_ID = 'generated:notices'
@@ -1018,6 +1024,36 @@ export function declineUnansweredDocker(plan: readonly Planned[], probe: () => s
   if (!plan.some(check => ENGINE_CHECKS.includes(check.id))) return [...plan]
   const reason = probe()
   return plan.map(check => ENGINE_CHECKS.includes(check.id) && reason !== undefined ? { ...check, declined: reason, declinedByHost: true } : check)
+}
+
+/**
+ * Why this host cannot build the product website: its home page shows real screenshots of the studio, which are not in
+ * the repository, so the build reads them from the folder {@link WEBSITE_PICTURES_VARIABLE} names and fails without it.
+ * @param env - the environment the check would run with.
+ * @param exists - whether a path exists, so the folder's presence is read without touching the filesystem here.
+ * @returns the reason, or undefined when the variable names a folder that exists.
+ */
+export function websitePicturesProblem(env: Readonly<Record<string, string | undefined>>, exists: (path: string) => boolean): string | undefined {
+  const value = env[WEBSITE_PICTURES_VARIABLE]
+  if (value === undefined || value === '') {
+    return `the product website's home page shows real screenshots of the studio, which are not in the repository, so its build needs ${WEBSITE_PICTURES_VARIABLE} to name the folder they are kept in; set it to that folder (for example ~/site-pictures) and run the check again`
+  }
+  if (!exists(value)) {
+    return `${WEBSITE_PICTURES_VARIABLE} names ${value}, which does not exist; set it to the folder of the product website's source pictures and run the check again`
+  }
+  return undefined
+}
+
+/**
+ * Decline the product website's check on a host with no pictures to build it from, as a limit of the host rather than a
+ * failure of the change: the pictures are not in the repository, so a checkout that never received them cannot build the
+ * site, and reporting that as a failed check would blame the change for it.
+ * @param plan - the plan.
+ * @param problem - why this host cannot build the site, from {@link websitePicturesProblem}; undefined when it can.
+ * @returns the plan, with the check declined for a host limit when there is a problem.
+ */
+export function declineWebsiteWithoutPictures(plan: readonly Planned[], problem: string | undefined): Planned[] {
+  return plan.map(check => check.id === WEBSITE_ID && problem !== undefined ? { ...check, declined: problem, declinedByHost: true } : check)
 }
 
 /**
