@@ -64,6 +64,7 @@ export const SERVICE_PAGE: Record<string, string> = {
   actionCards: 'boot.md',
   pluginRecommendations: 'boot.md',
   pluginAudit: 'boot.md',
+  profileHomePatch: 'boot.md',
   pluginMarket: 'boot.md',
   doctor: 'boot.md',
   pluginRegistryProbe: 'boot.md',

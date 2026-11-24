@@ -18,13 +18,15 @@ import {
 } from '@deepseek-ai/dsh-app-boot'
 import { OPTIONAL_BUNDLES, OFFICIAL_ON_DEMAND_CATALOG } from '@deepseek-ai/dsh-official-bundles'
 import PluginManager, { type Config, type PluginChange, type PluginInstallLogChunk, type PluginInstallProgress, type PluginInstallRequestId } from '../src/index.ts'
-import type { PluginEntryId, PluginOperation } from '../src/types.ts'
+import { PROFILE_FILES, ProfileHistory } from '../src/history.ts'
+import type { PluginEntryId, PluginOperation, ProfileHomePatch } from '../src/types.ts'
 import Hmr from '@deepseek-ai/dsh-hmr'
 import Timer from '@deepseek-ai/cordis-plugin-timer'
 import type { PatchOptions } from '@deepseek-ai/cordis-plugin-include'
 import { brandString } from '@deepseek-ai/dsh-brand'
 import type { PluginAuditResult, PluginAuditTarget, ProfileVersionId } from '../src/types.ts'
 import { Group } from '@deepseek-ai/cordis-plugin-loader'
+import { describeChanges } from '../src/tools.ts'
 import * as operations from '../src/operations.ts'
 import * as githubConnection from '../src/github-connection.ts'
 import * as gitTransport from '../src/git-transport.ts'
@@ -39,7 +41,7 @@ let restoreGitCommandLineConfig: () => void
 beforeAll(() => { restoreGitCommandLineConfig = isolateGitCommandLineConfig() })
 afterAll(() => { restoreGitCommandLineConfig() })
 
-async function fixture(reload: 'live' | 'startup' = 'live', overlay = false, prepare?: (ctx: Context) => void, config: Config = {}, packageManager?: ProfileContext['packageManager'], prepareFiles?: (dir: string) => void, sourceInstallation = false) {
+async function fixture(reload: 'live' | 'startup' = 'live', overlay = false, prepare?: (ctx: Context, profile: ProfileContext) => void, config: Config = {}, packageManager?: ProfileContext['packageManager'], prepareFiles?: (dir: string) => void, sourceInstallation = false) {
   const temporaryHome = mkdtempSync(join(tmpdir(), 'plugin-manager-'))
   let owner: Context | undefined
   onTestFinished(async () => { await owner?.fiber.dispose(); rmSync(temporaryHome, { recursive: true, force: true }) })
@@ -80,7 +82,7 @@ async function fixture(reload: 'live' | 'startup' = 'live', overlay = false, pre
   const ctx = await boot('test', join(dir, 'cordis.yml'), readProfilePatches('test', profile), (ctx) => {
     owner = ctx
     ctx.provide('appReady', { onReady: (listener: () => void) => { listener(); return () => {} } })
-    prepare?.(ctx)
+    prepare?.(ctx, profile)
     ctx.provide('profileContext', profile)
     ctx.loader.builtins.manager = PluginManager
   })
@@ -2405,7 +2407,7 @@ it('lists what a restore brings back before it runs, reading the history without
     bundles: [],
     builds: [{ name: 'audited', to: 'allowed' }],
     exemptions: [{ packageVersion: 'audited@1.0.0', runtimeVersion: getDshRuntimeVersion(), change: 'added' }],
-    patchChanged: false, unreadable: [],
+    patchChanged: false, homePatchChanged: false, unreadable: [],
   } })
   // The profile differs from its latest version, so undo would take that outside edit back to the same version.
   expect(await manager.previewUndo()).toMatchObject({ ok: true, version: { version } })
@@ -2495,7 +2497,7 @@ it('previews an undo of the latest change when nothing changed outside plugin ma
   const listed = await manager.listHistory(2)
   const previous = listed.available ? listed.versions[1] : undefined
   expect(await manager.previewUndo()).toEqual({ ok: true, version: { version: previous?.id, summary: 'Changed outside plugin management' },
-    changes: { plugins: [], bundles: [{ name: 'extra', selected: true }], builds: [], exemptions: [], patchChanged: false, unreadable: [] } })
+    changes: { plugins: [], bundles: [{ name: 'extra', selected: true }], builds: [], exemptions: [], patchChanged: false, homePatchChanged: false, unreadable: [] } })
   expect(readProfileManifest('test', dir).dsh?.profile?.bundles).toEqual(['core'])
 })
 
@@ -2549,6 +2551,121 @@ it('refuses a version the history does not hold, and a history limit out of rang
   expect(await manager.restore(brandString<ProfileVersionId>('0'.repeat(40)))).toMatchObject({ stage: 'restore', changed: false, application: 'failed', error: { code: 'unknown-version' } })
   await expect(manager.history(0)).rejects.toThrow('limit must be an integer from 1 to 500')
   await expect(manager.history(501)).rejects.toThrow(RangeError)
+})
+
+/** The profile file a version holds the home patch in, as `@delorun/profile-safety` names it. */
+const HOME_PATCH_COPY = 'home-cordis.patch.yml'
+
+/**
+ * A stand-in for the `profileHomePatch` service a Delorun profile provides: the home patch is a file beside the profile,
+ * and a version holds it as a copy inside the profile, which the history tracks beside the managed files.
+ * @param home - the Harness home.
+ * @param profileDir - the profile directory.
+ * @returns the service, and the home patch's path.
+ */
+function homePatchService(home: string, profileDir: string): { service: ProfileHomePatch; patch: string } {
+  const patch = join(home, 'cordis.patch.yml')
+  const copy = join(profileDir, HOME_PATCH_COPY)
+  const read = (path: string): string | undefined => existsSync(path) ? readFileSync(path, 'utf8') : undefined
+  const history = (): ProfileHistory => new ProfileHistory(profileDir, [...PROFILE_FILES, HOME_PATCH_COPY], 'git', 30_000)
+  const held = async (version: ProfileVersionId): Promise<string | undefined> => (await history().filesAt(version)).get(HOME_PATCH_COPY)
+  return {
+    patch,
+    service: {
+      copyFilename: HOME_PATCH_COPY,
+      mirror: async () => {
+        const previous = read(copy)
+        const text = read(patch)
+        if (text === undefined) rmSync(copy, { force: true })
+        else writeFileSync(copy, text)
+        return previous
+      },
+      restoreCopy: async (text) => {
+        if (text === undefined) rmSync(copy, { force: true })
+        else writeFileSync(copy, text)
+      },
+      differs: async (version) => {
+        const text = await held(version)
+        return text !== undefined && text !== read(patch)
+      },
+      restore: async (version) => {
+        const text = await held(version)
+        if (text === undefined || text === read(patch)) return false
+        writeFileSync(patch, text)
+        return true
+      },
+    },
+  }
+}
+
+describe('the home patch in a harness point', () => {
+  it('brings back a value set in the home patch when a version is restored', async () => {
+    let home = ''
+    let profileDir = ''
+    const { manager, dir } = await fixture('live', false, (ctx, profile) => {
+      home = profile.home
+      profileDir = profile.dir
+      writeFileSync(join(home, 'cordis.patch.yml'), '[{"id":"extra-row","config":{"limit":5}}]\n')
+      ctx.provide('profileHomePatch', homePatchService(home, profileDir).service)
+    })
+    expect(dir).toBe(profileDir)
+    const patch = join(home, 'cordis.patch.yml')
+    // A version saved while the home patch holds 5.
+    const saved = await manager.history(1)
+    const version = saved.available ? saved.versions[0]!.id : undefined
+    expect(version).toBeDefined()
+    // The person changes the value in the home layer, and nothing else.
+    writeFileSync(patch, '[{"id":"extra-row","config":{"limit":9}}]\n')
+    expect(await manager.previewRestore(version!)).toMatchObject({ ok: true, changes: { homePatchChanged: true } })
+    expect(await manager.restore(version!)).toMatchObject({ application: 'applied' })
+    expect(readFileSync(patch, 'utf8')).toBe('[{"id":"extra-row","config":{"limit":5}}]\n')
+  })
+
+  it('refuses a version whose home patch holds a secret value, and writes no copy of it into the record', async () => {
+    let home = ''
+    let profileDir = ''
+    const { manager, ctx } = await fixture('live', false, (ctx, profile) => {
+      home = profile.home
+      profileDir = profile.dir
+      writeFileSync(join(home, 'cordis.patch.yml'), '[{"id":"extra-row","config":{"limit":5}}]\n')
+      ctx.provide('profileHomePatch', homePatchService(home, profileDir).service)
+    })
+    // The admission the CLI registers: a value for a secret-role field refuses the version.
+    ctx.on('plugin-manager/before-record', files => files.get(HOME_PATCH_COPY)?.includes('sk-home-secret') === true
+      ? `${HOME_PATCH_COPY} holds a value for the secret field apiKey of web-deepseek-api`
+      : undefined)
+    const first = await manager.history(1)
+    expect(first.available).toBe(true)
+    const copy = join(profileDir, HOME_PATCH_COPY)
+    const before = readFileSync(copy, 'utf8')
+    // The key, edited into the home patch by hand.
+    writeFileSync(join(home, 'cordis.patch.yml'), '[{"id":"web-deepseek-api","config":{"apiKey":"sk-home-secret"}}]\n')
+    expect(await manager.history(10)).toMatchObject({ unsaved: expect.stringContaining('holds a value for the secret field apiKey') as string })
+    // The refused copy is put back, so it never waits in the profile for the next version another history saves.
+    expect(readFileSync(copy, 'utf8')).toBe(before)
+    expect(execFileSync('git', ['--git-dir', join(profileDir, '.plugin-manager', 'history'), 'log', '--all', '-p'], { encoding: 'utf8', timeout: 30_000 })).not.toContain('sk-home-secret')
+  })
+
+  it('says a restore would replace a home-patch value the person set after the version, rather than dropping it silently', async () => {
+    let home = ''
+    let profileDir = ''
+    const { manager } = await fixture('live', false, (ctx, profile) => {
+      home = profile.home
+      profileDir = profile.dir
+      writeFileSync(join(home, 'cordis.patch.yml'), '[{"id":"extra-row","config":{"limit":5}}]\n')
+      ctx.provide('profileHomePatch', homePatchService(home, profileDir).service)
+    })
+    const saved = await manager.history(1)
+    const version = saved.available ? saved.versions[0]!.id : undefined
+    writeFileSync(join(home, 'cordis.patch.yml'), '[{"id":"extra-row","config":{"limit":9}}]\n')
+    // The preview names the home layer, so the person sees what the restore would replace before it runs.
+    const preview = await manager.previewRestore(version!)
+    expect(preview).toMatchObject({ ok: true, changes: { homePatchChanged: true } })
+    expect(preview.ok ? describeChanges(preview.changes) : '').toContain('the home patch cordis.patch.yml, which applies over every profile')
+    // A version whose home patch matches the home's says nothing about it.
+    writeFileSync(join(home, 'cordis.patch.yml'), '[{"id":"extra-row","config":{"limit":5}}]\n')
+    expect(await manager.previewRestore(version!)).toMatchObject({ ok: true, changes: { homePatchChanged: false } })
+  })
 })
 
 it('keeps changing the profile when git cannot keep its history, and says so', async () => {

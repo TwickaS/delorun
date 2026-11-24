@@ -39,6 +39,7 @@ it('lists the dependencies, bundles, build decisions and exemptions a version ch
       { packageVersion: 'kept@1.0.0', runtimeVersion: '0.2.1', change: 'removed' },
     ],
     patchChanged: true,
+    homePatchChanged: false,
     unreadable: [],
   })
 })
@@ -47,7 +48,7 @@ it('names the packages a version brings back: each one it adds or moves, and eac
   expect(broughtBack({
     plugins: [{ name: 'back', change: 'added', to: '3.0.0' }, { name: 'gone', change: 'removed', from: '1.0.0' }, { name: 'moved', change: 'version', from: '2.0.0', to: '1.0.0' }],
     bundles: [{ name: 'back', selected: true }, { name: 'shipped', selected: true }, { name: 'gone', selected: false }],
-    builds: [], exemptions: [], patchChanged: false, unreadable: [],
+    builds: [], exemptions: [], patchChanged: false, homePatchChanged: false, unreadable: [],
   })).toEqual(['back', 'moved', 'shipped'])
 })
 
@@ -60,11 +61,11 @@ it('reads absent files as empty and ignores values that are not the records it e
   expect(changes).toEqual({
     plugins: [{ name: 'valid', change: 'added', to: '1.0.0' }], bundles: [{ name: 'valid', selected: true }],
     builds: [], exemptions: [{ packageVersion: 'valid@1.0.0', runtimeVersion: '0.2.0', change: 'added' }],
-    patchChanged: false, unreadable: [],
+    patchChanged: false, homePatchChanged: false, unreadable: [],
   })
   expect(profileVersionChanges(files({ 'package.json': '[]', 'compatibility.json': '"text"', 'pnpm-workspace.yaml': 'allowBuilds: [a]\n' }), files({
     'package.json': JSON.stringify({ dependencies: [], dsh: { profile: { bundles: 'one' } } }),
-  }))).toEqual({ plugins: [], bundles: [], builds: [], exemptions: [], patchChanged: false, unreadable: [] })
+  }))).toEqual({ plugins: [], bundles: [], builds: [], exemptions: [], patchChanged: false, homePatchChanged: false, unreadable: [] })
 })
 
 it('names a file it cannot parse on either side and lists no change from it', () => {
@@ -72,5 +73,5 @@ it('names a file it cannot parse on either side and lists no change from it', ()
     'package.json': '{not json', 'pnpm-workspace.yaml': 'allowBuilds:\n  a: true\n',
   }), files({
     'package.json': manifest({ back: '1.0.0' }), 'pnpm-workspace.yaml': 'allowBuilds: [unclosed\n', 'compatibility.json': '{',
-  }))).toEqual({ plugins: [], bundles: [], builds: [], exemptions: [], patchChanged: false, unreadable: ['package.json', 'pnpm-workspace.yaml', 'compatibility.json'] })
+  }))).toEqual({ plugins: [], bundles: [], builds: [], exemptions: [], patchChanged: false, homePatchChanged: false, unreadable: ['package.json', 'pnpm-workspace.yaml', 'compatibility.json'] })
 })

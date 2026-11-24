@@ -334,7 +334,7 @@ function versionOf(target: string | undefined): ProfileVersionId {
 /**
  * What an undo or a restore changes, as its approval names it.
  * @param changes - the changes the manager read.
- * @returns a clause listing the plugins, bundles, builds, exemptions and profile patch it changes.
+ * @returns a clause listing the plugins, bundles, builds, exemptions and patch layers it changes.
  */
 export function describeChanges(changes: ProfileVersionChanges): string {
   const plugins = changes.plugins.map((plugin) => {
@@ -356,6 +356,7 @@ export function describeChanges(changes: ProfileVersionChanges): string {
     ...builds.length > 0 ? [`build scripts: ${builds.join(', ')}`] : [],
     ...exemptions.length > 0 ? [`version exemptions: ${exemptions.join(', ')}`] : [],
     ...changes.patchChanged ? ['the profile patch cordis.patch.yml'] : [],
+    ...changes.homePatchChanged ? ['the home patch cordis.patch.yml, which applies over every profile'] : [],
     ...changes.unreadable.length > 0 ? [`files it cannot read, whose changes are not listed: ${changes.unreadable.join(', ')}`] : [],
   ]
   return parts.length === 0 ? 'no plugins, builds or exemptions' : parts.join('; ')

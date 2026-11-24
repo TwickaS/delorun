@@ -567,6 +567,42 @@ Current profile facts; scheduling and mutation belong to their callers.
 
 Source: [`packages/boot/app-boot/src/profile-context.ts`](../../packages/boot/app-boot/src/profile-context.ts)
 
+<a id="ctxprofilehomepatch--profilehomepatch"></a>
+
+### `ctx.profileHomePatch` — `ProfileHomePatch`
+
+The home patch's half of a profile version, a Service Definition: the patch layer at the Harness home (`cordis.patch.yml`), which applies over every profile's own layer and which the history's work tree, the profile directory, cannot hold. A distribution provides it as `profileHomePatch`; the manager then mirrors the home patch into the profile before it saves a version, so a version covers both patch layers, and writes a version's home patch back when it restores one. Without one, a version covers the profile's files alone, as upstream's does.
+
+```ts cordis-catalog
+/**
+ * Write the home patch's current text into the profile, so the version saved next holds the home layer.
+ * @returns the text the profile held before, so a version the admission refuses can put it back.
+ */
+mirror(): Promise<string | undefined>
+
+/**
+ * Put the profile's copy of the home patch back as it was, after a version the admission refused.
+ * @param text - what `mirror` returned.
+ */
+restoreCopy(text: string | undefined): Promise<void>
+
+/**
+ * Whether a version's home patch differs from the home's now.
+ * @param version - the version.
+ * @returns true when the version holds a home patch that differs from the home's.
+ */
+differs(version: ProfileVersionId): Promise<boolean>
+
+/**
+ * Write a version's home patch to the home.
+ * @param version - the version.
+ * @returns whether the home patch changed.
+ */
+restore(version: ProfileVersionId): Promise<boolean>
+```
+
+Source: [`packages/boot/plugin-manager/src/types.ts`](../../packages/boot/plugin-manager/src/types.ts)
+
 <a id="ctxprofilereconcilecheck--profilereconcilecheck"></a>
 
 ### `ctx.profileReconcileCheck` — `ProfileReconcileCheck`

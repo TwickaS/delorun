@@ -126,7 +126,8 @@ export function profileVersionChanges(current: ProfileFiles, restored: ProfileFi
   }
 
   const patchChanged = current.get('cordis.patch.yml') !== restored.get('cordis.patch.yml')
-  return { plugins, bundles, builds, exemptions, patchChanged, unreadable }
+  // The home patch's copy is not one of the files this comparison reads; the caller that tracks it says whether it differs.
+  return { plugins, bundles, builds, exemptions, patchChanged, homePatchChanged: false, unreadable }
 }
 
 /**
