@@ -26,8 +26,8 @@ body {
   --delorun-glass-highlight: transparent;
   --delorun-glass-radius: var(--dsw-radius-md);
   --delorun-glass-radius-dialog: var(--dsw-radius-lg);
-  --delorun-alert-icon-size: 24px;
-  --delorun-alert-glyph-size: 14px;
+  --delorun-alert-icon-size: 26px;
+  --delorun-alert-glyph-size: 15px;
   --delorun-alert-button-height: 28px;
   --delorun-alert-button-height-dialog: 32px;
   --delorun-alert-toast-width: 380px;
@@ -106,7 +106,8 @@ body[data-ds-dark-theme] {
 .delorun-alert[data-kind='success'] { --delorun-alert-tone: var(--dsw-alias-state-success-primary); }
 .delorun-alert[data-kind='warning'] { --delorun-alert-tone: var(--dsw-alias-state-warn-primary); }
 .delorun-alert[data-kind='error'] { --delorun-alert-tone: var(--dsw-alias-state-error-primary); }
-.delorun-alert[data-kind='progress'] { --delorun-alert-tone: var(--dsw-alias-label-secondary); }
+/* A working state reads as active: the accent, not the muted label colour, which looked like a disabled control. */
+.delorun-alert[data-kind='progress'] { --delorun-alert-tone: var(--dsw-alias-link); }
 
 .delorun-alert[data-variant='toast'] {
   width: min(var(--delorun-alert-toast-width), 100%);
@@ -185,6 +186,13 @@ body[data-ds-dark-theme] {
 .delorun-alert-primary {
   background: color-mix(in oklab, var(--dsw-alias-link) var(--delorun-alert-button-tint), transparent);
   color: var(--delorun-alert-action);
+  /* A pill, so the action reads as a control rather than a filled block; the tint and the ink keep the AA contrast the
+     spec measures. */
+  border-radius: 999px;
+}
+
+.delorun-alert-primary:hover {
+  background: color-mix(in oklab, var(--dsw-alias-link) calc(var(--delorun-alert-button-tint) * 2), transparent);
 }
 
 .delorun-alert-secondary {
