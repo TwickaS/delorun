@@ -11,7 +11,7 @@
  */
 import {
   FishLogo, HoverCard, IconAgentPresetOutlineRegular, IconAlarmClockOutlineRegular, IconCheckCircleOutlineRegular, IconCheckOutlineRegular,
-  IconClockOutlineRegular, IconEllipsisOutlineRegular, IconFolderCloseRegular, IconLoadingOutlineRegular, IconPinFillRegular,
+  IconClockOutlineRegular, IconEllipsisOutlineRegular, IconFolderCloseRegular, IconPinFillRegular,
   IconPinOutlineRegular, IconPlanOutlineRegular, IconQuestionOutlineRegular, IconShieldOutlineRegular, IconSparkleRegular,
   IconUnarchiveOutlineRegular, Menu, relativeTime, Tooltip, type MenuEntry,
 } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -22,6 +22,7 @@ import { memo, useEffect, useMemo, useState, type KeyboardEvent, type MouseEvent
 import type { SidebarLocaleKey } from './locales.ts'
 import { shouldRecede, waitsOnPerson, type BadgeColor, type ChatStatus, type SidebarChat, type SidebarDropVerb, type SidebarSection } from './sections.ts'
 import { WorkspaceBadge } from './WorkspaceBadge.tsx'
+import { WorkingRing } from './WorkingRing.tsx'
 import css from './ChatRow.module.css'
 
 type Translate = (key: SidebarLocaleKey, params?: Record<string, string | number>) => string
@@ -97,11 +98,14 @@ export interface ChatRowProps {
 }
 
 /** The status glyphs. */
-type StatusIcon = typeof IconLoadingOutlineRegular
+type StatusIcon = typeof IconShieldOutlineRegular
 
-/** Each status's label key and glyph. */
-const STATUS: Readonly<Record<Exclude<ChatStatus, 'ready'> | 'woke' | 'done', { readonly key: SidebarLocaleKey; readonly icon: StatusIcon }>> = {
-  working: { key: 'status.working', icon: IconLoadingOutlineRegular },
+/**
+ * Each status's label key and glyph. Working has no glyph: it draws the orbital ring, which is its own component and
+ * carries the motion the frozen arc never had.
+ */
+const STATUS: Readonly<Record<Exclude<ChatStatus, 'ready'> | 'woke' | 'done', { readonly key: SidebarLocaleKey; readonly icon: StatusIcon | null }>> = {
+  working: { key: 'status.working', icon: null },
   approval: { key: 'status.approval', icon: IconShieldOutlineRegular },
   question: { key: 'status.question', icon: IconQuestionOutlineRegular },
   plan: { key: 'status.plan', icon: IconPlanOutlineRegular },
@@ -235,7 +239,7 @@ function StatusLabel({ status, since, onDismissWoke, t }: {
   const { key, icon: Icon } = STATUS[status]
   const body = (
     <>
-      <Icon size={16} className={css.statusIcon} />
+      {Icon === null ? <WorkingRing className={css.statusIcon} /> : <Icon size={16} className={css.statusIcon} />}
       {t(key)}
       {status === 'working' && since !== undefined && <RunningFor since={since} t={t} />}
     </>

@@ -109,17 +109,35 @@ describe('SidebarRoot.module.css', () => {
   })
 
   it('keeps the reviewed expanded spacing separate from rail and caption controls', () => {
-    expect(declarations('.logoRow')?.get('padding')).toBe('8px 0 8px 8px')
+    // The leading padding is the column's one inset, so the brand's mark starts where the search magnifier does; the
+    // trailing padding is zero, so the toggle's box ends on the same edge as the header's last icon button.
+    expect(declarations('.logoRow')?.get('padding')).toBe('8px 0 8px var(--sidebar-inset)')
     expect(declarations('.logoRow')?.get('margin-bottom')).toBe('0')
     expect(declarations('.newSessionRow')?.get('margin')).toBe('0 calc(var(--dsh-sidebar-paint-inset) + 1px)')
     expect(declarations('.newSession')?.get('margin')).toBe('0')
     expect(declarations('.newSessionContent')?.get('justify-content')).toBe('center')
-    expect(declarations(":global(html[data-platform='darwin']:not([data-fullscreen])) .root:not(.collapsed) > .topStrip > .toggle")?.get('transform')).toBe('translateX(4px)')
+    // The macOS strip's toggle needs no nudge: its trailing padding is zero, as the logo row's is.
+    expect(declarations(":global(html[data-platform='darwin']:not([data-fullscreen])) .root:not(.collapsed) > .topStrip > .toggle")).toBeUndefined()
     expect(css).not.toContain(':not(.fading)')
     expect(declarations(':global([data-windows-titlebar]) .root:not(.collapsed) .newSessionRow')?.get('margin-top')).toBe('6px')
     expect(declarations(':global([data-windows-titlebar]) .root:not(.collapsed) .newSessionRow')?.has('margin-left')).toBe(false)
     expect(declarations('.topStrip')?.get('height')).toBe('52px')
     expect(declarations('.root.collapsed')?.get('padding')).toBe('18px 10px 6px')
+  })
+
+  it('gives the column one inset and one control size, so its left and right edges line up', () => {
+    // One inset, declared once on the root and read by the plugin's own stylesheets, so the search field's box, the
+    // chat cards, the shelf labels, the foot's buttons and the toggle all start on the same edge.
+    expect(declarations('.root')?.get('--sidebar-inset')).toBe('var(--delorun-space-4)')
+    // One control size: the header's icon buttons, the panel toggle and the foot's buttons are all 32px, so their 16px
+    // glyphs land on one line. The rail keeps its own 36px boxes.
+    expect(declarations('.root')?.get('--dsh-sidebar-control')).toBe('32px')
+    expect(declarations('.iconButton')?.get('width')).toBe('var(--dsh-sidebar-control)')
+    expect(declarations('.iconButton')?.get('height')).toBe('var(--dsh-sidebar-control)')
+    expect(declarations('.collapsed .iconButton')?.get('width')).toBe('36px')
+    // The toggle's box ends on the column's content edge, where the header's last icon button ends.
+    expect(declarations('.logoRow')?.get('padding')).toBe('8px 0 8px var(--sidebar-inset)')
+    expect(declarations('.topStrip')?.get('padding')).toBe('0 0 2px')
   })
 
   it('moves the upper controls while the settings seat only fades', () => {

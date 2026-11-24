@@ -1,0 +1,62 @@
+/*
+ * The working indicator: a 16px orbital ring in the status slot. A quiet track, a dash-array head that orbits once
+ * every 2.6s, and a core that breathes on the same period, so the two motions stay in step. It replaces the frozen
+ * loading arc in the same box, so no row changes size. The caller sets the box, as it did for the arc.
+ */
+.ring {
+  flex: none;
+  color: inherit;
+}
+
+.ringTrack,
+.ringHead {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+}
+
+.ringTrack {
+  opacity: 0.22;
+}
+
+.ringHead {
+  stroke-linecap: round;
+  stroke-dasharray: 10 50;
+  transform-box: view-box;
+  transform-origin: center;
+}
+
+.ringCore {
+  fill: currentColor;
+  opacity: 0.55;
+  transform-box: view-box;
+  transform-origin: center;
+}
+
+/* The ring rests as a still arc and a still core unless the person allows motion. */
+@media (prefers-reduced-motion: no-preference) {
+  .ringHead {
+    animation: working-ring-orbit 2.6s linear infinite;
+  }
+
+  .ringCore {
+    animation: working-ring-breathe 2.6s var(--ds-ease-in-out) infinite;
+  }
+
+  @keyframes working-ring-orbit {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes working-ring-breathe {
+    0%,
+    100% {
+      opacity: 0.3;
+    }
+
+    50% {
+      opacity: 0.75;
+    }
+  }
+}
