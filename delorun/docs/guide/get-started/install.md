@@ -119,7 +119,7 @@ You can run these checks again at any time with `delorun verify` ([Daily use](..
 <summary>Edge cases</summary>
 
 - If the log contradicts the release, then the install stops. Do not work around it; see [Installs and release checks](../help/troubleshooting.md#installs-and-release-checks).
-- If a copy on 0.1.0-preview.2.7 or earlier cannot update, then reinstall once with `npx delorun@latest`: your home, chats and settings stay. Releases from 0.1.0-preview.3 are verified under release root 2, which such a copy cannot read.
+- If a copy on 0.1.0-preview.2.7 or earlier cannot update, then run `npx delorun@latest repair` once: your home, chats and settings stay. Releases from 0.1.0-preview.3 are verified under release root 2, which such a copy cannot read.
 - If you want a stricter full file check at every start, then set `DELORUN_RUNTIME_FULL_CHECK_DAYS` to `0`. The default hashes every file at least every 7 days; the largest value is 30.
 
 </details>
