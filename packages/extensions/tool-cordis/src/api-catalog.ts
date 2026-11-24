@@ -2773,6 +2773,41 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     ],
   },
   {
+    key: 'profileHomePatch',
+    summary: 'The home patch\'s half of a profile version, a Service Definition: the patch layer at the Harness home (`cordis.patch.yml`), which applies over every profile\'s own layer and which the history\'s work tree, the profile directory, cannot hold.',
+    description: 'The home patch\'s half of a profile version, a Service Definition: the patch layer at the Harness home (`cordis.patch.yml`), which applies over every profile\'s own layer and which the history\'s work tree, the profile directory, cannot hold. A distribution provides it as `profileHomePatch`; the manager then mirrors the home patch into the profile before it saves a version, so a version covers both patch layers, and writes a version\'s home patch back when it restores one. Without one, a version covers the profile\'s files alone, as upstream\'s does.',
+    methods: [
+      {
+        signature: 'readonly copyFilename: string',
+        description: 'The profile file a version holds the home patch in, relative to the profile directory. The history tracks it beside the managed files, so a version covers both patch layers.',
+        parameters: [],
+      },
+      {
+        signature: 'mirror(): Promise<string | undefined>',
+        description: 'Write the home patch\'s current text into the profile, so the version saved next holds the home layer.',
+        parameters: [],
+        returns: 'the text the profile held before, so a version the admission refuses can put it back.',
+      },
+      {
+        signature: 'restoreCopy(text: string | undefined): Promise<void>',
+        description: 'Put the profile\'s copy of the home patch back as it was, after a version the admission refused.',
+        parameters: [{ name: 'text', description: 'what `mirror` returned.' }],
+      },
+      {
+        signature: 'differs(version: ProfileVersionId): Promise<boolean>',
+        description: 'Whether a version\'s home patch differs from the home\'s now.',
+        parameters: [{ name: 'version', description: 'the version.' }],
+        returns: 'true when the version holds a home patch that differs from the home\'s.',
+      },
+      {
+        signature: 'restore(version: ProfileVersionId): Promise<boolean>',
+        description: 'Write a version\'s home patch to the home.',
+        parameters: [{ name: 'version', description: 'the version.' }],
+        returns: 'whether the home patch changed.',
+      },
+    ],
+  },
+  {
     key: 'profileReconcileCheck',
     summary: 'A check the distribution runs before every profile recomposition, provided as the optional `profileReconcileCheck` service.',
     description: 'A check the distribution runs before every profile recomposition, provided as the optional `profileReconcileCheck` service. It runs inside Hmr.runExclusive, before any running plugin stops or any module is evicted, so it may rewrite the profile\'s files the recomposition reads; a caller such as the plugin manager may hold the profile\'s `package.json` file lock at that moment, so the check must not wait for that lock while its own process holds it.',
@@ -8555,7 +8590,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ProfileVersionChanges',
-    declaration: 'export interface ProfileVersionChanges {\n    readonly plugins: readonly ProfilePluginChange[];\n    readonly bundles: ReadonlyArray<{\n        readonly name: string;\n        readonly selected: boolean;\n    }>;\n    readonly builds: readonly ProfileBuildChange[];\n    readonly exemptions: readonly ProfileExemptionChange[];\n    readonly patchChanged: boolean;\n    readonly unreadable: readonly string[];\n}',
+    declaration: 'export interface ProfileVersionChanges {\n    readonly plugins: readonly ProfilePluginChange[];\n    readonly bundles: ReadonlyArray<{\n        readonly name: string;\n        readonly selected: boolean;\n    }>;\n    readonly builds: readonly ProfileBuildChange[];\n    readonly exemptions: readonly ProfileExemptionChange[];\n    readonly patchChanged: boolean;\n    readonly homePatchChanged: boolean;\n    readonly unreadable: readonly string[];\n}',
   },
   {
     name: 'ProfileVersionId',

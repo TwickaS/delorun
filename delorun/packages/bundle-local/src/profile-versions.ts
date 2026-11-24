@@ -19,7 +19,7 @@ import type { ProfileVersionId, VersionAdmission } from '@deepseek-ai/dsh-plugin
 import { discardImportReviews } from '@delorun/plugin-changes'
 import { gateByClass, REACH_DEVICE, requireComputerOrDevice, routedPathname } from '@delorun/home-auth'
 import {
-  HOME_PATCH_COPY_FILENAME, isProfileSafetyError, listProfileVersions, openHistory, planRestore, saveProfileVersion, switchToVersion, UPDATE_REPORT_FILENAME,
+  HOME_PATCH_COPY_FILENAME, isProfileSafetyError, listProfileVersions, openHistory, planRestore, ProfileHomePatch, saveProfileVersion, switchToVersion, UPDATE_REPORT_FILENAME,
   type RestorePlan,
 } from '@delorun/profile-safety'
 import { z } from 'zod'
@@ -329,11 +329,32 @@ function versionsWhere(ctx: Context): VersionsWhere | undefined {
 }
 
 /**
+ * Provide the home patch's half of a profile version, so the plugin manager's versions cover both patch layers: the
+ * manager mirrors the home patch into the profile before it saves a version, and writes a version's home patch back
+ * when it restores one. The history is the manager's own, opened over the files it tracks.
+ * @param ctx - the row's scope.
+ */
+function provideHomePatch(ctx: Context): void {
+  // The profile is read when a call needs it, so a Host that provides it after this row still gets the service.
+  const service = new ProfileHomePatch(() => {
+    const profile = ctx.get('profileContext')
+    if (profile === undefined) return undefined
+    return {
+      profileDir: profile.dir,
+      homeDir: profile.home,
+      history: () => openHistory({ profileDir: profile.dir }),
+    }
+  })
+  ctx.effect(() => ctx.provide('profileHomePatch', service), 'delorun-profile-versions: home patch')
+}
+
+/**
  * Mount the routes once the Connection is up. The versions come from the history that `delorun recover` and the plugin
  * manager share, so the row keeps no store of its own.
  * @param ctx - the row's scope.
  */
 export function apply(ctx: Context): void {
+  provideHomePatch(ctx)
   ctx.inject(['connection'], (scope) => {
     registerVersionRoutes(scope, new ProfileVersions(() => versionsWhere(scope)))
   })

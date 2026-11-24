@@ -11,7 +11,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { readChangeLog, writeChangeLog } from '../../changes/src/records.ts'
 import { recordImportReviews } from '../../changes/src/setup-transfer/import-reviews.ts'
 import { CHANGE_LOG_SCHEMA, type ChangeEntry, type ChangeId } from '../../changes/src/types.ts'
-import { ProfileVersions, VersionsError, type VersionsWhere } from '../src/profile-versions.ts'
+import { apply, ProfileVersions, VersionsError, type VersionsWhere } from '../src/profile-versions.ts'
 
 const hasGit = ((): boolean => {
   try {
@@ -159,6 +159,26 @@ describe.skipIf(!hasGit)('the Setup versions service', () => {
     await expect(service.save('With a key')).rejects.toMatchObject({ code: 'SAVE_REFUSED', message: expect.stringContaining('secret value') })
     expect((await service.list()).versions).toEqual([])
     expect(execFileSync('git', ['--git-dir', join(profileDir, '.plugin-manager', 'history'), 'log', '--all', '-p'], { encoding: 'utf8', timeout: 30_000 })).not.toContain(secret)
+  })
+
+  it('provides the home patch service the plugin manager mirrors and restores through', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'delorun-profile-versions-'))
+    roots.push(root)
+    const homeDir = join(root, 'home')
+    const profileDir = join(homeDir, 'profiles', 'default')
+    mkdirSync(profileDir, { recursive: true })
+    writeFileSync(join(profileDir, 'package.json'), JSON.stringify({ name: 'dsh-profile-default', private: true, dsh: { profile: { bundles: [] } } }, undefined, 2) + '\n')
+    writeFileSync(join(profileDir, 'cordis.patch.yml'), '[]\n')
+    writeFileSync(join(homeDir, 'cordis.patch.yml'), '[{"id":"a","config":{"n":1}}]\n')
+    const { Context } = await import('@deepseek-ai/cordis')
+    const ctx = new Context()
+    ctx.provide('profileContext', { name: 'default', dir: profileDir, home: homeDir })
+    apply(ctx)
+    const service = ctx.get('profileHomePatch')
+    expect(service?.copyFilename).toBe('home-cordis.patch.yml')
+    expect(await service?.mirror()).toBeUndefined()
+    expect(readFileSync(join(profileDir, 'home-cordis.patch.yml'), 'utf8')).toBe('[{"id":"a","config":{"n":1}}]\n')
+    await ctx.fiber.dispose()
   })
 
   it('answers a Host without a profile with NO_PROFILE', async () => {

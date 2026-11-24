@@ -21,7 +21,7 @@ import type PluginManager from '../src/index.ts'
 import type { BundleInfo, ProfileVersionId, ProfileVersionPreview } from '../src/types.ts'
 import * as tool from '../src/tools.ts'
 
-const NO_CHANGES = { plugins: [], bundles: [], builds: [], exemptions: [], patchChanged: false, unreadable: [] }
+const NO_CHANGES = { plugins: [], bundles: [], builds: [], exemptions: [], patchChanged: false, homePatchChanged: false, unreadable: [] }
 
 function resultText(result: ToolExecutionResult): string {
   if (typeof result.value !== 'string') throw new Error('Expected a serialized manager result')
@@ -464,7 +464,7 @@ it('lists the plugins, builds and exemptions an undo or a restore changes in its
     bundles: [{ name: 'audited', selected: true }],
     builds: [{ name: 'audited', to: 'allowed' }, { name: 'native', from: 'allowed', to: 'denied' }],
     exemptions: [{ packageVersion: 'audited@1.0.0', runtimeVersion: '0.2.2', change: 'added' }],
-    patchChanged: true, unreadable: [],
+    patchChanged: true, homePatchChanged: false, unreadable: [],
   } })
   expect((await call({ action: 'restore', target: 'b'.repeat(40) }, agent)).isError).toBe(false)
   expect(history.previewRestore).toHaveBeenCalledWith('b'.repeat(40))
@@ -504,7 +504,7 @@ it('reads no preview for an undo or a restore that full access runs without a pr
 it('describes each kind of change an undo or a restore makes', () => {
   expect(tool.describeChanges({
     plugins: [{ name: 'gone', change: 'removed', from: '1.0.0' }], bundles: [{ name: 'gone', selected: false }], builds: [],
-    exemptions: [{ packageVersion: 'gone@1.0.0', runtimeVersion: '0.2.2', change: 'removed' }], patchChanged: false, unreadable: ['package.json'],
+    exemptions: [{ packageVersion: 'gone@1.0.0', runtimeVersion: '0.2.2', change: 'removed' }], patchChanged: false, homePatchChanged: false, unreadable: ['package.json'],
   })).toBe('plugins: removes gone 1.0.0; bundles: deselects gone; version exemptions: revokes gone@1.0.0 on DSH 0.2.2; files it cannot read, whose changes are not listed: package.json')
 })
 

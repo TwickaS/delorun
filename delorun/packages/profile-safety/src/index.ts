@@ -80,6 +80,16 @@ export {
 } from './record.ts'
 
 export {
+  mirrorHomePatch,
+  ProfileHomePatch,
+  readHomePatch,
+  readHomePatchCopy,
+  restoreHomePatchCopy,
+  writeHomePatch,
+  type HomePatchWhere,
+} from './home-patch.ts'
+
+export {
   applyRestore,
   currentFiles,
   HISTORY_TIMEOUT_MS,

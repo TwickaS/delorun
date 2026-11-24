@@ -53,7 +53,7 @@ import type {
   PluginRegistries, PluginSpecInspection, PluginUpdateResult, PluginUpdateStep, PluginVersion, PluginVersionList, Registry,
   RegistryAttempt, UpdateBundleOptions, PluginAudit, PluginAuditResult, ProfileChangedBy, ProfileHistoryInfo, ProfileVersion,
   PackFolderCheck, ProfileVersionChanges, ProfileVersionId, ProfileVersionPreview,
-  PluginOperation, PluginOperationId,
+  PluginOperation, PluginOperationId, ProfileHomePatch,
 } from './types.ts'
 export type * from './types.ts'
 export { classifyInstallFailure, type InstallFailureFacts } from './install-failure.ts'
@@ -331,6 +331,8 @@ declare module '@deepseek-ai/cordis' {
     pluginManager: PluginManager
     /** The distribution's plugin audit, which the manager asks before it selects or enables a bundle; optional. */
     pluginAudit: PluginAudit
+    /** The home patch's half of a profile version, which the manager mirrors before a version and writes back on a restore; optional. */
+    profileHomePatch: ProfileHomePatch
   }
 }
 
@@ -378,7 +380,10 @@ export class PluginManager extends TypertRemoteService {
   private readonly githubConnectionTimeoutMs: number
   private readonly gitTransportTimeoutMs: number
   private readonly idleTimeoutMs: number
-  private readonly versions: ProfileHistory
+  /** The history, built on first use so it can track the home patch's copy when the distribution provides one. */
+  private opened: ProfileHistory | undefined
+  private readonly gitCommand: string
+  private readonly historyTimeoutMs: number
   private readonly pnpmCommand: string
   private readonly versionListLimit: number
   private readonly versionLookupConcurrency: number
@@ -405,8 +410,8 @@ export class PluginManager extends TypertRemoteService {
     this.idleTimeoutMs = (config as Required<Config>).idleTimeoutMs
     this.pnpmCommand = (config as Required<Config>).pnpmCommand
     const { gitCommand, historyTimeoutMs } = config as Required<Config>
-    this.versions = new ProfileHistory(this.profile.dir, PROFILE_FILES, gitCommand, historyTimeoutMs,
-      files => ctx.bail('plugin-manager/before-record', files))
+    this.gitCommand = gitCommand
+    this.historyTimeoutMs = historyTimeoutMs
     this.versionListLimit = (config as Required<Config>).versionListLimit
     this.versionLookupConcurrency = (config as Required<Config>).versionLookupConcurrency
     this.configuredRegistries = {
@@ -480,11 +485,62 @@ export class PluginManager extends TypertRemoteService {
     }
   }
 
+  /**
+   * The home patch's half of a version, read when a call needs it: the distribution provides it as `profileHomePatch`,
+   * and a profile without one saves versions of its own files alone, as upstream's does.
+   * @returns the service, or undefined when the distribution provides none.
+   */
+  private homePatch(): ProfileHomePatch | undefined {
+    return this.ownerContext.get('profileHomePatch')
+  }
+
+  /**
+   * The profile files the history tracks: upstream's five, and the home patch's copy when the distribution provides
+   * one, so a version covers both patch layers.
+   * @returns the file names, relative to the profile directory.
+   */
+  private trackedFiles(): readonly string[] {
+    const homePatch = this.homePatch()
+    return homePatch === undefined ? PROFILE_FILES : [...PROFILE_FILES, homePatch.copyFilename]
+  }
+
+  /**
+   * The profile's history, opened on first use over {@link trackedFiles}, so a service the distribution provides after
+   * this manager is constructed is still tracked.
+   * @returns the history.
+   */
+  private versions(): ProfileHistory {
+    this.opened ??= new ProfileHistory(this.profile.dir, this.trackedFiles(), this.gitCommand, this.historyTimeoutMs,
+      files => this.ownerContext.bail('plugin-manager/before-record', files))
+    return this.opened
+  }
+
+  /**
+   * Save a version of the profile's files, with the home patch's copy mirrored first when the distribution provides
+   * one, so the version covers both patch layers. A version the admission refuses puts the copy back as it was.
+   * @param summary - what changed, which is the version's subject.
+   * @param changedBy - who changed it.
+   * @returns the new version's id, or undefined when nothing changed.
+   * @throws HistoryUnavailableError when git cannot keep the history; {@link VersionRefusedError} when the admission
+   *   refuses the version.
+   */
+  private async recordVersion(summary: string, changedBy: ProfileChangedBy): Promise<ProfileVersionId | undefined> {
+    const homePatch = this.homePatch()
+    if (homePatch === undefined) return await this.versions().record(summary, changedBy)
+    const previous = await homePatch.mirror()
+    try {
+      return await this.versions().record(summary, changedBy)
+    } catch (error) {
+      if (error instanceof VersionRefusedError) await homePatch.restoreCopy(previous)
+      throw error
+    }
+  }
+
   // Saved under the profile's lock, which the editor released before announcing the edit.
   private async recordEdit(entryId: string, changedBy: ProfileChangedBy): Promise<void> {
     try {
       await withFileLock(join(this.profile.dir, 'package.json'),
-        () => this.versions.record(`Changed the settings of ${entryId}`, changedBy), { waitMs: this.lockWaitMs })
+        () => this.recordVersion(`Changed the settings of ${entryId}`, changedBy), { waitMs: this.lockWaitMs })
     } catch (error) {
       // The edit is saved and applied; a version that cannot be written only means it cannot be undone or restored.
       this.ownerContext.logger.warn(`the profile's history could not save the settings of ${entryId}: ${messageOf(error)}`)
@@ -537,11 +593,11 @@ export class PluginManager extends TypertRemoteService {
     let summary = ''
     return this.change(result => this.configure(async () => {
       const { value: { latest, previous }, unsaved } = await this.readHistory(async () => {
-        const [latest, previous] = await this.versions.list(2)
-        return { latest: latest === undefined ? undefined : { ...latest, files: await this.versions.filesAt(latest.id) }, previous }
+        const [latest, previous] = await this.versions().list(2)
+        return { latest: latest === undefined ? undefined : { ...latest, files: await this.versions().filesAt(latest.id) }, previous }
       })
       const current = this.profileFiles()
-      if (unsaved !== undefined && latest !== undefined && PROFILE_FILES.some(name => current.get(name) !== latest.files.get(name))) {
+      if (unsaved !== undefined && latest !== undefined && this.trackedFiles().some(name => current.get(name) !== latest.files.get(name))) {
         result.restored = { version: latest.id, summary: latest.summary }
         summary = 'Undid an edit made outside plugin management that the history did not save'
         await this.restoreVersion(latest.id, result)
@@ -567,7 +623,7 @@ export class PluginManager extends TypertRemoteService {
   restore(version: ProfileVersionId): Promise<ChangeResult> {
     let summary = ''
     return this.change(result => this.configure(async () => {
-      const { value: held } = await this.readHistory(() => this.versions.version(version))
+      const { value: held } = await this.readHistory(() => this.versions().version(version))
       if (held === undefined) throw new ManagementFailure('unknown-version')
       result.restored = { version: held.id, summary: held.summary }
       summary = `Restored the version "${held.summary}"`
@@ -587,7 +643,7 @@ export class PluginManager extends TypertRemoteService {
     return withFileLock(join(this.profile.dir, 'package.json'), async (): Promise<ProfileHistoryInfo> => {
       try {
         const unsaved = await this.recordOutsideEdit()
-        return { available: true, versions: await this.versions.list(limit), ...unsaved === undefined ? {} : { unsaved } }
+        return { available: true, versions: await this.versions().list(limit), ...unsaved === undefined ? {} : { unsaved } }
       } catch (error) {
         // Every failure of the history is a HistoryUnavailableError.
         return { available: false, reason: messageOf(error) }
@@ -604,7 +660,7 @@ export class PluginManager extends TypertRemoteService {
   async listHistory(limit: number): Promise<ProfileHistoryInfo> {
     if (!Number.isInteger(limit) || limit < 1 || limit > 500) throw new RangeError('limit must be an integer from 1 to 500')
     try {
-      return { available: true, versions: await this.versions.list(limit) }
+      return { available: true, versions: await this.versions().list(limit) }
     } catch (error) {
       // Every failure of the history is a HistoryUnavailableError.
       return { available: false, reason: messageOf(error) }
@@ -620,9 +676,9 @@ export class PluginManager extends TypertRemoteService {
   async previewUndo(): Promise<ProfileVersionPreview> {
     const current = this.profileFiles()
     return this.preview(current, async () => {
-      const [latest, previous] = await this.versions.list(2)
+      const [latest, previous] = await this.versions().list(2)
       if (latest === undefined) return undefined
-      const atLatest = await this.versions.filesAt(latest.id)
+      const atLatest = await this.versions().filesAt(latest.id)
       const outside = PROFILE_FILES.some(name => current.get(name) !== atLatest.get(name))
       return outside ? latest : previous
     }, 'nothing-to-undo')
@@ -634,7 +690,7 @@ export class PluginManager extends TypertRemoteService {
    * @returns the version and what it changes, or the refusal restore would end with.
    */
   async previewRestore(version: ProfileVersionId): Promise<ProfileVersionPreview> {
-    return this.preview(this.profileFiles(), () => this.versions.version(version), 'unknown-version')
+    return this.preview(this.profileFiles(), () => this.versions().version(version), 'unknown-version')
   }
 
   /** Compare the files now with the target version's; only the history's reads become `history-unavailable`. */
@@ -647,15 +703,33 @@ export class PluginManager extends TypertRemoteService {
     try {
       held = await target()
       if (held === undefined) return { ok: false, error: { code: missing } }
-      files = await this.versions.filesAt(held.id)
+      files = await this.versions().filesAt(held.id)
     } catch (error) {
       // Every failure of the history is a HistoryUnavailableError.
       return { ok: false, error: { code: 'history-unavailable', diagnostic: messageOf(error) } }
     }
-    const changes = profileVersionChanges(current, files)
+    const changes = { ...profileVersionChanges(current, files), homePatchChanged: await this.homePatchDiffers(held.id) }
     const pack = await this.packOutsideItsFolder(changes)
     if (pack !== undefined) return { ok: false, error: { code: 'operation-error', diagnostic: pack } }
     return { ok: true, version: { version: held.id, summary: held.summary }, changes }
+  }
+
+  /**
+   * Whether a version's home patch differs from the home's now, so a restore of it would replace a value the person set
+   * there since.
+   * @param version - the version.
+   * @returns true when the version holds a home patch that differs from the home's; false without a `profileHomePatch`
+   *   service, and for a version that holds none.
+   */
+  private async homePatchDiffers(version: ProfileVersionId): Promise<boolean> {
+    const homePatch = this.homePatch()
+    if (homePatch === undefined) return false
+    try {
+      return await homePatch.differs(version)
+    } catch (error) {
+      // A home patch that cannot be read is reported as a history failure, as the version's own files are.
+      throw new ManagementFailure('history-unavailable', undefined, messageOf(error))
+    }
   }
 
   /**
@@ -692,9 +766,9 @@ export class PluginManager extends TypertRemoteService {
     return undefined
   }
 
-  /** The managed files as they are now; an absent file reads as undefined. */
+  /** The tracked files as they are now; an absent file reads as undefined. */
   private profileFiles(): Map<string, string | undefined> {
-    return new Map(PROFILE_FILES.map((name) => {
+    return new Map(this.trackedFiles().map((name) => {
       try { return [name, readFileSync(join(this.profile.dir, name), 'utf8')] }
       catch (error) {
         if ((error as NodeJS.ErrnoException).code === 'ENOENT') return [name, undefined]
@@ -711,7 +785,7 @@ export class PluginManager extends TypertRemoteService {
    */
   private async recordOutsideEdit(): Promise<string | undefined> {
     try {
-      await this.versions.record(OUTSIDE_SUMMARY, { kind: 'outside' })
+      await this.recordVersion(OUTSIDE_SUMMARY, { kind: 'outside' })
       return undefined
     } catch (error) {
       if (!(error instanceof VersionRefusedError)) throw error
@@ -747,8 +821,8 @@ export class PluginManager extends TypertRemoteService {
    */
   private async restoreVersion(version: ProfileVersionId, result: ChangeResult): Promise<void> {
     const current = this.profileFiles()
-    const { value: files } = await this.readHistory(() => this.versions.filesAt(version))
-    const changes = profileVersionChanges(current, files)
+    const { value: files } = await this.readHistory(() => this.versions().filesAt(version))
+    const changes = { ...profileVersionChanges(current, files), homePatchChanged: await this.homePatchDiffers(version) }
     result.changes = changes
     const pack = await this.packOutsideItsFolder(changes)
     if (pack !== undefined) throw new ManagementFailure('operation-error', undefined, pack)
@@ -768,6 +842,8 @@ export class PluginManager extends TypertRemoteService {
         await writeProfileVersion(this.profile.dir, current)
         throw error
       }
+      // The home patch is written once every check has passed, so a refused restore leaves the home layer as it was.
+      await this.homePatch()?.restore(version)
       Object.assign(result, await this.publishAndReload())
       return
     }
@@ -801,6 +877,8 @@ export class PluginManager extends TypertRemoteService {
     // Asked again once the builds have run, so an audit that records the installed files records their output too.
     await this.auditRestored(audited)
     for (const plugin of changes.plugins) if (plugin.change === 'removed') this.installedFrom.delete(plugin.name)
+    // The home patch is written once every check has passed, so a refused restore leaves the home layer as it was.
+    await this.homePatch()?.restore(version)
     Object.assign(result, await this.publishAndReload())
   }
 
@@ -1931,7 +2009,7 @@ export class PluginManager extends TypertRemoteService {
         this.abort.signal.throwIfAborted()
         // An edit made outside plugin management is its own version, so this change's version, and an undo, hold only it.
         const warnings: string[] = []
-        await this.versions.record(OUTSIDE_SUMMARY, { kind: 'outside' }).catch((error: unknown) => {
+        await this.recordVersion(OUTSIDE_SUMMARY, { kind: 'outside' }).catch((error: unknown) => {
           warnings.push(`the profile's history could not save an earlier edit: ${messageOf(error)}`)
         })
         const before = this.diskState()
@@ -1954,7 +2032,7 @@ export class PluginManager extends TypertRemoteService {
         result.changed = before !== this.diskState()
         if (result.changed) {
           // The change itself is saved; a version that cannot be written only means it cannot be undone or restored.
-          await this.versions.record(summary(result), this.changedBy()).catch((error: unknown) => {
+          await this.recordVersion(summary(result), this.changedBy()).catch((error: unknown) => {
             warnings.push(`the profile's history could not save this change: ${messageOf(error)}`)
           })
         }
@@ -2010,7 +2088,7 @@ export class PluginManager extends TypertRemoteService {
   }
 
   private diskState(): string {
-    return PROFILE_FILES.map((file) => {
+    return this.trackedFiles().map((file) => {
       try { return readFileSync(join(this.profile.dir, file), 'utf8') }
       catch (error) {
         if ((error as NodeJS.ErrnoException).code === 'ENOENT') return ''

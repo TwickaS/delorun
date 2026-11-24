@@ -117,6 +117,43 @@ export interface PluginAudit {
 }
 
 /**
+ * The home patch's half of a profile version, a Service Definition: the patch layer at the Harness home
+ * (`cordis.patch.yml`), which applies over every profile's own layer and which the history's work tree, the profile
+ * directory, cannot hold. A distribution provides it as `profileHomePatch`; the manager then mirrors the home patch
+ * into the profile before it saves a version, so a version covers both patch layers, and writes a version's home patch
+ * back when it restores one. Without one, a version covers the profile's files alone, as upstream's does.
+ */
+export interface ProfileHomePatch {
+  /**
+   * The profile file a version holds the home patch in, relative to the profile directory. The history tracks it
+   * beside the managed files, so a version covers both patch layers.
+   */
+  readonly copyFilename: string
+  /**
+   * Write the home patch's current text into the profile, so the version saved next holds the home layer.
+   * @returns the text the profile held before, so a version the admission refuses can put it back.
+   */
+  mirror(): Promise<string | undefined>
+  /**
+   * Put the profile's copy of the home patch back as it was, after a version the admission refused.
+   * @param text - what `mirror` returned.
+   */
+  restoreCopy(text: string | undefined): Promise<void>
+  /**
+   * Whether a version's home patch differs from the home's now.
+   * @param version - the version.
+   * @returns true when the version holds a home patch that differs from the home's.
+   */
+  differs(version: ProfileVersionId): Promise<boolean>
+  /**
+   * Write a version's home patch to the home.
+   * @param version - the version.
+   * @returns whether the home patch changed.
+   */
+  restore(version: ProfileVersionId): Promise<boolean>
+}
+
+/**
  * Why a change waits for the next start: `no-hmr` profiles apply changes only at startup; `package-moved` changes map an
  * installed package to another directory without removing it first, or change or locally override a package the DSH
  * installation provides; `host-module` changes reach
@@ -560,8 +597,9 @@ export interface ProfileExemptionChange {
 /**
  * What putting the profile back as one version held it changes, compared with the profile's files now: the
  * dependencies, the bundle selection, the pnpm build decisions and the version exemptions. `patchChanged` says
- * whether the profile patch (`cordis.patch.yml`) differs; `unreadable` names the files on either side that could not
- * be parsed, whose changes are not listed.
+ * whether the profile patch (`cordis.patch.yml`) differs; `homePatchChanged` says whether the home patch the version
+ * holds differs from the home's, so a restore would replace a value the person set there since; `unreadable` names the
+ * files on either side that could not be parsed, whose changes are not listed.
  */
 export interface ProfileVersionChanges {
   readonly plugins: readonly ProfilePluginChange[]
@@ -570,6 +608,11 @@ export interface ProfileVersionChanges {
   readonly builds: readonly ProfileBuildChange[]
   readonly exemptions: readonly ProfileExemptionChange[]
   readonly patchChanged: boolean
+  /**
+   * Whether the home patch the version holds differs from the home's, so the restore writes it; false without a
+   * `profileHomePatch` service.
+   */
+  readonly homePatchChanged: boolean
   readonly unreadable: readonly string[]
 }
 
