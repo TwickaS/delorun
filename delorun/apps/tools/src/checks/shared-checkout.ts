@@ -12,10 +12,28 @@
  * because a gate can be left out with `DELORUN_PUSH_SKIP` and covered by a tree pass recorded before the shared
  * checkout was touched; a refusal before the plan can be neither skipped nor cached.
  *
+ * Git exports `GIT_DIR` and `GIT_WORK_TREE` to a hook, so a plain `git status` in the shared checkout would read the
+ * pushing worktree's index against the shared checkout's tree and report the pusher's own files as the shared tree's
+ * changes. Every read here therefore runs git with those variables removed, so it sees the shared checkout's own state.
+ *
  * @module @delorun/tools/checks/shared-checkout
  */
 import { resolve } from 'node:path'
 import { git } from '../git.ts'
+
+/** The variables git exports to a hook, which would point a read at the pushing worktree instead of the shared checkout. */
+const HOOK_GIT_VARIABLES = ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_OBJECT_DIRECTORY', 'GIT_COMMON_DIR'] as const
+
+/**
+ * The environment for a git read of a worktree other than the one the process runs in.
+ * @param env - the process's environment.
+ * @returns the environment without the variables git exports to a hook.
+ */
+export function worktreeEnvironment(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const clean = { ...env }
+  for (const name of HOOK_GIT_VARIABLES) delete clean[name]
+  return clean
+}
 
 /** How many paths a refusal names before it counts the rest. */
 const NAMED = 3
@@ -36,7 +54,7 @@ export interface WorktreeDirt {
  * @returns the absolute path, or undefined when git lists no worktree.
  */
 export function mainWorktree(root: string): string | undefined {
-  const first = git(root, ['worktree', 'list', '--porcelain']).split('\n').find(line => line.startsWith('worktree '))
+  const first = git(root, ['worktree', 'list', '--porcelain'], worktreeEnvironment()).split('\n').find(line => line.startsWith('worktree '))
   return first === undefined ? undefined : first.slice('worktree '.length)
 }
 
@@ -47,7 +65,7 @@ export function mainWorktree(root: string): string | undefined {
  * @throws Error when git cannot read the worktree.
  */
 export function worktreeDirt(path: string): WorktreeDirt {
-  const entries = git(path, ['status', '--porcelain', '-z', '--untracked-files=all']).split('\0').filter(entry => entry.length > 0)
+  const entries = git(path, ['status', '--porcelain', '-z', '--untracked-files=all'], worktreeEnvironment()).split('\0').filter(entry => entry.length > 0)
   const tracked: string[] = []
   const untracked: string[] = []
   for (let index = 0; index < entries.length; index += 1) {

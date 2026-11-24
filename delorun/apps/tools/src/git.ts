@@ -34,10 +34,11 @@ export interface GitBytesRun {
  * @param cwd - the directory to run in.
  * @param args - git's arguments.
  * @param input - text written to git's standard input; omitted to leave the stream closed.
+ * @param env - the environment git runs in; omitted to inherit this process's.
  * @returns the exit status and the captured output.
  */
-export function runGit(cwd: string, args: readonly string[], input?: string): GitRun {
-  const result = spawnSync('git', args, { cwd, encoding: 'utf8', maxBuffer: MAX_BUFFER, ...input === undefined ? {} : { input } })
+export function runGit(cwd: string, args: readonly string[], input?: string, env?: NodeJS.ProcessEnv): GitRun {
+  const result = spawnSync('git', args, { cwd, encoding: 'utf8', maxBuffer: MAX_BUFFER, ...input === undefined ? {} : { input }, ...env === undefined ? {} : { env } })
   if (result.error !== undefined) throw result.error
   return { status: result.status, stdout: result.stdout, stderr: result.stderr }
 }
@@ -60,10 +61,11 @@ export function runGitBytes(cwd: string, args: readonly string[], input?: string
  * Run git and return its standard output; a nonzero exit throws with git's error text.
  * @param cwd - the directory to run in.
  * @param args - git's arguments.
+ * @param env - the environment git runs in; omitted to inherit this process's.
  * @returns the output as git wrote it, so a NUL-separated listing keeps its last entry.
  */
-export function git(cwd: string, args: readonly string[]): string {
-  const run = runGit(cwd, args)
+export function git(cwd: string, args: readonly string[], env?: NodeJS.ProcessEnv): string {
+  const run = runGit(cwd, args, undefined, env)
   if (run.status !== 0) throw new Error(`git ${args.join(' ')} exited ${String(run.status)}: ${run.stderr.trim()}`)
   return run.stdout
 }

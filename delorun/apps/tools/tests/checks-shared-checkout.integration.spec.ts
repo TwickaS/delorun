@@ -6,7 +6,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it, type TestContext } from 'vitest'
-import { mainWorktree, sharedCheckoutDirt, sharedCheckoutNote, sharedCheckoutRefusal, worktreeDirt } from '../src/checks/shared-checkout.ts'
+import { mainWorktree, sharedCheckoutDirt, sharedCheckoutNote, sharedCheckoutRefusal, worktreeDirt, worktreeEnvironment } from '../src/checks/shared-checkout.ts'
 import { refuseSharedCheckout } from '../src/run-checks.ts'
 import { scratchRepo, type Scratch } from './gates/support.ts'
 
@@ -91,6 +91,29 @@ describe('the shared checkout guard', () => {
     expect(warned[0]).toContain('stray.pyc')
     writeFileSync(join(main.root, 'README.md'), '')
     expect(() => { refuseSharedCheckout(linked, line => warned.push(line)) }).toThrow(/has uncommitted changes to README\.md/)
+  })
+
+  it('reads the shared checkout\'s own state when git exports a hook\'s GIT_DIR and GIT_WORK_TREE', (test) => {
+    const { main, linked } = cloneWithWorktree(test)
+    // A hook runs with the pushing worktree's git directory exported, which a plain `git status` would apply to the
+    // shared checkout and report the pusher's own files as its changes.
+    const hookEnv = { ...process.env, GIT_DIR: join(main.root, '.git', 'worktrees', 'lane'), GIT_WORK_TREE: linked }
+    expect(worktreeEnvironment(hookEnv)).not.toHaveProperty('GIT_DIR')
+    expect(worktreeEnvironment(hookEnv)).not.toHaveProperty('GIT_WORK_TREE')
+    expect(worktreeEnvironment(hookEnv)['PATH']).toBe(process.env['PATH'])
+    // The shared checkout is clean, and the pushing worktree's own uncommitted file must not be reported as its dirt.
+    writeFileSync(join(linked, 'lane-only.ts'), 'export const lane = 1\n')
+    const saved = { GIT_DIR: process.env['GIT_DIR'], GIT_WORK_TREE: process.env['GIT_WORK_TREE'] }
+    process.env['GIT_DIR'] = hookEnv.GIT_DIR
+    process.env['GIT_WORK_TREE'] = hookEnv.GIT_WORK_TREE
+    try {
+      expect(sharedCheckoutRefusal(linked)).toBeUndefined()
+    } finally {
+      for (const [name, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[name]
+        else process.env[name] = value
+      }
+    }
   })
 
   it('names three paths and counts the rest', (test) => {
