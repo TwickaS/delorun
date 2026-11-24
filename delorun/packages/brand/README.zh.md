@@ -61,7 +61,7 @@ kind: "package-library"
 | `Button` | `Button` | `primary`、`secondary`、`destructive`、`ghost` 四种变体；按下时缩小，仅在精确指针下有悬停效果，焦点环，以及 `unavailable`：`aria-disabled`、仍可获得焦点、按下和悬停都不变化、文字达到 AA 可读 |
 | `TextField` | `Input` | 可见标签、用 `aria-describedby` 关联的帮助行和错误行，错误会被朗读 |
 | `Pill` | `Pill` | 色调 |
-| `Dialog` | `Modal` | 操作区页脚和 `warning` 色调 |
+| `Dialog` | `Modal` | 操作区页脚和 `warning` 色调；`className` 和 `contentClassName` 作用于卡片本身和标题周围的内容区；`headless` 在卡片里直接绘制调用方自己的框架，没有标题、关闭按钮和操作区 |
 | `Card` | 无 | 由 `<h3>` 命名的带边框分区 |
 | `Alert` | none | The studio's alert: kinds `info`, `success`, `warning`, `error` and `progress`, each with its own glyph in a tinted circle; a title, one muted line, a tinted primary and a quiet secondary action, an optional close; `inline`, `toast` and `banner` variants; role `alert` for a warning or an error and `status` otherwise unless the caller names one; `closing` plays the leave and `onClosed` reports its end. It holds no styles: `@delorun/plugin-theme` styles `ALERT_CLASSES` while the Delorun look is on (its README, "Alerts and pop-ups") |
 | `Notice` | 无 | 四种色调、可选图标、标题、说明和操作，实时区域角色由调用方选择 |

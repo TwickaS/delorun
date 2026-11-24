@@ -25,8 +25,12 @@ export function Pill({ active = false, className, children, onClick, ...rest }: 
   return <button type="button" className={join(css.pill, css.interactive, active && css.active, className)} onClick={onClick} {...rest}>{children}</button>
 }
 
-/** A modal `<dialog>` with a heading, a close button, a body and a footer; Escape and the close button call `onClose`. */
-export function Modal({ open, onClose, title, closeLabel, description, children, footer }: { open: boolean, onClose: () => void, title: string, closeLabel?: string, description?: string | undefined, children?: ReactNode, footer?: ReactNode, tone?: string | undefined }) {
+/**
+ * A modal `<dialog>` with a heading, a close button, a body and a footer; Escape and the close button call `onClose`.
+ * A headless one draws the children alone in the card, and `className` and `contentClassName` reach the card and the
+ * region around the header, as upstream's do.
+ */
+export function Modal({ open, onClose, title, closeLabel, description, children, footer, headless = false, className, contentClassName }: { open: boolean, onClose: () => void, title: string, closeLabel?: string, description?: string | undefined, children?: ReactNode, footer?: ReactNode, tone?: string | undefined, headless?: boolean, className?: string | undefined, contentClassName?: string | undefined }) {
   const dialog = useRef<HTMLDialogElement>(null)
   useEffect(() => {
     const element = dialog.current
@@ -35,11 +39,13 @@ export function Modal({ open, onClose, title, closeLabel, description, children,
     if (!open && element.open) element.close()
   }, [open])
   return (
-    <dialog ref={dialog} className={css.dialog} aria-label={title} onCancel={(event) => { event.preventDefault(); onClose() }}>
-      {open ? <>
-        <h2 className={css.heading}>{title}</h2>
-        {description === undefined ? null : <p className={css.description}>{description}</p>}
-        <div>{children}</div>
+    <dialog ref={dialog} className={join(css.dialog, className)} aria-label={title} onCancel={(event) => { event.preventDefault(); onClose() }}>
+      {open ? headless ? children : <>
+        <div className={contentClassName}>
+          <h2 className={css.heading}>{title}</h2>
+          {description === undefined ? null : <p className={css.description}>{description}</p>}
+          <div>{children}</div>
+        </div>
         {footer === undefined ? null : <div className={css.footer}>{footer}</div>}
         {closeLabel === undefined ? null : <button type="button" className={css.close} aria-label={closeLabel} onClick={onClose}>×</button>}
       </> : null}

@@ -7,13 +7,18 @@ const css = (name: string): string => readFileSync(new URL(name, import.meta.url
 const PAGE = css('../assets/sign-in.css')
 const TOKENS = css('../../brand/src/tokens.css')
 
-/** The light and dark colour of a `--dl-*` token declared with `light-dark()` or as one value. */
+/**
+ * The light and dark colour of a `--dl-*` token declared with `light-dark()`, as one value, or as a studio role with a
+ * brand fallback. The page has no studio, so a role is undefined and the fallback is the colour it draws.
+ */
 function token(name: string, scheme: 'light' | 'dark'): string {
   const line = new RegExp(`--${name}:\\s*([^;]+);`).exec(TOKENS)?.[1] ?? ''
   const pair = /light-dark\((#[0-9A-Fa-f]{6}),\s*(#[0-9A-Fa-f]{6})\)/.exec(line)
   if (pair !== null) return (scheme === 'light' ? pair[1] : pair[2]) as string
   const direct = /^(#[0-9A-Fa-f]{6})$/.exec(line.trim())
   if (direct !== null) return direct[1] as string
+  const fallback = /var\(--[\w-]+,\s*(#[0-9A-Fa-f]{6})\)/.exec(line)
+  if (fallback !== null) return fallback[1] as string
   const peach = /var\(--dl-peach\)\)?$/.test(line.trim()) || line.includes('var(--dl-peach)') ? token('dl-peach', scheme) : ''
   return peach
 }

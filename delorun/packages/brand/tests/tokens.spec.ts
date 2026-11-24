@@ -31,7 +31,6 @@ describe('the brand colours', () => {
     const css = read('../src/tokens.css')
     expect(css).toContain(`--dl-peach: ${BRAND_COLOURS.peach};`)
     expect(css).toContain(`light-dark(${BRAND_COLOURS.peachText}, ${BRAND_COLOURS.peach})`)
-    expect(css).toContain(`--dl-on-accent: ${BRAND_COLOURS.onPeach};`)
     expect(css).toContain(`--dl-surface: var(--dsw-alias-bg-base, light-dark(${BRAND_SURFACE.light}, ${BRAND_SURFACE.dark}))`)
     for (const [name, px] of Object.entries(BRAND_RADII)) expect(css).toContain(`var(--dsw-radius-${name}, ${px}px)`)
     expect(css).toContain(BRAND_FONTS.sans.split(',')[0])
@@ -46,6 +45,49 @@ describe('the brand colours', () => {
 
   it('are the studio theme plugin default accent', () => {
     expect(read('../../plugin-theme/src/config.ts')).toContain(`DEFAULT_CUSTOM_ACCENT = '${BRAND_COLOURS.peach}'`)
+  })
+})
+
+/** The studio's accent fills and the ink it puts on each, from the looks stylesheet the Theme plugin generates. */
+const LOOKS = read('../../site-design/src/looks.css')
+
+/** The light and dark value of a `--look-*` role in one custom accent's block. */
+function accentRole(accent: string, role: string): [string, string] {
+  const block = new RegExp(`\\[data-look="custom"\\]\\[data-accent="${accent}"\\] \\{([^}]*)\\}`).exec(LOOKS)?.[1]
+  if (block === undefined) throw new Error(`looks.css has no custom ${accent} block`)
+  const pair = new RegExp(`--look-${role}: light-dark\\((rgb\\([^)]*\\)), (rgb\\([^)]*\\))\\);`).exec(block)
+  if (pair === null) throw new Error(`looks.css has no --look-${role} for ${accent}`)
+  return [pair[1] as string, pair[2] as string]
+}
+
+/** A colour as six-digit hex, from `rgb(r g b)` or from hex. */
+function toHex(value: string): string {
+  const channels = /rgb\((\d+) (\d+) (\d+)\)/.exec(value)
+  if (channels === null) return value
+  return `#${channels.slice(1, 4).map(channel => Number(channel).toString(16).padStart(2, '0')).join('')}`
+}
+
+/** The WCAG contrast ratio of two colours, each `rgb(r g b)` or six-digit hex. */
+function rgbRatio(a: string, b: string): number {
+  return ratio(toHex(a), toHex(b))
+}
+
+describe('the ink on the accent fill', () => {
+  const ACCENTS = ['peach', 'cobalt', 'moss', 'mono'] as const
+
+  // A fixed ink is the peach ink, and peach is the one accent it reads on: it reaches 3.55:1 on Cobalt, 3.70:1 on Moss
+  // and 1.09:1 on Mono in light, against AA's 4.5:1. The token therefore reads the role the accent layer sets per accent.
+  it('reads the studio\'s foreground role, which the accent layer sets to ink or white per accent', () => {
+    expect(read('../src/tokens.css')).toContain(`--dl-on-accent: var(--dsw-alias-label-primary-foreground, ${BRAND_COLOURS.onPeach});`)
+  })
+
+  it('reaches AA on every accent in both schemes, because the role it reads is chosen for that accent', () => {
+    for (const accent of ACCENTS) {
+      const [lightFill, darkFill] = accentRole(accent, 'accent')
+      const [lightInk, darkInk] = accentRole(accent, 'on-accent')
+      expect(rgbRatio(lightInk, lightFill), `${accent} light`).toBeGreaterThanOrEqual(4.5)
+      expect(rgbRatio(darkInk, darkFill), `${accent} dark`).toBeGreaterThanOrEqual(4.5)
+    }
   })
 })
 

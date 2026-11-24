@@ -11,7 +11,7 @@ export const BRAND_COLOURS = {
   peach: '#E5734A',
   /** Peach darkened for text and links on a light page; 5.21:1 on white and 5.07:1 on #FCFCFC, above WCAG AA's 4.5:1. */
   peachText: '#B84A1B',
-  /** The text colour on a peach fill; 6.19:1, because white on peach reaches only 3.05:1. */
+  /** The fallback ink on a peach fill, for a page without a studio; 6.19:1, because white on peach reaches only 3.05:1. */
   onPeach: '#111110',
   /** The mark's nut on a light page. */
   ink: '#111110',

@@ -137,6 +137,25 @@ describe('Pill, ConfirmAction and Dialog', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(onClose).toHaveBeenCalled()
   })
+
+  it('puts the caller\'s class on the card and its content class on the region around the header', () => {
+    render(<Dialog open onClose={() => {}} title="Rename" closeLabel="Close" className="wide" contentClassName="scrolls">Body</Dialog>)
+    const card = screen.getByRole('dialog', { name: 'Rename' })
+    expect(card.classList.contains('wide')).toBe(true)
+    const content = card.querySelector('.scrolls')
+    expect(content).not.toBeNull()
+    expect(content?.textContent).toContain('Body')
+    expect(content?.contains(screen.getByRole('heading', { name: 'Rename' }))).toBe(true)
+  })
+
+  it('when headless draws the caller\'s own frame in the card, with no header, close button or action row', () => {
+    render(<Dialog open headless onClose={() => {}} title="A notice" className="frame" actions={<button type="button">Continue</button>}><h2>Our promise</h2></Dialog>)
+    const card = screen.getByRole('dialog', { name: 'A notice' })
+    expect(card.classList.contains('frame')).toBe(true)
+    expect(screen.getByRole('heading', { name: 'Our promise' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Continue' })).toBeNull()
+    expect(card.querySelector('h2')?.textContent).toBe('Our promise')
+  })
 })
 
 describe('SecretPair', () => {
