@@ -18,6 +18,7 @@ kind: "package-reference"
 - [约定](#contract)
 - [配置](#configuration)
 - [外观](#the-look)
+- [插件页面](#the-plugins-screen)
 - [Alerts and pop-ups](#alerts-and-pop-ups)
 - [stock 外观](#the-stock-look)
 - [调色板与署名](#palettes-and-attribution)
@@ -79,6 +80,16 @@ kind: "package-reference"
 
 <a id="the-stock-look"></a>
 
+<a id="the-plugins-screen"></a>
+
+## 插件页面
+
+外观开启期间，样式元素还带有针对上游「插件」页面的两组规则，插件还覆盖该页面文案中的一个词。stock 外观会移除这三者，于是上游的页面恢复原样。
+
+- **实验性插件控件。** 上游把该组的「更多」操作画成标题旁一个安静的文字链接，因此人无法看出它是一个控件，也无法知道它后面有多少插件。[`src/client/experimental-more.ts`](src/client/experimental-more.ts) 给它次要按钮的形状——上游自己的描边细线、`--dsw-radius-sm` 和间距令牌——并通过 `attr()` 显示页面在 `data-plugin-more-count` 中携带的数量，因此不从 Host 读取任何内容，也不运行观察器。数量是一个伪元素，可访问名称计算会包含它，所以屏幕阅读器只读一次「显示实验性插件 · 11」；箭头取 `order: 1`，使数量位于文字与箭头之间。不设置该属性的页面（例如较早的上游版本）不匹配任何数量规则，既不显示分隔符也不显示数量。标签本身是 `pluginManager` 命名空间的 `moreAction` 覆盖，英文为「Show experimental」，中文为「显示实验性插件」。
+- **按需安装的行。** Codex subagent 和 Claude Code subagent 是本版本的 `ON_DEMAND_BUNDLES`：它们在有人添加时才安装，因此 Host 把它们报告为不在 profile 中，并带上插件管理器的签名包拒绝信息，页面把它画成红色的「异常」标签。[`src/client/on-demand-rows.ts`](src/client/on-demand-rows.ts) 在这两行及其页面上隐藏该标签，改为在标题旁显示「按需安装」，文字由 [`src/client/on-demand-label.ts`](src/client/on-demand-label.ts) 从 `delorunPluginList` 字典写入 `--delorun-on-demand-label`，并随语言变化保持最新。只有当该行同时带有页面的「未安装」标签时才隐藏该标签，因此已安装且确实出错的包仍保留其红色标签。该行保留页面自己的「未安装」标签，以及 `@delorun/plugin-downloads` 为不在本机的包绘制的「添加」操作。名称来自上游自己的列表，因此加入或离开该列表的包无需在此改动。
+- **规则触及的表面**是上游的稳定表面：`data-plugin-group="extensions"`、`data-plugin-package`、`data-plugin-detail`，以及 `.groupMore`、`.statusTag` 和 `.titleRow` 类，CSS Modules 会为它们加哈希，规则按保留的后缀匹配。
+
 <a id="alerts-and-pop-ups"></a>
 
 ## Alerts and pop-ups
@@ -116,7 +127,7 @@ Soft 是 Delorun 自己的。T3 Code 的六个主题以 [`src/palette/t3-themes.
 - [`boot-settings.client.spec.tsx`](tests/boot-settings.client.spec.tsx) 读回已打印的设置，并拒绝缺少字段或含有配置不接受的字段的值。
 - [`alerts.client.spec.ts`](tests/alerts.client.spec.ts) holds the alert sheet to the `Alert` component's classes, the opaque fallbacks, transform-and-opacity motion that stops under reduced motion, and AA contrast on the glass.
 - [`studio.client.spec.tsx`](tests/studio.client.spec.tsx) 证明该开关：关闭时没有服务、层、style 元素、字体、部分或词汇，只注册「通用」行；开启时，服务、外观、hero 字标和四个「通用」行都存在，各行通过主题行的表单写入，外观离开或插件被释放之后，首次绘制元素消失；`useStockLook()` 会卸载依赖它的插件；没有已打印的设置时，Host 应答之前不注册任何内容；有已打印的设置时，外观和服务（因而依赖它的插件）在表单加载期间已就位，表单的第一次应答会取代它们，无效的已打印设置会被报告并忽略。
-- [`appearance.client.spec.tsx`](tests/appearance.client.spec.tsx)、[`appearance-rows.client.spec.tsx`](tests/appearance-rows.client.spec.tsx)、[`conversation.client.spec.tsx`](tests/conversation.client.spec.tsx)、[`look-row.client.spec.tsx`](tests/look-row.client.spec.tsx) 和 [`controller.client.spec.tsx`](tests/controller.client.spec.tsx) 渲染各部分、各行和控制器：每个控件写入其字段，标题指明各自的部分，「思考」选择框会打开所提供显示方式的菜单。
+- [`appearance.client.spec.tsx`](tests/appearance.client.spec.tsx)、[`appearance-rows.client.spec.tsx`](tests/appearance-rows.client.spec.tsx)、[`conversation.client.spec.tsx`](tests/conversation.client.spec.tsx)、[`look-row.client.spec.tsx`](tests/look-row.client.spec.tsx) 和 [`controller.client.spec.tsx`](tests/controller.client.spec.tsx) 渲染各部分、各行和控制器：每个控件写入其字段，标题指明各自的部分，「思考」选择框会打开所提供显示方式的菜单。 [`experimental-more.client.spec.tsx`](tests/experimental-more.client.spec.tsx) 检查「更多」控件的规则触及实验性插件组的控件而不触及页面上其他按钮，给它次要按钮的形状，只在页面设置该属性时显示数量，把数量放在箭头之前，并随 stock 外观一起离开。[`on-demand-rows.client.spec.tsx`](tests/on-demand-rows.client.spec.tsx) 检查规则触及本版本列出的每个按需安装包的行和页面，只在页面的「未安装」标签之下隐藏红色标签，显示文字，不触碰不是按需安装的包，把文字设为带引号的自定义属性并随语言变化更新，且随 stock 外观一起离开。
 
 <a id="limits"></a>
 

@@ -41,6 +41,10 @@ import { EdgeController } from './edges.ts'
 import { effortBarsCss } from './effort.ts'
 import { composerFocusCss } from './focus.ts'
 import { panelGlyphsCss } from './panel-glyphs.ts'
+import { experimentalMoreCss } from './experimental-more.ts'
+import { followOnDemandLabel } from './on-demand-label.ts'
+import { onDemandRowsCss } from './on-demand-rows.ts'
+import { en as pluginListEn, zh as pluginListZh, type PluginListLocaleKey } from './plugin-list-locales.ts'
 import { markMainLandmark } from './landmark.ts'
 import { COPY, COPY_ZH } from './copy.ts'
 import { VOCABULARY } from './vocabulary.ts'
@@ -99,6 +103,8 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'delorunBrand': BrandLocaleKey
     /** The workspace icon picker's copy. */
     'delorunIconPicker': IconPickerLocaleKey
+    /** The Plugins screen's Delorun additions: the Experimental plugins control and the on-demand rows. */
+    'delorunPluginList': PluginListLocaleKey
   }
 }
 
@@ -141,6 +147,9 @@ export const BRAND_NS = 'delorunBrand'
 
 /** The namespace of the workspace icon picker's copy. */
 export const PICKER_NS = 'delorunIconPicker'
+
+/** The namespace of the Plugins screen's Delorun additions. */
+export const PLUGIN_LIST_NS = 'delorunPluginList'
 
 /** Services the studio half uses. */
 export const inject = ['theme', 'slots', 'locale', 'configForms']
@@ -251,7 +260,7 @@ function registerStockEntry(ctx: Context, form: ConfigForm<ThemeSettings>): Regi
  * @returns the registration set, which leaves upstream's look in place again once disposed.
  */
 function registerStudio(ctx: Context, form: ConfigForm<ThemeSettings>, initial: ThemeSettings): Registration {
-  const controller = new ThemeController(ctx.theme, `${fonts}\n${effortBarsCss()}\n${composerFocusCss()}\n${panelGlyphsCss()}\n${alerts}`, document)
+  const controller = new ThemeController(ctx.theme, `${fonts}\n${effortBarsCss()}\n${composerFocusCss()}\n${panelGlyphsCss()}\n${experimentalMoreCss()}\n${onDemandRowsCss()}\n${alerts}`, document)
   const t = ctx.locale.bind(NS)
   const conversationT = ctx.locale.bind(CONVERSATION.ns)
   const useStockLook = (): Promise<boolean> => form.set('studioAdditions', false)
@@ -294,6 +303,9 @@ function registerStudio(ctx: Context, form: ConfigForm<ThemeSettings>, initial: 
     }, ConversationSection))),
     ctx.locale.register(BRANDING.ns, { en: brandingEn, zh: brandingZh }),
     ctx.locale.register(PICKER_NS, { en: pickerEn, zh: pickerZh }),
+    ctx.locale.register(PLUGIN_LIST_NS, { en: pluginListEn, zh: pluginListZh }),
+    // The on-demand rows state what they are, in the studio's language.
+    followOnDemandLabel(document, () => ctx.locale.bind(PLUGIN_LIST_NS)('onDemand'), listener => ctx.on('locale/change', () => { listener() })),
     // Priority -2 shadows the Delorun bundle's own brand occupants, which register at -1.
     ctx.slots.inject('sidebar.brand.mark', () => ctx.slots.register({ name: 'sidebar.brand.mark', priority: -2 }, SidebarBrandMark)),
     ctx.slots.inject('sidebar.brand.name', () => ctx.slots.register({ name: 'sidebar.brand.name', priority: -2 }, SidebarBrandName)),
@@ -304,6 +316,9 @@ function registerStudio(ctx: Context, form: ConfigForm<ThemeSettings>, initial: 
     // After the vocabulary, so a hand-written text wins over a generated one.
     ...Object.entries(COPY).map(([ns, english]) => ctx.locale.override(ns, 'en', english)),
     ...Object.entries(COPY_ZH).map(([ns, chinese]) => ctx.locale.override(ns, 'zh', chinese)),
+    // The Plugins screen's More control reads as a control that says what it opens.
+    ctx.locale.override('pluginManager', 'en', { moreAction: pluginListEn.moreAction }),
+    ctx.locale.override('pluginManager', 'zh', { moreAction: pluginListZh.moreAction }),
     ctx.provide('delorunStudio', studio),
     markMainLandmark(document),
   ]

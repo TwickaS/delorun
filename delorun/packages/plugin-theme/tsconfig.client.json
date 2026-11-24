@@ -47,6 +47,9 @@
     },
     {
       "path": "../../../packages/client/ui-conversation/tsconfig.client.json"
+    },
+    {
+      "path": "../../../packages/util/official-bundles"
     }
   ]
 }

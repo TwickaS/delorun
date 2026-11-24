@@ -12,8 +12,8 @@
   en: 505580d5cfa03755
   zh: 100dfd34b2e7ddc7
 /delorun-plugin-theme/contents:
-  en: 65eedb86c2f8c754
-  zh: 0d614d7dcefcbf6c
+  en: fd65286291760e25
+  zh: 11272cc8c06b1c87
 /delorun-plugin-theme/contract:
   en: ff3a955c9ffcf6d4
   zh: 2caf5ae033daf63e
@@ -22,7 +22,10 @@
   zh: 843535100ce8e43e
 /delorun-plugin-theme/the-look:
   en: 43753e3b23143e37
-  zh: e923bc63b979a7e5
+  zh: af6a3dd19845f292
+/delorun-plugin-theme/the-plugins-screen:
+  en: 72170eb6acedc8dc
+  zh: 9cf0f0a21486b0fe
 /delorun-plugin-theme/alerts-and-pop-ups:
   en: ca91cbecb2ec3618
   zh: ca91cbecb2ec3618
@@ -33,8 +36,8 @@
   en: ba77cf574f111890
   zh: 8b28441b3554800e
 /delorun-plugin-theme/tests:
-  en: d3d2ef7f790c3a5e
-  zh: 1dc7e47d251c0a55
+  en: 52f53e91c2f0bfa5
+  zh: caf09331911e0733
 /delorun-plugin-theme/limits:
   en: 87a57702d9aab5b9
   zh: 581aa9ba70bd9a36

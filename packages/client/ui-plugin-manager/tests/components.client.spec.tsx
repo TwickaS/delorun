@@ -1343,6 +1343,8 @@ describe('PluginManagerPage', () => {
       expect(within(basic).getAllByRole('listitem').map(card => card.getAttribute('data-plugin-item'))).toEqual(['bash'])
       expect(within(extensions).getByRole('heading', { name: en.extensionsTitle })).toBeTruthy()
       expect(within(extensions).getByRole('button', { name: en.moreAction }).textContent).toBe(en.moreAction)
+      // The More control states how many bundles its list holds, for a look that draws the count beside the words.
+      expect(within(extensions).getByRole('button', { name: en.moreAction }).getAttribute('data-plugin-more-count')).toBe('5')
       expect(within(extensions).getAllByRole('listitem').map(card => card.getAttribute('data-plugin-package')))
         .toEqual(['@deepseek-ai/dsh-experimental-voice-input-bundle', '@acme/new-official'])
       expect(document.querySelector('[data-plugin-count]')).toBeNull()
