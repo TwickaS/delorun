@@ -13,8 +13,8 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import type { ClipboardEvent, FormEvent, ReactNode } from 'react'
-import { Checkbox, IconCloseOutlineRegular, IconInfoOutlineRegular, IconWarningOutlineRegular, Modal, Toast } from '@deepseek-ai/dsh-client-ui-primitives'
-import { ALERT_CLASSES, CodeCells } from '@delorun/brand'
+import { Checkbox, IconCloseOutlineRegular, IconInfoOutlineRegular, IconWarningOutlineRegular, Toast } from '@deepseek-ai/dsh-client-ui-primitives'
+import { ALERT_CLASSES, CodeCells, Dialog } from '@delorun/brand'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { PAIRING_WRONG_CODES } from '@delorun/home-auth/wire'
 import type { PendingDevice } from './devices-api.ts'
@@ -282,7 +282,7 @@ export function PairingDialog({ t, request, place, total, hide, onClose, onDecli
   const wrong = request.wrongCodes === 0 ? undefined
     : triesLeft === 1 ? t('pairing.box.wrongLast') : t('pairing.box.wrong', { left: String(triesLeft) })
   const title = t('pairing.box.title')
-  return <Modal open headless title={title} onClose={onClose} className={css.dialog as string}>
+  return <Dialog open headless title={title} onClose={onClose} className={css.dialog as string}>
     <form className={css.frame} onSubmit={(event) => { void submit(event) }} noValidate>
       <header className={css.header}>
         <span className={css.icon} aria-hidden="true"><IconInfoOutlineRegular size={14} /></span>
@@ -334,5 +334,5 @@ export function PairingDialog({ t, request, place, total, hide, onClose, onDecli
         </div>
       </footer>
     </form>
-  </Modal>
+  </Dialog>
 }

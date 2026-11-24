@@ -10,7 +10,7 @@
  */
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button } from '@delorun/brand'
 import type { ApprovalActionOwnerProps } from '@deepseek-ai/dsh-client-ui-approval/client'
 import type { InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { AgentLevelView } from '@delorun/plugin-delegation-consent/wire'
@@ -65,7 +65,7 @@ function LevelChip({ provider, fetch, t, open }: { readonly provider: string; re
   }, [fetch, provider])
   if (view === undefined) return null
   const text = levelChipText(t, view)
-  return <Button variant="outline" size="sm" data-level-chip={view.level} aria-label={t('levels.chip.change', { agent: view.agent, level: text })} onClick={open}>{view.agent} · {text}</Button>
+  return <Button variant="secondary" size="sm" data-level-chip={view.level} aria-label={t('levels.chip.change', { agent: view.agent, level: text })} onClick={open}>{view.agent} · {text}</Button>
 }
 
 /**
@@ -102,7 +102,7 @@ export function ExternalAgentAction({ grants, toolName, allow, answered, canAnsw
     }
   }
   return <div className={css.action} data-external-agent-action="allow">
-    <Button variant="outline" size="sm" disabled={busy || answered || !canAnswer()} onClick={() => { void run() }}>{t('action.allowAgent')}</Button>
+    <Button variant="secondary" size="sm" disabled={busy || answered || !canAnswer()} onClick={() => { void run() }}>{t('action.allowAgent')}</Button>
     {chip}
     {failure === undefined ? null : <ConsentFailureLine t={t} failure={failure} action="action.changeAgent" />}
   </div>

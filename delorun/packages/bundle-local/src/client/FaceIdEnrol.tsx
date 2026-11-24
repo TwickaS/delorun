@@ -6,7 +6,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button } from '@delorun/brand'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { PasskeyBrowser } from './face-id-browser.ts'
 import type { FaceIdKind, PasskeyApi, PendingAdd } from './face-id-types.ts'
@@ -216,7 +216,7 @@ export function PasskeyCodeEntry({ t, api, onDone }: PasskeyCodeEntryProps): Rea
     {pending.length === 0 ? <p className={css.meta}>{t('code.none')}</p> : <p className={css.meta}>{t('code.body')}</p>}
     {pending.length > 1
       ? <div className={css.choices} role="group" aria-label={t('code.which')}>
-        {pending.map(entry => <Button key={entry.requestId} type="button" size="sm" variant={entry.requestId === target?.requestId ? 'primary' : 'outline'}
+        {pending.map(entry => <Button key={entry.requestId} type="button" size="sm" variant={entry.requestId === target?.requestId ? 'primary' : 'secondary'}
           onClick={() => { setChosen(entry.requestId); setMismatch(false) }}>{entry.deviceLabel}</Button>)}
       </div> : target === undefined ? null : <p className={css.meta}>{target.deviceLabel}</p>}
     <input className={css.field} type="text" inputMode="numeric" autoComplete="off" aria-label={t('code.label')} value={typed} disabled={target === undefined}

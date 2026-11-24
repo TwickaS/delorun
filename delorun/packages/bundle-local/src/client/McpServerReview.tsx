@@ -8,7 +8,7 @@
  * outlives the surface that asked.
  */
 import type { ReactNode } from 'react'
-import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, Dialog } from '@delorun/brand'
 import type { HostObservable, InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { acceptServer, type AcceptedServer, type PendingServer, type ServerChange } from './consents-api.ts'
 import { consentFailureOf, ConsentFailureLine, type ConsentFailure } from './FullAccessConsent.tsx'
@@ -179,9 +179,9 @@ export function McpServerReview({ useReview, confirm, cancel, t }: McpServerRevi
   const linked = linkedFile(server)
   // While the answer is recorded the review stays open, so its outcome is the one the person sees.
   const close = (): void => { if (!review.busy) cancel() }
-  return <Modal open onClose={close} title={t('mcp.confirm.title', { server: server.serverName })} closeLabel={t('mcp.confirm.close')}
-    footer={<>
-      <Button variant="outline" data-modal-autofocus disabled={review.busy} onClick={close}>{t('mcp.confirm.cancel')}</Button>
+  return <Dialog open onClose={close} title={t('mcp.confirm.title', { server: server.serverName })} closeLabel={t('mcp.confirm.close')}
+    actions={<>
+      <Button variant="secondary" data-modal-autofocus disabled={review.busy} onClick={close}>{t('mcp.confirm.cancel')}</Button>
       <Button variant="primary" disabled={review.busy} onClick={confirm}>{t('mcp.confirm.accept')}</Button>
     </>}>
     <div className={css.consent}>
@@ -199,5 +199,5 @@ export function McpServerReview({ useReview, confirm, cancel, t }: McpServerRevi
       </details>
       {review.failure === undefined ? null : <ConsentFailureLine t={t} failure={review.failure} action="action.answerServer" />}
     </div>
-  </Modal>
+  </Dialog>
 }

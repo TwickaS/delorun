@@ -4,7 +4,7 @@
  * name; a level is a setting, not a logged fact, so the chip shows today's level of that agent.
  */
 import { memo, useEffect, useState } from 'react'
-import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button } from '@delorun/brand'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { AgentLevelView } from '@delorun/plugin-delegation-consent/wire'
 import { levelChipText } from './AgentLevels.tsx'
@@ -36,7 +36,7 @@ export const AgentLevelsNotice = memo(function AgentLevelsNotice({ node, t, fetc
   if (started.length === 0) return null
   return <div className={css.row} role="status" data-agent-levels-notice="">
     {t('levels.notice')}{' '}
-    {started.map(view => <Button key={view.provider} variant="outline" size="sm" data-level-chip={view.level}
+    {started.map(view => <Button key={view.provider} variant="secondary" size="sm" data-level-chip={view.level}
       aria-label={t('levels.chip.change', { agent: view.agent, level: levelChipText(t, view) })} onClick={openLevels}>{view.agent} · {levelChipText(t, view)}</Button>)}
   </div>
 })

@@ -7,7 +7,8 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Button, Input, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Input, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button } from '@delorun/brand'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { RadioList, SettingsCard, type RadioRow } from '@delorun/settings-controls'
 import { GateFailure } from './GateNotice.tsx'
@@ -221,7 +222,7 @@ function PortControl({ t, fetch, state, computer, onChanged, onRestart }: Pick<C
     {computer
       ? <form className={commandCss.inline} onSubmit={(event) => { event.preventDefault(); if (isUsablePort(typed)) void change() }}>
         <Input value={typed} inputMode="numeric" aria-label={t('port.label')} autoComplete="off" maxLength={5} onChange={(event) => { setTyped(event.target.value) }} />
-        <Button variant="outline" size="sm" type="submit" disabled={busy || !state.recorded || !isUsablePort(typed)}>{t('port.action')}</Button>
+        <Button variant="secondary" size="sm" type="submit" disabled={busy || !state.recorded || !isUsablePort(typed)}>{t('port.action')}</Button>
       </form>
       : null}
     {computer && typed !== '' && !isUsablePort(typed) ? <p className={commandCss.note}>{t('port.invalid')}</p> : null}

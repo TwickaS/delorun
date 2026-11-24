@@ -5,8 +5,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { InjectFace, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
-import { Modal } from '@deepseek-ai/dsh-client-ui-primitives'
-import { Button } from '@delorun/brand'
+import { Button, Dialog } from '@delorun/brand'
 import type { PrivacyLocaleKey } from './locales.ts'
 import css from './DelorunNotice.module.css'
 
@@ -83,7 +82,7 @@ export function DelorunNotice({ complete, t }: DelorunNoticeProps): ReactNode {
     setOpen(false)
   }
   return (
-    <Modal open title={t('notice.title')} onClose={ignoreImplicitDismiss} headless className={css.dialog as string}>
+    <Dialog open title={t('notice.title')} onClose={ignoreImplicitDismiss} headless className={css.dialog as string}>
       <div className={css.content}>
         <h2 className={css.title}>{t('notice.title')}</h2>
         <div className={css.copy}>
@@ -93,6 +92,6 @@ export function DelorunNotice({ complete, t }: DelorunNoticeProps): ReactNode {
           <Button variant="primary" className={css.primary} onClick={dismiss}>{t('notice.continue')}</Button>
         </div>
       </div>
-    </Modal>
+    </Dialog>
   )
 }
