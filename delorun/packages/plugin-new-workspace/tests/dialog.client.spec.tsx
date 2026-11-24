@@ -232,11 +232,11 @@ describe('a folder on this computer', () => {
     const found = [{ path: `${HOME}/src/delorun`, name: 'delorun' }, { path: `${HOME}/old/delorun-v2`, name: 'delorun-v2' }]
     const { search } = await open({ api: { search: async () => ok({ results: found, stopped: 'limit' }) } })
     const box = screen.getByRole('textbox', { name: en['folder.search'] })
-    await type(box, 'delo')
+    await type(box, 'delor')
     expect(screen.getByText(en['folder.looking'])).toBeTruthy()
     await screen.findByRole('option', { name: /^delorun-v2/ })
     const results = screen.getByRole('listbox', { name: en['folder.results'] })
-    expect(search).toHaveBeenCalledExactlyOnceWith('delo', expect.any(AbortSignal))
+    expect(search).toHaveBeenCalledExactlyOnceWith('delor', expect.any(AbortSignal))
     expect(within(results).getAllByRole('option').map(each => each.textContent)).toEqual(['delorun~/src/delorun', 'delorun-v2~/old/delorun-v2'])
     expect(screen.getByText('Showing the first 50')).toBeTruthy()
     await key(within(results).getAllByRole('option')[1] as HTMLElement, 'Enter')
