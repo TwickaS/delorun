@@ -1,4 +1,5 @@
 /** Persistent manager behavior through a real profile Include and Loader. */
+import { execFileSync } from 'node:child_process'
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { realpath } from 'node:fs/promises'
 import { once } from 'node:events'
@@ -28,6 +29,9 @@ import * as operations from '../src/operations.ts'
 import * as githubConnection from '../src/github-connection.ts'
 import * as gitTransport from '../src/git-transport.ts'
 import { parse, parseDocument } from 'yaml'
+import ConfigEditor from '@deepseek-ai/dsh-config-editor'
+import Settings from '@deepseek-ai/dsh-settings'
+import z from '@deepseek-ai/schemastery'
 import { isolateGitCommandLineConfig } from './git-environment.ts'
 
 // These cases install through real Git and pnpm, so the host's command-line configuration group must not reach their children.
@@ -3270,4 +3274,72 @@ describe('a package the release publishes as a signed pack', () => {
     writeFileSync(join(dir, 'package.json'), manifest)
     expect(await manager.previewRestore(held.versions[0]!.id)).toMatchObject({ ok: true })
   })
+})
+
+/** A plugin whose settings a person edits from Settings: one ordinary field and one secret-role field. */
+const SettingsProbe = {
+  Config: z.object({
+    ordinary: z.string().required(),
+    count: z.number().min(1).default(2).volatile(),
+    apiKey: z.string().role('secret').volatile(),
+  }),
+  apply: () => {},
+}
+
+/**
+ * A profile whose bundle carries upstream's configuration editor and Settings service beside a plugin with editable
+ * settings, so a settings write runs the path a person's Settings page runs.
+ * @returns the fixture, with the profile directory and the context.
+ */
+async function settingsFixture() {
+  return await fixture('live', false, (ctx) => {
+    ctx.loader.builtins.editor = ConfigEditor
+    ctx.loader.builtins.settings = Settings
+    ctx.loader.builtins.probe = SettingsProbe
+  }, {}, undefined, (dir) => {
+    writeFileSync(join(dir, 'node_modules/core/cordis.patch.yml'), JSON.stringify([{ insert: [
+      { id: 'manager', name: 'cordis:manager' },
+      { id: 'editor', name: 'cordis:editor' },
+      { id: 'settings', name: 'cordis:settings' },
+      { id: 'probe', name: 'cordis:probe', config: { ordinary: 'fixed' } },
+    ] }]))
+  })
+}
+
+it('brings a settings value back when a version is restored, after the value changed again', async () => {
+  const { manager, ctx, dir } = await settingsFixture()
+  const patch = join(dir, 'cordis.patch.yml')
+  await ctx.settings.update('probe', { count: 5 })
+  expect(readFileSync(patch, 'utf8')).toContain('count: 5')
+  // The settings edit is a version of its own, saved by the manager when the editor announced it.
+  await vi.waitFor(async () => {
+    expect(await manager.history(10)).toMatchObject({ versions: [{ summary: 'Changed the settings of probe' }] })
+  })
+  const listed = await manager.history(10)
+  const version = listed.available ? listed.versions[0]!.id : undefined
+  expect(version).toBeDefined()
+  await ctx.settings.update('probe', { count: 9 })
+  expect(readFileSync(patch, 'utf8')).toContain('count: 9')
+  expect(await manager.restore(version as ProfileVersionId)).toMatchObject({ application: 'applied', changed: true, restored: { version } })
+  expect(readFileSync(patch, 'utf8')).toContain('count: 5')
+  expect(readFileSync(patch, 'utf8')).not.toContain('count: 9')
+})
+
+it('writes no secret settings value into any version, so a restore point never holds one', async () => {
+  const { manager, ctx, dir } = await settingsFixture()
+  const secret = 'sk-a-secret-typed-into-settings'
+  // The admission Delorun registers over a booted Host: a version whose patch holds a secret-role value is refused.
+  ctx.on('plugin-manager/before-record', (files) => {
+    const text = files.get('cordis.patch.yml')
+    return text !== undefined && text.includes(secret) ? 'the patch holds a value for a secret field' : undefined
+  })
+  const patch = join(dir, 'cordis.patch.yml')
+  // A settings value for a secret-role field, as a settings file holds it when the edit guard is not composed.
+  writeFileSync(patch, `# scratch\n- id: probe\n  config:\n    ordinary: fixed\n    apiKey: ${secret}\n`)
+  ctx.emit('config-editor/edited', { entryId: 'probe' })
+  await new Promise(resolve => setTimeout(resolve, 400))
+  const history = await manager.history(10)
+  expect(history).toMatchObject({ available: true, unsaved: 'the patch holds a value for a secret field' })
+  expect(JSON.stringify(history)).not.toContain(secret)
+  expect(execFileSync('git', ['--git-dir', join(dir, '.plugin-manager', 'history'), 'log', '--all', '-p'], { encoding: 'utf8', timeout: 30_000 })).not.toContain(secret)
 })

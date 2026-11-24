@@ -134,6 +134,33 @@ describe.skipIf(!hasGit)('the Setup versions service', () => {
     expect((await service.list()).versions).toHaveLength(1)
   })
 
+  it('brings a settings value back when the profile switches to a version, after the value changed again', async () => {
+    const { service, profileDir } = setup()
+    const patch = join(profileDir, 'cordis.patch.yml')
+    // A settings value as the configuration editor saves it: the row's config in the profile patch.
+    writeFileSync(patch, '- id: probe\n  config:\n    count: 5\n')
+    const { id } = await service.save('Count is five')
+    writeFileSync(patch, '- id: probe\n  config:\n    count: 9\n')
+    expect(readFileSync(patch, 'utf8')).toContain('count: 9')
+    expect(await service.changes(id)).toMatchObject({ patchChanged: true, same: false })
+    await service.switch(id)
+    expect(readFileSync(patch, 'utf8')).toContain('count: 5')
+    expect(readFileSync(patch, 'utf8')).not.toContain('count: 9')
+  })
+
+  it('saves no version whose settings file holds a secret value, so a restore point never holds one', async () => {
+    const secret = 'sk-a-secret-in-a-settings-file'
+    const { service, profileDir } = setup((files) => {
+      const text = files.get('cordis.patch.yml')
+      return text !== undefined && text.includes(secret) ? 'a settings file holds a secret value' : undefined
+    })
+    const patch = join(profileDir, 'cordis.patch.yml')
+    writeFileSync(patch, `- id: probe\n  config:\n    apiKey: ${secret}\n`)
+    await expect(service.save('With a key')).rejects.toMatchObject({ code: 'SAVE_REFUSED', message: expect.stringContaining('secret value') })
+    expect((await service.list()).versions).toEqual([])
+    expect(execFileSync('git', ['--git-dir', join(profileDir, '.plugin-manager', 'history'), 'log', '--all', '-p'], { encoding: 'utf8', timeout: 30_000 })).not.toContain(secret)
+  })
+
   it('answers a Host without a profile with NO_PROFILE', async () => {
     const service = new ProfileVersions(() => undefined)
     await expect(service.list()).rejects.toMatchObject({ code: 'NO_PROFILE' })
