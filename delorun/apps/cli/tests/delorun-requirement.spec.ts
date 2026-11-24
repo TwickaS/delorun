@@ -93,6 +93,19 @@ describe('refusals', () => {
     expect(evaluateDelorunRequirement(manifest('>=2.0.0'), undefined)).toBeUndefined()
     expect(evaluatePluginCompatibility(manifest('>=2.0.0'), {}, DSH, undefined)).toBeUndefined()
   })
+
+  // A caller that passes undefined asks for the dsh axis alone, which is how the update report decides that axis
+  // (delorun/packages/update/src/versions.ts). A default parameter cannot tell that from an omitted argument, so the
+  // two are separate: omitted reads the environment, explicit undefined skips the axis. This spec runs with
+  // DELORUN_VERSION set by the delorun command that started it, which is what made the difference observable.
+  it('tells an omitted Delorun version from an explicit undefined one', () => {
+    vi.stubEnv(DELORUN_VERSION_ENV, DELORUN)
+    expect(evaluateDelorunRequirement(manifest('>=2.0.0'))).toEqual({ delorunVersion: DELORUN, status: 'unmet', requirement: '>=2.0.0' })
+    expect(evaluateDelorunRequirement(manifest('>=2.0.0'), undefined)).toBeUndefined()
+    expect(evaluatePluginCompatibility(manifest('>=2.0.0'), {}, DSH)?.delorun).toEqual({ delorunVersion: DELORUN, status: 'unmet', requirement: '>=2.0.0' })
+    expect(evaluatePluginCompatibility(manifest('>=2.0.0'), {}, DSH, undefined)).toBeUndefined()
+    vi.unstubAllEnvs()
+  })
 })
 
 describe('exemptions', () => {

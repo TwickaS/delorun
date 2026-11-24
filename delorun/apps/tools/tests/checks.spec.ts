@@ -12,7 +12,7 @@ import { GATES } from '../src/checks/gates/index.ts'
 import { UPSTREAM_GATES } from '../src/checks/gates/upstream.ts'
 import { checkEnvironment, cgroupBudget, removeScratch, scratchDir, scratchPlace, statfsOf, headroomBytes, pnpmExecAnswer, runMemoryBytes, scopeCommand, workerCounts } from '../src/checks/machine.ts'
 import { PARITY_OVERLAY_PATH } from '@delorun/contract-parity-composition'
-import { affectsParity, declaredBuildOutputs, declineClosureOffHost, declineUnansweredDocker, JOURNEY_SPEC, dependentsLeftForMerge, laneKeeps, leftForMerge, affectsUpstreamRuntime, catalog, criticalPath, packageDirOf, programLabel, readsPnpmScriptEnvironment, select, selectPreCommit, staleDelorunBuilds, type BuildProbe, type Budgets, type ForkPackage, type ForkTree, type Planned, type Selection, type UpstreamPackage, FORK_INTEGRATION_WORKERS, UPSTREAM_CHANGED_SPEC_BUDGET, unknownSelectors, upstreamSpecDirs, withDependents, withSecurityPackages } from '../src/checks/plan.ts'
+import { affectsParity, declaredBuildOutputs, declineClosureOffHost, declineUnansweredDocker, declineWebsiteWithoutPictures, websitePicturesProblem, WEBSITE_PICTURES_VARIABLE, JOURNEY_SPEC, dependentsLeftForMerge, laneKeeps, leftForMerge, affectsUpstreamRuntime, catalog, criticalPath, packageDirOf, programLabel, readsPnpmScriptEnvironment, select, selectPreCommit, staleDelorunBuilds, type BuildProbe, type Budgets, type ForkPackage, type ForkTree, type Planned, type Selection, type UpstreamPackage, FORK_INTEGRATION_WORKERS, UPSTREAM_CHANGED_SPEC_BUDGET, unknownSelectors, upstreamSpecDirs, withDependents, withSecurityPackages } from '../src/checks/plan.ts'
 import { CLOSURE_SPEC, closureHostProblem, closureRunProblem } from '../src/checks/closure.ts'
 import { gateFailure, probeDocker, runPlan, type DockerRun, type Result } from '../src/checks/run.ts'
 import type { GateCheck } from '../src/checks/types.ts'
@@ -450,6 +450,25 @@ describe('the documentation website check', () => {
     expect(packageDirOf('delorun/apps/docs/source.config.ts')).toBeUndefined()
     expect(selected(['delorun/apps/docs/source.config.ts'])).not.toContain('tests:fork')
     expect(selected(['delorun/apps/docs/source.config.ts'])).toContain('docs-site')
+  })
+
+  it('declines the product website as a host limit when the pictures it builds from are absent, and runs it when they are there', () => {
+    const site = (): Planned[] => select(CHECKS, TREE, { ...NONE, changed: { base: 'main', paths: ['delorun/apps/website/src/site/copy.ts'] }, tier: 'merge' })
+    const present = (): boolean => true
+    const absent = (): boolean => false
+    // The pictures are not in the repository, so a checkout that never received them cannot build the site.
+    const unset = websitePicturesProblem({}, present)
+    expect(unset).toContain(WEBSITE_PICTURES_VARIABLE)
+    expect(unset).toContain('not in the repository')
+    expect(websitePicturesProblem({ [WEBSITE_PICTURES_VARIABLE]: '' }, present)).toBe(unset)
+    expect(websitePicturesProblem({ [WEBSITE_PICTURES_VARIABLE]: '/pictures' }, absent)).toContain('/pictures')
+    expect(websitePicturesProblem({ [WEBSITE_PICTURES_VARIABLE]: '/pictures' }, present)).toBeUndefined()
+    const declined = declineWebsiteWithoutPictures(site(), unset).find(check => check.id === 'website-site')
+    expect(declined).toMatchObject({ declined: unset, declinedByHost: true })
+    expect(declineWebsiteWithoutPictures(site(), undefined).find(check => check.id === 'website-site')?.declined).toBeUndefined()
+    // Only the product website reads the pictures; the documentation site has none, though it shares the group name.
+    const both = declineWebsiteWithoutPictures(select(CHECKS, TREE, { ...NONE, changed: { base: 'main', paths: ['delorun/docs/guide/safety-and-updates/trust.md'] }, tier: 'merge' }), unset)
+    expect(both.find(check => check.id === 'docs-site')?.declined).toBeUndefined()
   })
 })
 

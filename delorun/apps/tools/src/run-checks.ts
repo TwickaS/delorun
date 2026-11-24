@@ -62,7 +62,7 @@ import { z } from 'zod'
 import { cacheUse, contentId, createPassCache, type PassCache, type SharedUse } from './checks/cache.ts'
 import { FUNDAMENTALS_INPUTS, gatesFor, rangeBase, rangeBaseOverridden, unresolvedRangeBase } from './checks/gates/index.ts'
 import { canScope, cgroupBudget, checkEnvironment, ioPressure, memoryReport, removeScratch, pnpmExecAnswer, runMemoryBytes, scopeCommand, scratchDir, scratchPlace, statfsOf, workerCounts } from './checks/machine.ts'
-import { catalog, criticalPath, declineClosureOffHost, declineUnansweredDocker, dependentsLeftForMerge, leftForMerge, readsPnpmScriptEnvironment, select, selectPreCommit, staleDelorunBuilds, type Budgets, type Check, type GateTier, type Planned, type UpstreamPackage, unknownSelectors } from './checks/plan.ts'
+import { catalog, criticalPath, declineClosureOffHost, declineUnansweredDocker, declineWebsiteWithoutPictures, dependentsLeftForMerge, leftForMerge, readsPnpmScriptEnvironment, select, selectPreCommit, staleDelorunBuilds, websitePicturesProblem, type Budgets, type Check, type GateTier, type Planned, type UpstreamPackage, unknownSelectors } from './checks/plan.ts'
 import { checksToRun, fitToGrant, runDemand, withoutIdleNeeds } from './checks/demand.ts'
 import { isLightPlan, gatePriority } from './checks/run-queue.ts'
 import { machineBudget, nodeSlotHost, privateSlotPaths } from './checks/slot-host.ts'
@@ -628,7 +628,7 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
     const fullRun = changed === undefined && targets.length === 0
     gateTier = fullRun || fullGate ? undefined : changeTier(values.tier, pushInput, env)
     const selection = { targets, ...changed === undefined ? {} : { changed }, ...gateTier === undefined ? {} : { tier: gateTier }, only: list(values.only), skip: list(values.skip) }
-    plan = declineClosureOffHost(declineUnansweredDocker(select(checks, tree, selection), () => probeDocker((command, args, timeout) => spawnSync(command, [...args], { encoding: 'utf8', timeout }))), closureHostProblem(process.platform, process.arch))
+    plan = declineWebsiteWithoutPictures(declineClosureOffHost(declineUnansweredDocker(select(checks, tree, selection), () => probeDocker((command, args, timeout) => spawnSync(command, [...args], { encoding: 'utf8', timeout }))), closureHostProblem(process.platform, process.arch)), websitePicturesProblem(env, path => existsSync(resolve(path))))
     // The fork suite remembers a pass per package (`checks/units.ts`).
     const specDirs = plan.some(check => isForkSuite(check.id)) ? forkSpecDirs(root) : []
     plan = plan.map((check) => {
