@@ -1036,9 +1036,10 @@ export interface ProfileReconciliation {
   pending: PendingModule[]
   /**
    * Why every change waits for a restart: `module-comparison` when module caches cannot be inspected or their files
-   * compared, even when no URLs are known; `package-moved` when the runtime resolution cannot publish a moved package.
+   * compared, even when no URLs are known; `package-moved` when the runtime resolution cannot publish a moved package;
+   * `service-replaced` when the change turns off a row providing a service that must not be swapped under running work.
    */
-  restartReason?: 'module-comparison' | 'package-moved'
+  restartReason?: 'module-comparison' | 'package-moved' | 'service-replaced'
 }
 
 /** A changed module that loads only after a restart. */

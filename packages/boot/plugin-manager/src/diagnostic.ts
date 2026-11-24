@@ -76,6 +76,7 @@ const operation: z.ZodType<PluginOperation> = z.discriminatedUnion('phase', [
       'host-module': 'host-module',
       'unmanaged-plugin': 'unmanaged-plugin',
       'module-comparison': 'module-comparison',
+      'service-replaced': 'service-replaced',
     } satisfies { [K in RestartReason]: K }).optional(),
   }),
 ])

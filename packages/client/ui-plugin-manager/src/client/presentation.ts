@@ -155,6 +155,7 @@ const RESTART_REASON_KEYS = {
   'host-module': 'restartReasonHostModule',
   'unmanaged-plugin': 'restartReasonUnmanagedPlugin',
   'module-comparison': 'restartReasonModuleComparison',
+  'service-replaced': 'restartReasonServiceReplaced',
 } satisfies Record<RestartReason, PluginManagerLocaleKey>
 
 /**

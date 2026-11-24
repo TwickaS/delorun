@@ -73,6 +73,7 @@ const RESTART_STEPS: Record<RestartReason, string> = {
   'host-module': 'the change reaches modules DSH itself loaded',
   'unmanaged-plugin': 'the change reaches a plugin running outside the plugin list',
   'module-comparison': 'DSH could not compare loaded plugins with their files',
+  'service-replaced': 'the change turns off a plugin that provides a service running chats depend on; restart Delorun to apply it',
 }
 
 /**
