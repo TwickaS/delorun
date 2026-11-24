@@ -1,0 +1,589 @@
+{
+  "entries": [
+    {
+      "path": "delorun/packages/browser-setup/src/client/BrowserChoices.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the onboarding pull request."
+    },
+    {
+      "path": "delorun/packages/browser-setup/src/client/BrowserChoices.tsx",
+      "rule": "link",
+      "reason": "Imports a raw `<a href>`; migrates in the onboarding pull request."
+    },
+    {
+      "path": "delorun/packages/bundle-local/src/client/AboutSection.tsx",
+      "rule": "link",
+      "reason": "Imports a raw `<a href>`; migrates in the Settings pull request."
+    },
+    {
+      "path": "delorun/packages/bundle-local/src/client/AgentLevelsNotice.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the consent dialogs pull request."
+    },
+    {
+      "path": "delorun/packages/bundle-local/src/client/AgentLimits.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the Settings pull request."
+    },
+    {
+      "path": "delorun/packages/bundle-local/src/client/AllowForChat.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the consent dialogs pull request."
+    },
+    {
+      "path": "delorun/packages/bundle-local/src/client/DelorunNotice.tsx",
+      "rule": "modal",
+      "reason": "Imports upstream `Modal`; migrates in the consent dialogs pull request."
+    },
+    {
+      "path": "delorun/packages/bundle-local/src/client/DevicesSection.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the consent dialogs pull request."
+    },
+    {
+      "path": "delorun/packages/bundle-local/src/client/DevicesSection.tsx",
+      "rule": "modal",
+      "reason": "Imports upstream `Modal`; migrates in the consent dialogs pull request."
+    },
+    {
+      "path": "delorun/packages/bundle-local/src/client/ExternalAgentAction.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the consent dialogs pull request."
+    },
+    {
+      "path": "delorun/packages/bundle-local/src/client/ExternalAgentsSection.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the consent dialogs pull request."
+    },
+    {
+      "path": "delorun/packages/bundle-local/src/client/FaceIdEnrol.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the consent dialogs pull request."
+    },
+    {
+      "path": "delorun/packages/bundle-local/src/client/FaceIdPin.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the consent dialogs pull request."
+    },
+    {
+      "path": "delorun/packages/bundle-local/src/client/FaceIdSheet.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the consent dialogs pull request."
+    },
+    {
+      "path": "delorun/packages/bundle-local/src/client/FullAccessConsent.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the consent dialogs pull request."
+    },
+    {
+      "path": "delorun/packages/bundle-local/src/client/FullAccessConsent.tsx",
+      "rule": "modal",
+      "reason": "Imports upstream `Modal`; migrates in the consent dialogs pull request."
+    },
+    {
+      "path": "delorun/packages/bundle-local/src/client/McpServerReview.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the consent dialogs pull request."
+    },
+    {
+      "path": "delorun/packages/bundle-local/src/client/McpServerReview.tsx",
+      "rule": "modal",
+      "reason": "Imports upstream `Modal`; migrates in the consent dialogs pull request."
+    },
+    {
+      "path": "delorun/packages/bundle-local/src/client/NeedsSetup.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the Settings pull request."
+    },
+    {
+      "path": "delorun/packages/bundle-local/src/client/NeedsSetup.tsx",
+      "rule": "link",
+      "reason": "Imports a raw `<a href>`; migrates in the Settings pull request."
+    },
+    {
+      "path": "delorun/packages/bundle-local/src/client/NetworkSection.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the Settings pull request."
+    },
+    {
+      "path": "delorun/packages/bundle-local/src/client/NetworkSection.tsx",
+      "rule": "modal",
+      "reason": "Imports upstream `Modal`; migrates in the Settings pull request."
+    },
+    {
+      "path": "delorun/packages/bundle-local/src/client/OptInRow.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the consent dialogs pull request."
+    },
+    {
+      "path": "delorun/packages/bundle-local/src/client/OptInRow.tsx",
+      "rule": "modal",
+      "reason": "Imports upstream `Modal`; migrates in the consent dialogs pull request."
+    },
+    {
+      "path": "delorun/packages/bundle-local/src/client/PairingNotice.tsx",
+      "rule": "modal",
+      "reason": "Imports upstream `Modal`; migrates in the consent dialogs pull request."
+    },
+    {
+      "path": "delorun/packages/bundle-local/src/client/PairingSettings.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the consent dialogs pull request."
+    },
+    {
+      "path": "delorun/packages/bundle-local/src/client/PasskeyDevices.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the consent dialogs pull request."
+    },
+    {
+      "path": "delorun/packages/bundle-local/src/client/PermissionsSection.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the consent dialogs pull request."
+    },
+    {
+      "path": "delorun/packages/bundle-local/src/client/PinModeSection.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the Settings pull request."
+    },
+    {
+      "path": "delorun/packages/bundle-local/src/client/RunDangerous.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the consent dialogs pull request."
+    },
+    {
+      "path": "delorun/packages/bundle-local/src/client/RunDangerous.tsx",
+      "rule": "modal",
+      "reason": "Imports upstream `Modal`; migrates in the consent dialogs pull request."
+    },
+    {
+      "path": "delorun/packages/bundle-local/src/client/RunReach.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the Settings pull request."
+    },
+    {
+      "path": "delorun/packages/bundle-local/src/client/SecurityOverview.tsx",
+      "rule": "link",
+      "reason": "The Security panel's learn-more anchor is a raw `<a href>`; the contract's inventory lists it among the nine raw anchors but its staging table does not name the file, so the entry records the drift until a lane migrates it."
+    },
+    {
+      "path": "delorun/packages/bundle-local/src/client/SetupCommandsSection.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the consent dialogs pull request."
+    },
+    {
+      "path": "delorun/packages/bundle-local/src/client/SetupTransfer.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the Settings pull request."
+    },
+    {
+      "path": "delorun/packages/bundle-local/src/client/TrustBadge.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the consent dialogs pull request."
+    },
+    {
+      "path": "delorun/packages/bundle-local/src/client/TrustBadge.tsx",
+      "rule": "modal",
+      "reason": "Imports upstream `Modal`; migrates in the consent dialogs pull request."
+    },
+    {
+      "path": "delorun/packages/bundle-local/src/client/VersionsSection.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the Settings pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-agent-seats/src/client/Approval.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the agent seats pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-agent-seats/src/client/Banner.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the agent seats pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-changes/src/client/ChangesSection.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the Changes pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-changes/src/client/ChangesSection.tsx",
+      "rule": "modal",
+      "reason": "Imports upstream `Modal`; migrates in the Changes pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-changes/src/client/CreateSection.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the Changes pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-changes/src/client/ProtectionGroup.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the Changes pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-changes/src/client/ProtectionGroup.tsx",
+      "rule": "modal",
+      "reason": "Imports upstream `Modal`; migrates in the Changes pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-changes/src/client/RestartCard.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the Changes pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-changes/src/client/RestartCard.tsx",
+      "rule": "modal",
+      "reason": "Imports upstream `Modal`; migrates in the Changes pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-changes/src/client/SelfGroup.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the Changes pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-changes/src/client/SelfGroup.tsx",
+      "rule": "modal",
+      "reason": "Imports upstream `Modal`; migrates in the Changes pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-chat-states/src/client/CustomSnooze.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the Settings pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-chat-states/src/client/CustomSnooze.tsx",
+      "rule": "modal",
+      "reason": "Imports upstream `Modal`; migrates in the Settings pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-chat-states/src/client/SnoozeSettings.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the Settings pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-downloads/src/client/Action.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the Settings pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-main-chat/src/client/MainChatOpening.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the main chat pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-multiview/src/panel/settings/Section.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the Multiview pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-new-workspace/src/client/footer.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the workspace picker pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-new-workspace/src/client/NewWorkspaceDialog.tsx",
+      "rule": "modal",
+      "reason": "Imports upstream `Modal`; migrates in the workspace picker pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-new-workspace/src/client/screens/BrowserScreen.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the workspace picker pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-new-workspace/src/client/screens/CloneScreen.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the workspace picker pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-new-workspace/src/client/screens/FolderScreen.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the workspace picker pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-new-workspace/src/client/screens/NewFolderScreen.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the workspace picker pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-onboarding/src/client/browser/BrowserSettings.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the onboarding pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-onboarding/src/client/frame/StepFooter.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the onboarding pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-onboarding/src/client/Onboarding.tsx",
+      "rule": "modal",
+      "reason": "Imports upstream `Modal`; migrates in the onboarding pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-onboarding/src/client/ShowAgainRow.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the onboarding pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-onboarding/src/client/steps/AgentAdvanced.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the onboarding pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-onboarding/src/client/steps/Agents.tsx",
+      "rule": "link",
+      "reason": "The Agents step's guide anchor is a raw `<a href>`; the contract's inventory lists it among the nine raw anchors but its staging table does not name the file, so the entry records the drift until a lane migrates it."
+    },
+    {
+      "path": "delorun/packages/plugin-onboarding/src/client/steps/BundleCard.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the onboarding pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-onboarding/src/client/steps/Models.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the onboarding pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-onboarding/src/client/steps/Models.tsx",
+      "rule": "link",
+      "reason": "Imports a raw `<a href>`; migrates in the onboarding pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-onboarding/src/client/steps/Pin.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the onboarding pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-onboarding/src/client/steps/Plugins.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the onboarding pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-onboarding/src/client/steps/Ready.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the onboarding pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-onboarding/src/client/steps/StockLook.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the onboarding pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-onboarding/src/client/steps/Workspace.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the onboarding pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-onboarding/src/client/ui/CommandRow.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the onboarding pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-onboarding/src/client/ui/StateLine.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the onboarding pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-onboarding/src/client/ui/Summary.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the onboarding pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-sidebar/src/client/SettingsSection.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the Settings pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-sidebar/src/client/Sidebar.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the sidebar pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-sidebar/src/client/Sidebar.tsx",
+      "rule": "modal",
+      "reason": "Imports upstream `Modal`; migrates in the sidebar pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-sidebar/src/client/UpdateNotice.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the sidebar pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-sidebar/src/client/UpdateNotice.tsx",
+      "rule": "modal",
+      "reason": "Imports upstream `Modal`; migrates in the sidebar pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-thinking-rsvp/src/client/ThinkingPane.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the thinking pane pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-trash/src/client/TrashSection.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the trash pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-trash/src/client/TrashSection.tsx",
+      "rule": "modal",
+      "reason": "Imports upstream `Modal`; migrates in the trash pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-update/src/client/NotesSheet.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the update pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-update/src/client/NotesSheet.tsx",
+      "rule": "modal",
+      "reason": "Imports upstream `Modal`; migrates in the update pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-update/src/client/RollbackPanel.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the update pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-update/src/client/RollbackPanel.tsx",
+      "rule": "modal",
+      "reason": "Imports upstream `Modal`; migrates in the update pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-update/src/client/StopChats.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the update pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-update/src/client/StopChats.tsx",
+      "rule": "modal",
+      "reason": "Imports upstream `Modal`; migrates in the update pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-update/src/client/UpdateDialog.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the update pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-update/src/client/UpdateDialog.tsx",
+      "rule": "modal",
+      "reason": "Imports upstream `Modal`; migrates in the update pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-update/src/client/UpdateOverlay.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the update pull request."
+    },
+    {
+      "path": "delorun/packages/plugin-update/src/client/UpdatePanel.tsx",
+      "rule": "button",
+      "reason": "Imports upstream `Button`; migrates in the update pull request."
+    },
+    {
+      "path": "delorun/packages/site-design/src/site-header.tsx",
+      "rule": "link",
+      "reason": "The shared header for the two websites draws a raw `<a href>` rather than the brand's `Link`; the contract's inventory does not list this package, so the entry records the drift it missed."
+    },
+    {
+      "path": "packages/client/ui-agent-preset/src/client/AgentPresetSection.tsx",
+      "rule": "button",
+      "reason": "An upstream file the divergence ledger lists, importing upstream `Button`; the contract does not migrate the upstream tree, so the entry stays until a lane decides to."
+    },
+    {
+      "path": "packages/client/ui-agent-preset/src/client/AgentPresetSection.tsx",
+      "rule": "modal",
+      "reason": "An upstream file the divergence ledger lists, importing upstream `Modal`; the contract does not migrate the upstream tree, so the entry stays until a lane decides to."
+    },
+    {
+      "path": "packages/client/ui-approval/src/client/ApprovalCard.tsx",
+      "rule": "button",
+      "reason": "An upstream file the divergence ledger lists, importing upstream `Button`; the contract does not migrate the upstream tree, so the entry stays until a lane decides to."
+    },
+    {
+      "path": "packages/client/ui-chat/src/client/chat/ChatView.tsx",
+      "rule": "button",
+      "reason": "An upstream file the divergence ledger lists, importing upstream `Button`; the contract does not migrate the upstream tree, so the entry stays until a lane decides to."
+    },
+    {
+      "path": "packages/client/ui-chat/src/client/chat/ChatView.tsx",
+      "rule": "modal",
+      "reason": "An upstream file the divergence ledger lists, importing upstream `Modal`; the contract does not migrate the upstream tree, so the entry stays until a lane decides to."
+    },
+    {
+      "path": "packages/client/ui-message-feedback/src/client/FeedbackDialog.tsx",
+      "rule": "button",
+      "reason": "An upstream file the divergence ledger lists, importing upstream `Button`; the contract does not migrate the upstream tree, so the entry stays until a lane decides to."
+    },
+    {
+      "path": "packages/client/ui-message-feedback/src/client/FeedbackDialog.tsx",
+      "rule": "modal",
+      "reason": "An upstream file the divergence ledger lists, importing upstream `Modal`; the contract does not migrate the upstream tree, so the entry stays until a lane decides to."
+    },
+    {
+      "path": "packages/client/ui-plugin-manager/src/client/PluginManagerPage.tsx",
+      "rule": "button",
+      "reason": "An upstream file the divergence ledger lists, importing upstream `Button`; the contract does not migrate the upstream tree, so the entry stays until a lane decides to."
+    },
+    {
+      "path": "packages/client/ui-plugin-manager/src/client/PluginManagerPage.tsx",
+      "rule": "modal",
+      "reason": "An upstream file the divergence ledger lists, importing upstream `Modal`; the contract does not migrate the upstream tree, so the entry stays until a lane decides to."
+    },
+    {
+      "path": "packages/client/ui-plugin-manager/src/client/PluginManagerPage.tsx",
+      "rule": "tabs",
+      "reason": "An upstream file the divergence ledger lists, importing upstream `SegmentedTabs`; the contract does not migrate the upstream tree, so the entry stays until a lane decides to."
+    },
+    {
+      "path": "packages/client/ui-plugin-market/src/client/DiscoverSection.tsx",
+      "rule": "button",
+      "reason": "An upstream file the divergence ledger lists, importing upstream `Button`; the contract does not migrate the upstream tree, so the entry stays until a lane decides to."
+    },
+    {
+      "path": "packages/client/ui-plugin-market/src/client/DiscoverSection.tsx",
+      "rule": "modal",
+      "reason": "An upstream file the divergence ledger lists, importing upstream `Modal`; the contract does not migrate the upstream tree, so the entry stays until a lane decides to."
+    },
+    {
+      "path": "packages/client/ui-plugin-market/src/client/DiscoverSection.tsx",
+      "rule": "pill",
+      "reason": "An upstream file the divergence ledger lists, importing upstream `Pill`; the contract does not migrate the upstream tree, so the entry stays until a lane decides to."
+    },
+    {
+      "path": "packages/client/ui-settings-general/src/client/SettingsDocumentAction.tsx",
+      "rule": "button",
+      "reason": "An upstream file the divergence ledger lists, importing upstream `Button`; the contract does not migrate the upstream tree, so the entry stays until a lane decides to."
+    },
+    {
+      "path": "packages/client/ui-settings-models/src/client/ModelsSection.tsx",
+      "rule": "button",
+      "reason": "An upstream file the divergence ledger lists, importing upstream `Button`; the contract does not migrate the upstream tree, so the entry stays until a lane decides to."
+    },
+    {
+      "path": "packages/client/ui-settings-models/src/client/ModelsSection.tsx",
+      "rule": "modal",
+      "reason": "An upstream file the divergence ledger lists, importing upstream `Modal`; the contract does not migrate the upstream tree, so the entry stays until a lane decides to."
+    },
+    {
+      "path": "packages/client/ui-shortcuts/src/client/Reference.tsx",
+      "rule": "button",
+      "reason": "An upstream file the divergence ledger lists, importing upstream `Button`; the contract does not migrate the upstream tree, so the entry stays until a lane decides to."
+    },
+    {
+      "path": "packages/client/ui-shortcuts/src/client/Reference.tsx",
+      "rule": "modal",
+      "reason": "An upstream file the divergence ledger lists, importing upstream `Modal`; the contract does not migrate the upstream tree, so the entry stays until a lane decides to."
+    },
+    {
+      "path": "packages/client/ui-sidebar-terminal/src/client/terminal.tsx",
+      "rule": "button",
+      "reason": "An upstream file the divergence ledger lists, importing upstream `Button`; the contract does not migrate the upstream tree, so the entry stays until a lane decides to."
+    },
+    {
+      "path": "packages/client/ui-sidebar-terminal/src/client/TerminalGuide.tsx",
+      "rule": "button",
+      "reason": "An upstream file the divergence ledger lists, importing upstream `Button`; the contract does not migrate the upstream tree, so the entry stays until a lane decides to."
+    }
+  ]
+}
