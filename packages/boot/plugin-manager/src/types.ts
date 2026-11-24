@@ -121,9 +121,10 @@ export interface PluginAudit {
  * installed package to another directory without removing it first, or change or locally override a package the DSH
  * installation provides; `host-module` changes reach
  * modules the running process itself imports; `unmanaged-plugin` changes reach a plugin running outside a Loader entry;
- * `module-comparison` means loaded modules could not be compared with disk.
+ * `module-comparison` means loaded modules could not be compared with disk; `service-replaced` means the change turns
+ * off a row that provides a service the running process depends on, which cannot be swapped under live work.
  */
-export type RestartReason = 'no-hmr' | 'package-moved' | 'host-module' | 'unmanaged-plugin' | 'module-comparison'
+export type RestartReason = 'no-hmr' | 'package-moved' | 'host-module' | 'unmanaged-plugin' | 'module-comparison' | 'service-replaced'
 
 /** One running-profile entry and its persistent control availability. */
 export type PluginInfo = PluginInventoryEntry & (

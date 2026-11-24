@@ -334,6 +334,14 @@ export function loadLayeredEnv(
 
 const bootstrapIncludes = new WeakMap<Context, Entry>()
 
+/**
+ * The services a live reload must not swap under running work. A change that turns off a row providing one of these
+ * waits for the next start instead: chat storage, the chat service and the sandbox policy are held by in-flight turns,
+ * so stopping their provider mid-turn fails the turn rather than reloading it. The list is deliberately short; a
+ * service not named here is swapped live, which is what a reload is for.
+ */
+export const CORE_SERVICES: readonly string[] = ['sessionPersistence', 'sessionController', 'sandboxPolicy']
+
 // The include's YAML dialect (`!!js` scalars become expression nodes the
 // Loader interpolates against each entry's injection-ready context), imported
 // from the include itself so patch parsing and config dumping can never drift
@@ -356,8 +364,12 @@ export interface ProfileRecompositionOptions {
 export interface ProfileRecomposition {
   /** Diagnostics for unchanged pre-existing inactive entries. */
   warnings: string[]
-  /** Present when the runtime resolution could not publish a moved package or a changed installation mapping. */
-  restartReason?: 'package-moved'
+  /**
+   * Present when the change cannot be applied live: `package-moved` when the runtime resolution could not publish a
+   * moved package or a changed installation mapping, and `service-replaced` when the change turns off a row providing
+   * a service on {@link CORE_SERVICES}, which must not be swapped under running work.
+   */
+  restartReason?: 'package-moved' | 'service-replaced'
 }
 
 /**
@@ -421,17 +433,26 @@ async function recompose(
     const current = withResolution ? ctx.get('pluginPackages')?.resolution : undefined
     // A plain-data resolution has no inputs to recompute from.
     const successor = current instanceof ProfileRuntimeResolution ? await current.computeLatestResolution() : undefined
+    // Rows the generation no longer lists stop, and their disposal finishes, while their packages are still mapped.
+    const listed = rowIds(structuredClone(patches))
+    const composed = rowIds(structuredClone(previous))
+    // Only rows of the root Include's tree; a nested Include file has its own ids.
+    const tree = entry.subgroup?.tree
+    // A row the generation still lists but now disables is not dropped, so the Loader would update it in place and
+    // start its replacement before this one has finished disposing. A row that provides a core service must not be
+    // swapped under live work at all, so the whole change waits for the next start. This is decided before the
+    // resolution, because a profile without one still reloads its rows.
+    const turnedOff = [...ctx.loader.entries()]
+      .filter(row => row.parent.tree === tree && composed.has(row.options.id) && listed.has(row.options.id)
+        && row.options.disabled !== true && disabledIn(patches, row.options.id))
+    if (turnedOff.some(row => providesCoreService(row))) return { warnings: [], restartReason: 'service-replaced' }
     if (successor !== undefined) {
-      // Rows the generation no longer lists stop, and their disposal finishes, while their packages are still mapped.
-      const listed = rowIds(structuredClone(patches))
-      const composed = rowIds(structuredClone(previous))
-      // Only rows of the root Include's tree; a nested Include file has its own ids.
-      const tree = entry.subgroup?.tree
       const dropped = [...ctx.loader.entries()]
         .filter(row => row.parent.tree === tree && composed.has(row.options.id) && !listed.has(row.options.id))
       // A dropped group takes its rows with it.
-      const ids = new Set(dropped.map(row => row.options.id))
-      const topmost = dropped.filter(row => !ids.has(row.parent.ctx.fiber.entry?.options.id as string))
+      const ids = new Set([...dropped, ...turnedOff].map(row => row.options.id))
+      const topmost = [...dropped, ...turnedOff]
+        .filter(row => !ids.has(row.parent.ctx.fiber.entry?.options.id as string))
       // The Loader marks the options of a row it stops, so the copy taken before is the one restored.
       stopped = topmost.map(row => ({
         group: row.parent, options: structuredClone(row.options),
@@ -532,6 +553,38 @@ interface StoppedRow {
 }
 
 /** The ids of the rows a patch list inserts, including the rows of groups. */
+/**
+ * Whether the new generation disables a row the previous one ran. A row is disabled either by its own `disabled` field
+ * or by a patch that sets it, so the composed generation is read rather than the patch list.
+ * @param patches - the new generation's patches.
+ * @param id - the row's id.
+ * @returns true when the generation lists the row as disabled.
+ */
+function disabledIn(patches: readonly PatchOptions[], id: string): boolean {
+  let disabled = false
+  const visit = (rows: readonly EntryOptions[]): void => {
+    for (const row of rows) {
+      if (row.id === id && row.disabled === true) disabled = true
+      if ((row.group === true || row.name === 'cordis:group') && Array.isArray(row.config)) visit(row.config as EntryOptions[])
+    }
+  }
+  visit(applyEntryPatches([], patches as PatchOptions[], () => {}))
+  return disabled
+}
+
+/**
+ * Whether a running row provides a service a live reload must not swap. A row provides through `ctx.provide`, which
+ * records the provision on its fiber; `fiber.inject` is what the row consumes, not what it offers.
+ * @param row - the Loader entry.
+ * @returns true when the row's fiber provisions one of {@link CORE_SERVICES}.
+ */
+function providesCoreService(
+  row: { readonly fiber?: { readonly provisions?: ReadonlySet<{ readonly name: string }> } | undefined },
+): boolean {
+  const provisions = row.fiber?.provisions
+  return provisions !== undefined && [...provisions].some(impl => CORE_SERVICES.includes(impl.name))
+}
+
 function rowIds(patches: readonly PatchOptions[]): Set<string> {
   const ids = new Set<string>()
   const visit = (rows: readonly EntryOptions[]): void => {

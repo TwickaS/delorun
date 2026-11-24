@@ -491,3 +491,44 @@ describe('boot with user patches', () => {
   })
 
 })
+
+describe('a live reload that turns a row off', () => {
+  /** A plugin that provides one service, so a reload can turn it off under a live consumer. */
+  const PROVIDER = `
+export const name = 'provider'
+export function apply(ctx, config) {
+  ctx.provide(config.service, { provided: true })
+}
+`
+
+  it('answers service-replaced and leaves the provider running when the change turns off a core service', async () => {
+    const dir = tmp()
+    writeFileSync(join(dir, 'cordis.yml'), '[]\n')
+    writeFileSync(join(dir, 'provider.mjs'), PROVIDER)
+    const patches = [{ insert: [{ id: 'provider', name: './provider.mjs', config: { service: 'sessionPersistence' } }] }]
+    const ctx = await boot(NAME, join(dir, 'cordis.yml'), patches)
+    onTestFinished(() => ctx.fiber.dispose())
+    expect(ctx.get('sessionPersistence')).toBeDefined()
+    // The change disables the row rather than dropping it, which is what a bundle patch that replaces a provider does.
+    const disabled = [...patches, { id: 'provider', disabled: true }]
+    const result = await reconcileProfilePatches(ctx, disabled, NAME)
+    expect(result).toEqual([])
+    // Nothing was applied: the provider still answers, so a running chat keeps its storage.
+    expect(ctx.get('sessionPersistence')).toBeDefined()
+    expect([...ctx.loader.entries()].find(row => row.options.id === 'provider')?.options.disabled).not.toBe(true)
+  })
+
+  it('reloads live when the change turns off a row that provides no core service', async () => {
+    const dir = tmp()
+    writeFileSync(join(dir, 'cordis.yml'), '[]\n')
+    writeFileSync(join(dir, 'provider.mjs'), PROVIDER)
+    const patches = [{ insert: [{ id: 'provider', name: './provider.mjs', config: { service: 'ordinaryService' } }] }]
+    const ctx = await boot(NAME, join(dir, 'cordis.yml'), patches)
+    onTestFinished(() => ctx.fiber.dispose())
+    expect(ctx.get('ordinaryService')).toBeDefined()
+    const disabled = [...patches, { id: 'provider', disabled: true }]
+    await reconcileProfilePatches(ctx, disabled, NAME)
+    // The ordinary row is turned off live, so its service is gone and no second registration was attempted.
+    expect(ctx.get('ordinaryService')).toBeUndefined()
+  })
+})
