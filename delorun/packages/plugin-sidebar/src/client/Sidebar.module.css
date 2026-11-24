@@ -712,14 +712,31 @@
   cursor: default;
 }
 
-/* Phone widths get 44px targets whatever the pointer reports. */
-@media (max-width: 767px) {
+/* Phone widths and touch screens get 44px targets whatever the pointer reports: the search field's clear button, the
+   shelf headers, the shelf menus and a folder's new-chat button all reach a finger. */
+@media (max-width: 767px), (pointer: coarse) {
   .root {
     --list-control: 44px;
     --list-icon-button: 44px;
     --dsh-sidebar-control: 44px;
+    --list-row-height: 44px;
+    --list-folder-height: 44px;
+    --list-folder-new: 44px;
+    --list-clear: 44px;
   }
 
+  /* The shelf's "..." menu keeps its 12px label and takes a 44px row. */
+  .more {
+    min-height: var(--list-control);
+  }
+
+  /* A folder's new-chat button is a 44px box inside the folder row, so it never overlaps the header's own tap area. */
+  .folderNew {
+    right: 0;
+  }
+}
+
+@media (max-width: 767px) {
   /* Three 44px buttons leave a 256px drawer less than the search field's usual minimum, so the field gives way before the New chat button is cut off. */
   .search,
   .searchInput {

@@ -7,7 +7,7 @@ import { MASKABLE_SAFE_RADIUS_RATIO } from '../scripts/render-app-icons.ts'
 
 const DIST_ROOT = fileURLToPath(new URL('../dist', import.meta.url))
 // The build names the product from DSH_CLIENT_TITLE; Delorun's mark is a full-bleed tile with the hex drawn in paper.
-const CLIENT_TITLE = process.env.DSH_CLIENT_TITLE ?? 'DSH Local Build'
+const CLIENT_TITLE = process.env.DSH_CLIENT_TITLE ?? 'Delorun'
 
 async function pixels(page: Page, url: string, size: number, light = false) {
   return page.evaluate(async ({ url, size, light }) => {
@@ -66,8 +66,10 @@ it('ships install metadata with the built web application', async () => {
     // `standalone` keeps the phone's status bar; `fullscreen` hides it and the
     // navigation bar, which strands a chat surface with no clock or battery.
     display: 'standalone',
-    background_color: '#ffffff',
-    theme_color: '#ffffff',
+    // The dark theme's base surface, so the launch screen and the surrounding chrome are the studio's own colour
+    // rather than a white flash before the first paint.
+    background_color: '#151517',
+    theme_color: '#151517',
     icons: [
       { src: 'icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
       { src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },

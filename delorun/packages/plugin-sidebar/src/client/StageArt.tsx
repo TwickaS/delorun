@@ -439,7 +439,7 @@ export function StageBackdrop({ scene, palette, seed = 1, strength = 'standard',
   readonly fade?: ArtFade | false
 }) {
   return (
-    <div className={css.backdrop} data-palette={palette} data-scene={scene} data-fade={String(fade)} data-strength={strength} aria-hidden="true">
+    <div className={css.backdrop} data-palette={palette} data-scene={scene} data-fade={String(fade)} data-strength={strength} data-delorun-edge-surface="sidebar-art" aria-hidden="true">
       {scene === 'night' ? <NightSkyArt compact={compact} /> : scene === 'blueprint' ? <BlueprintArt compact={compact} /> : <GenerativeArt scene={scene} seed={seed} />}
     </div>
   )

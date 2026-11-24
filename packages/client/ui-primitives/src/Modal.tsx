@@ -69,6 +69,7 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
+        data-delorun-edge-surface="dialog"
       >
         {headless
           ? children

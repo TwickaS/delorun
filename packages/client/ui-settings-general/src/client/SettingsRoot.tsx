@@ -144,7 +144,8 @@ function SettingsPanel({ rows, nav, renderSlot, activeId, onSelect, onClose, bac
     <div className={css.overlay} role="presentation">
       <div className={css.mask} aria-hidden="true" onClick={onClose} />
       <div ref={panel} tabIndex={-1} data-shortcut-modal="settings" className={css.panel} role="dialog" aria-modal="true" aria-labelledby={titleId}
-        data-phone={phoneView}>
+        data-phone={phoneView}
+        data-delorun-edge-surface="settings">
         {/* The four seats stay direct children of the panel and take their
             places from its grid: title and header share the first row, the
             navigation and the active section the second. */}
