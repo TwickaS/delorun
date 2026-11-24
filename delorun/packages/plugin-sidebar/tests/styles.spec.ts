@@ -128,6 +128,41 @@ describe('the stylesheets of the sidebar', () => {
   })
 })
 
+describe('the column\'s one inset', () => {
+  const value = (file: string, selector: string, property: string): string | undefined =>
+    BY_FILE(file).find(declaration => declaration.selector === selector && declaration.property === property)?.value
+
+  it('reads one shared token for every horizontal inset, so the column has one left edge and one right edge', () => {
+    // The token is declared once, on the shell root, and rides the density scale: a literal nudge would break the
+    // density setting, while this ratio survives it.
+    expect(value('Sidebar.module.css', '.root', '--sidebar-inset')).toBeUndefined()
+    for (const [file, selector, property] of [
+      ['Sidebar.module.css', '.search', 'padding'],
+      ['Sidebar.module.css', '.shelfHeader', 'padding'],
+      ['Sidebar.module.css', '.more', 'padding'],
+      ['Sidebar.module.css', '.result', 'padding'],
+      ['Sidebar.module.css', '.folderHeader', 'padding'],
+      ['ChatRow.module.css', '.card', 'padding'],
+      ['ChatRow.module.css', '.slim', 'padding'],
+    ] as const) {
+      expect(value(file, selector, property), `${file} ${selector}`).toContain('var(--sidebar-inset)')
+    }
+  })
+
+  it('folds the item margins into the inset rather than adding to them, so the two shelf labels agree', () => {
+    // The Settled shelf's item margin and the Working shelf's reset are both gone: the header's own padding is the
+    // whole inset, so both labels start on the same edge.
+    expect(value('Sidebar.module.css', '.shelfItem', 'margin')).toBe('0')
+    expect(value('Sidebar.module.css', '.workingList > .shelfItem', 'margin')).toBeUndefined()
+    expect(value('Sidebar.module.css', '.divider', 'margin')).toBe('0 0 -1px')
+  })
+
+  it('keeps no second side token beside it', () => {
+    // The two ad-hoc 10px sides are gone, so there is one home for the inset.
+    expect(ALL.filter(declaration => declaration.property === '--list-side' || declaration.property === '--row-side')).toEqual([])
+  })
+})
+
 describe('the Working shelf', () => {
   const rule = (selector: string): Array<[string, string]> => BY_FILE('Sidebar.module.css')
     .filter(declaration => declaration.selector === selector).map(declaration => [declaration.property, declaration.value])
@@ -145,6 +180,30 @@ describe('the Working shelf', () => {
 
   it('sits above the sidebar\'s bottom fade', () => {
     expect(rule('.workingPane')).toEqual(expect.arrayContaining([['position', 'relative'], ['z-index', '1']]))
+  })
+})
+
+describe('the working indicator', () => {
+  const ring = (selector: string, property: string): string | undefined =>
+    BY_FILE('WorkingRing.module.css').find(declaration => declaration.selector === selector && declaration.property === property)?.value
+
+  it('draws a track, a dash-array head and a breathing core in one 16px box', () => {
+    expect(ring('.ringTrack', 'opacity')).toBe('0.22')
+    expect(ring('.ringHead', 'stroke-dasharray')).toBe('10 50')
+    expect(ring('.ringCore', 'fill')).toBe('currentColor')
+  })
+
+  it('orbits the head and breathes the core on one 2.6s period, on the studio easing curve', () => {
+    expect(ring('.ringHead', 'animation')).toBe('working-ring-orbit 2.6s linear infinite')
+    expect(ring('.ringCore', 'animation')).toBe('working-ring-breathe 2.6s var(--ds-ease-in-out) infinite')
+  })
+
+  it('runs no motion unless the person allows it, so the ring rests as a still arc and a still core', () => {
+    // The study animated by default and switched off under `reduce`; this is the inverse, which is what the rule above
+    // requires.
+    const moving = BY_FILE('WorkingRing.module.css').filter(declaration => /^(transition|animation)(-[a-z-]+)?$/.test(declaration.property))
+    expect(moving.length).toBeGreaterThan(0)
+    expect(moving.filter(declaration => !declaration.atRules.includes('@media (prefers-reduced-motion: no-preference)')).map(describeAt)).toEqual([])
   })
 })
 
@@ -185,7 +244,7 @@ describe('the search field', () => {
 
   it('tightens the field\'s gaps next and keeps a label width that fits "Search" and its Chinese word', () => {
     const tighter = header.filter(declaration => declaration.selector === '.search' && declaration.atRules.includes('@container (max-width: 15rem)'))
-    expect(tighter.map(declaration => declaration.property)).toEqual(['gap', 'padding-inline'])
+    expect(tighter.map(declaration => declaration.property)).toEqual(['padding-inline'])
     expect(header.find(declaration => declaration.property === '--list-label-min')?.value).toBe('7ch')
     expect(header.find(declaration => declaration.selector === '.searchInput' && declaration.property === 'min-width')?.value).toBe('var(--list-label-min)')
     expect(header.find(declaration => declaration.selector === '.search' && declaration.property === 'min-width')?.value).toContain('var(--list-label-min)')

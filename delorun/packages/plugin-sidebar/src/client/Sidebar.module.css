@@ -6,7 +6,9 @@
 .root,
 .menuIcon {
   --list-control: 32px;
-  --list-icon-button: 28px;
+  /* The column's one control size, from the shell root: the header's icon buttons, the panel toggle and the foot's
+     buttons are all this wide, so their 16px glyphs land on one line. */
+  --list-icon-button: var(--dsh-sidebar-control);
   --list-icon: 16px;
   --list-icon-small: 12px;
   --list-icon-menu: 14px;
@@ -21,8 +23,6 @@
   --list-badge: 14px;
   /* The least width the search label keeps: "Search" in English and its Chinese word fit. */
   --list-label-min: 7ch;
-  /* T3 Code's 10px sides, between the spacing steps. */
-  --list-side: calc(var(--delorun-space-4) + var(--delorun-space-1));
 }
 
 .root {
@@ -42,7 +42,7 @@
   display: flex;
   align-items: center;
   gap: var(--delorun-space-2);
-  padding: var(--delorun-space-4);
+  padding: var(--delorun-space-4) 0;
   container-type: inline-size;
 }
 
@@ -50,10 +50,11 @@
   display: flex;
   flex: 1;
   align-items: center;
-  gap: var(--delorun-space-4);
+  /* The same step the card's badge leads into its workspace line by, so both second-level lines start on one edge. */
+  gap: var(--delorun-space-3);
   min-width: calc(var(--delorun-space-4) * 3 + var(--list-icon) + var(--list-label-min));
   height: var(--list-control);
-  padding: 0 var(--delorun-space-4);
+  padding: 0 var(--sidebar-inset);
   border-radius: var(--dsw-radius-sm);
   color: var(--dsw-alias-label-secondary);
   cursor: text;
@@ -119,7 +120,6 @@
 
 @container (max-width: 15rem) {
   .search {
-    gap: var(--delorun-space-3);
     padding-inline: var(--delorun-space-3);
   }
 }
@@ -227,7 +227,7 @@
   flex: 1;
   flex-direction: column;
   min-height: 0;
-  padding: 0 var(--delorun-space-4) var(--delorun-space-4);
+  padding: 0 0 var(--delorun-space-4);
   overflow-y: auto;
   scrollbar-width: none;
   /* T3 Code's scroll fade: each end fades over up to 12px, as far as the list is scrolled past it. Only the mask's alpha counts. */
@@ -262,13 +262,13 @@
 .divider {
   position: relative;
   height: 0;
-  margin: 0 var(--delorun-space-1) -1px;
+  margin: 0 0 -1px;
   list-style: none;
   pointer-events: none;
 }
 
 .empty {
-  padding: var(--delorun-space-8) var(--delorun-space-4);
+  padding: var(--delorun-space-8) var(--sidebar-inset);
   color: var(--dsw-alias-label-secondary);
   font-size: var(--dsw-font-xxs-12-font-size);
   text-align: center;
@@ -280,7 +280,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--delorun-space-2);
-  padding: var(--delorun-space-3) var(--delorun-space-4);
+  padding: var(--delorun-space-3) var(--sidebar-inset);
   list-style: none;
 }
 
@@ -312,7 +312,7 @@
 
 /* The first shelf takes the free space above it, so the shelves sit at the bottom of a short list. */
 .shelfItem {
-  margin: 0 var(--delorun-space-1);
+  margin: 0;
   list-style: none;
 }
 
@@ -330,7 +330,7 @@
   flex-direction: column;
   max-height: 40%;
   min-height: 0;
-  padding: 0 var(--delorun-space-4) var(--delorun-space-2);
+  padding: 0 0 var(--delorun-space-2);
   border-top: 1px solid var(--dsw-alias-border-l2);
 }
 
@@ -350,7 +350,6 @@
   position: sticky;
   top: 0;
   z-index: 1;
-  margin: 0;
   background: var(--dsw-specific-sidebar-fill, var(--dsw-alias-bg-base));
 }
 
@@ -361,7 +360,7 @@
   gap: var(--delorun-space-4);
   width: 100%;
   height: var(--list-control);
-  padding: 0 var(--delorun-space-4);
+  padding: 0 var(--sidebar-inset);
   border: 0;
   border-radius: var(--dsw-radius-sm);
   background: transparent;
@@ -414,10 +413,10 @@
 .more {
   display: flex;
   align-items: center;
-  gap: var(--list-side);
+  gap: var(--sidebar-inset);
   width: 100%;
   height: var(--list-row-height);
-  padding: 0 var(--list-side);
+  padding: 0 var(--sidebar-inset);
   border: 0;
   border-radius: var(--dsw-radius-sm);
   background: transparent;
@@ -449,10 +448,10 @@
 .result {
   display: flex;
   align-items: center;
-  gap: var(--list-side);
+  gap: var(--sidebar-inset);
   width: 100%;
   min-height: var(--list-row-height);
-  padding: var(--delorun-space-2) var(--list-side);
+  padding: var(--delorun-space-2) var(--sidebar-inset);
   border: 0;
   border-radius: var(--dsw-radius-md);
   background: transparent;
@@ -496,7 +495,7 @@
 
 .searchEmpty {
   margin: 0;
-  padding: var(--delorun-space-8) var(--delorun-space-4);
+  padding: var(--delorun-space-8) var(--sidebar-inset);
   color: var(--dsw-alias-label-secondary);
   font-size: var(--dsw-font-xxs-12-font-size);
   text-align: center;
@@ -531,7 +530,7 @@
   gap: var(--delorun-space-4);
   min-width: 0;
   height: var(--list-folder-height);
-  padding: 0 var(--list-folder-reserve) 0 var(--delorun-space-3);
+  padding: 0 var(--list-folder-reserve) 0 var(--sidebar-inset);
   border: 0;
   border-radius: var(--dsw-radius-md);
   background: transparent;
@@ -651,7 +650,7 @@
 
 .boundary {
   position: absolute;
-  inset-inline: var(--delorun-space-4);
+  inset-inline: var(--sidebar-inset);
   top: var(--delorun-space-2);
   display: flex;
   align-items: center;
@@ -718,6 +717,7 @@
   .root {
     --list-control: 44px;
     --list-icon-button: 44px;
+    --dsh-sidebar-control: 44px;
   }
 
   /* Three 44px buttons leave a 256px drawer less than the search field's usual minimum, so the field gives way before the New chat button is cut off. */

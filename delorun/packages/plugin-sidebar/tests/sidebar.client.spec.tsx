@@ -464,6 +464,32 @@ describe('what a row says', () => {
     expect(within(row(noStart.container, 'x')).getByText(en['status.working'])).toBeTruthy()
   })
 
+  it('draws the working indicator as an orbital ring, in the same 16px slot the frozen arc took', () => {
+    const { container } = only(summary('x', { running: true }), { settings: { workingShelf: false } })
+    const ring = row(container, 'x').querySelector('svg[viewBox="0 0 16 16"]')
+    expect(ring).not.toBeNull()
+    // A track, a dash-array head and a core: three circles, and no loading glyph beside them.
+    expect(ring?.querySelectorAll('circle')).toHaveLength(3)
+    expect(ring?.getAttribute('aria-hidden')).toBe('true')
+    expect(row(container, 'x').querySelector('[data-icon="dsw-icon-loading-outline-regular"]')).toBeNull()
+    // The status text still names the state, so the ring is decoration.
+    expect(within(row(container, 'x')).getByText(en['status.working'])).toBeTruthy()
+  })
+
+  it('pins every ring to document time zero, so several working rows stay in step', () => {
+    // jsdom implements no Web Animations, so the pin is proved through the call it makes rather than through a start
+    // time: every ring asks its subtree for its animations on mount.
+    const asked: Element[] = []
+    const getAnimations = vi.fn(function (this: Element) { asked.push(this); return [] })
+    Object.defineProperty(Element.prototype, 'getAnimations', { value: getAnimations, configurable: true })
+    try {
+      only(summary('x', { running: true }), { settings: { workingShelf: false } })
+      expect(getAnimations).toHaveBeenCalled()
+      expect(asked.some(element => element.tagName.toLowerCase() === 'svg')).toBe(true)
+    } finally {
+      Reflect.deleteProperty(Element.prototype, 'getAnimations')
+    }
+  })
   it('moves the ages on once a minute', () => {
     vi.useFakeTimers({ now: NOW })
     const { container } = only(summary('x', { updatedAt: NOW - 59 * 60_000 }))

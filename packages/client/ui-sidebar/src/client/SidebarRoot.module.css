@@ -11,6 +11,19 @@
   --dsh-sidebar-row-padding: 12px;
   --dsh-sidebar-label-gap: 6px;
   --dsh-sidebar-paint-inset: 3px;
+  /* The one control size in the column: the header's icon buttons, the panel toggle and the foot's buttons. */
+  --dsh-sidebar-control: 32px;
+  /* The one horizontal inset of the sidebar's content: every box in the column spans its full inner width and pads
+     itself by this, so the search field's magnifier, the chat cards' badges and titles, the shelf labels, the folder
+     headers, the foot's icons and the panel toggle's glyph all land on one left edge and one right edge. It rides the
+     density scale, as every spacing step does: a literal nudge would break the density setting, while this ratio
+     survives it. The plugin's own stylesheets read it from here. */
+  --sidebar-inset: var(--delorun-space-4);
+  /* The one horizontal inset every sidebar surface reads, inside the column's own padding: the search field's box, the
+     chat cards, the shelf headers, the foot's buttons and the panel toggle all start here, so the column has one left
+     edge and one right edge. It rides the density scale, as every spacing step does, so a literal nudge would break the
+     density setting while this ratio survives it. */
+  --sidebar-inset: var(--delorun-space-4);
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -273,11 +286,7 @@
   /* The 2px foot centres the 28px toggle at y 25, level with the collapsed
      seat (ui-layout .leadingSeat, top 11) and the conversation title row, so
      collapse/expand never shifts it vertically. */
-  padding: 0 12px 2px;
-}
-
-:global(html[data-platform='darwin']:not([data-fullscreen])) .root:not(.collapsed) > .topStrip > .toggle {
-  transform: translateX(4px);
+  padding: 0 0 2px;
 }
 
 /* Window fullscreen hides the traffic lights (html[data-fullscreen], desktop
@@ -313,7 +322,10 @@
   justify-content: flex-end;
   gap: 8px;
   height: 60px;
-  padding: 8px 0 8px 8px;
+  /* No trailing padding: the toggle's box ends on the column's content edge, where the header's last icon button and
+     the foot's last button end, so all three share one right edge and their 16px glyphs share one line. The leading
+     padding is the one inset, so the brand's mark starts where the search magnifier does. */
+  padding: 8px 0 8px var(--sidebar-inset);
   margin-bottom: 0;
   box-sizing: border-box;
   overflow: hidden;
@@ -418,8 +430,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  /* The foot's buttons are 32px, so the header's and the toggle's are too: one control size in the column, and every
+     16px glyph lands on the same edge as the search magnifier and the text rows. */
+  width: var(--dsh-sidebar-control);
+  height: var(--dsh-sidebar-control);
   border: none;
   border-radius: var(--dsw-radius-sm);
   padding: 0;

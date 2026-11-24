@@ -3,7 +3,8 @@
  * the free space. Spacing, type sizes and corners are the studio's tokens; the lengths below are the foot's own geometry.
  */
 .utility {
-  --foot-button: 32px;
+  /* The column's one control size, from the shell root, so the foot's buttons match the header's and the toggle's. */
+  --foot-button: var(--dsh-sidebar-control);
   --foot-icon: 16px;
   /* T3 Code's sidebar icon colour: the muted label at 85% over the sidebar. */
   --sidebar-icon: color-mix(in srgb, var(--dsw-alias-label-tertiary) 85%, var(--dsw-specific-sidebar-fill, var(--dsw-alias-bg-base)));
