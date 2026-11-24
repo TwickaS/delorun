@@ -1,0 +1,14 @@
+{
+  "entries": [
+    {
+      "path": "delorun/apps/tools/src/checks/gates/brand-names.ts",
+      "rule": "spelling",
+      "reason": "The gate's module comment quotes the patterns it refuses."
+    },
+    {
+      "path": "delorun/apps/tools/src/checks/gates/brand-names.ts",
+      "rule": "upstream-as-name",
+      "reason": "The gate's module comment quotes the patterns it refuses."
+    }
+  ]
+}
