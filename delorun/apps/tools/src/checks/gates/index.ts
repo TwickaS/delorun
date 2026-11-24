@@ -212,6 +212,13 @@ export function gatesFor(base: string): readonly GateCheck[] {
       inputs: ['delorun/packages/*/src/**', 'delorun/packages/site-design/**', 'delorun/apps/website/{src,public,scripts}/**', 'delorun/apps/docs/{src,public,scripts}/**', `${GATE_DIR}/brand-drift.*`],
     },
     {
+      id: 'gates:design-system',
+      title: 'Delorun surfaces use the brand components, not the upstream primitives they replace',
+      command: [TSX, `${GATE_DIR}/design-system.ts`],
+      // The gate reads the upstream files the ledger lists, so a change to any of them can change its verdict.
+      inputs: ['delorun/packages/*/src/**', 'delorun/upstream-patches.json', 'packages/client/**', `${GATE_DIR}/design-system.*`],
+    },
+    {
       id: 'gates:dco',
       title: 'Every commit in the range is signed off by its author',
       command: [TSX, `${GATE_DIR}/dco.ts`, '--base', base],
