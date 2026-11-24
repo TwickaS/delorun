@@ -92,24 +92,28 @@ function satisfies(runtimeVersion: string, range: string): boolean {
  * An absent declaration has no Delorun requirement; a non-string one is unreadable and is refused as unmet;
  * an empty, `workspace:` or invalid range is unmet. Prereleases participate in ranges.
  * @param manifest - parsed plugin package.json; inherited fields are ignored.
- * @param delorunVersion - the Delorun version to check against, read from {@link DELORUN_VERSION_ENV} by default.
+ * @param delorunVersion - the Delorun version to check against. Omitted, it is read from {@link DELORUN_VERSION_ENV};
+ *   passed as undefined, the axis is not checked, which is how a caller asks for the dsh axis alone.
  * @returns the requirement's result, or undefined when Delorun's version is unknown or the plugin declares none.
  * @throws Error for a manifest that is not an object or a Delorun version that is not a semantic version.
  */
 export function evaluateDelorunRequirement(
   manifest: object,
-  delorunVersion: string | undefined = getDelorunRuntimeVersion(),
+  ...delorunVersion: readonly [] | readonly [string | undefined]
 ): DelorunRequirement | undefined {
-  if (delorunVersion === undefined) return undefined
-  if (semver.valid(delorunVersion) === null) {
-    throw new Error(`Invalid Delorun version: ${JSON.stringify(delorunVersion)}; expected a semantic version such as 1.0.0`)
+  // A default parameter cannot tell an omitted argument from an explicit undefined, and the two mean different things
+  // here: omitted reads the environment, explicit undefined skips the axis.
+  const version = delorunVersion.length === 0 ? getDelorunRuntimeVersion() : delorunVersion[0]
+  if (version === undefined) return undefined
+  if (semver.valid(version) === null) {
+    throw new Error(`Invalid Delorun version: ${JSON.stringify(version)}; expected a semantic version such as 1.0.0`)
   }
   const fields = objectOf(manifest, 'Plugin manifest')
   const engines = Object.hasOwn(fields, 'engines') ? objectOf(fields.engines, 'Plugin manifest engines') : {}
   if (!Object.hasOwn(engines, 'delorun')) return undefined
   const range = engines.delorun
-  if (typeof range !== 'string') return { delorunVersion, status: 'unreadable' }
-  return { delorunVersion, status: satisfies(delorunVersion, range) ? 'met' : 'unmet', requirement: range }
+  if (typeof range !== 'string') return { delorunVersion: version, status: 'unreadable' }
+  return { delorunVersion: version, status: satisfies(version, range) ? 'met' : 'unmet', requirement: range }
 }
 
 function unmetRequirements(fields: Record<string, unknown>, runtimeVersion: string): Record<string, string> {
@@ -143,17 +147,21 @@ function unmetRequirements(fields: Record<string, unknown>, runtimeVersion: stri
  * the dsh exact-version exemption does not admit it, because an exemption covers one axis only.
  * @param manifest - parsed plugin package.json; inherited fields are ignored.
  * @param exemptions - exact plugin name@version keys mapped to exact runtime versions.
- * @param runtimeVersion - running dsh version, defaulting to this app-boot package.
- * @param delorunVersion - running Delorun version, read from {@link DELORUN_VERSION_ENV} by default; undefined skips the Delorun axis.
+ * @param versions - the running dsh version, then the running Delorun version. Each omitted is read from its own
+ *   source, the dsh version from this app-boot package and the Delorun version from {@link DELORUN_VERSION_ENV};
+ *   a Delorun version passed as undefined skips the Delorun axis, which is how a caller asks for the dsh axis alone.
  * @returns unmet requirements and exemption status, or undefined when every requirement is met.
  * @throws for malformed manifest engines or peer fields, invalid runtime or Delorun versions, or missing identity on a mismatch.
  */
 export function evaluatePluginCompatibility(
   manifest: object,
   exemptions: Readonly<Record<string, readonly string[]>> = {},
-  runtimeVersion = getDshRuntimeVersion(),
-  delorunVersion: string | undefined = getDelorunRuntimeVersion(),
+  ...versions: readonly [] | readonly [string] | readonly [string, string | undefined]
 ): PluginCompatibility | undefined {
+  // As in {@link evaluateDelorunRequirement}, a default parameter cannot tell an omitted argument from an explicit
+  // undefined, and the two mean different things for the Delorun axis.
+  const runtimeVersion = versions.length === 0 ? getDshRuntimeVersion() : versions[0]
+  const delorunVersion = versions.length < 2 ? getDelorunRuntimeVersion() : versions[1]
   runtimeVersionOf(runtimeVersion)
   const fields = objectOf(manifest, 'Plugin manifest')
   const requirements = unmetRequirements(fields, runtimeVersion)
