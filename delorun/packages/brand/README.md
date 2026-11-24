@@ -56,7 +56,7 @@ Each is a function component with a documented props interface. "Upstream" means
 | `Button` | `Button` | `primary`, `secondary`, `destructive` and `ghost` variants; a pressed shrink, hover only under a fine pointer, the focus ring, and `unavailable`: `aria-disabled`, still focusable, no press or hover change, readable at AA |
 | `TextField` | `Input` | Visible label, help and error lines wired with `aria-describedby`, an announced error |
 | `Pill` | `Pill` | Tones |
-| `Dialog` | `Modal` | Actions footer and a `warning` tone |
+| `Dialog` | `Modal` | Actions footer and a `warning` tone; `className` and `contentClassName` reach the card and the region around the header; `headless` draws the caller's own frame in the card, with no header, close button or action row |
 | `Card` | none | Bordered section named by its `<h3>` |
 | `Alert` | none | The studio's alert: kinds `info`, `success`, `warning`, `error` and `progress`, each with its own glyph in a tinted circle; a title, one muted line, a tinted primary and a quiet secondary action, an optional close; `inline`, `toast` and `banner` variants; role `alert` for a warning or an error and `status` otherwise unless the caller names one; `closing` plays the leave and `onClosed` reports its end. It holds no styles: `@delorun/plugin-theme` styles `ALERT_CLASSES` while the Delorun look is on (its README, "Alerts and pop-ups") |
 | `Notice` | none | Four tones, optional icon, title, sentence and actions, caller-chosen live-region role |

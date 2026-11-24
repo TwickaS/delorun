@@ -2,11 +2,11 @@
 /** The parts the website and the docs draw with: tabs, section headings, the code block, the frame and the web switch. */
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { useState } from 'react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Button } from '../src/components/Button.tsx'
 import { ButtonLink } from '../src/button-link.web.tsx'
 import { CodeBlock, COPY_ANSWER_MS, Frame, SectionHeading, TabList, TabPanel } from '../src/index.ts'
-import { Switch } from '../src/upstream.web.tsx'
+import { Modal, Switch } from '../src/upstream.web.tsx'
 
 afterEach(() => {
   cleanup()
@@ -192,6 +192,34 @@ describe('the web Switch', () => {
     expect(control.getAttribute('aria-checked')).toBe('true')
     fireEvent.click(control)
     expect(onChange).toHaveBeenCalledWith(false)
+  })
+})
+
+describe('the web Modal', () => {
+  // jsdom has no top layer, so the browser's own `showModal` and `close` are stubbed; the sites run where they exist.
+  beforeEach(() => {
+    HTMLDialogElement.prototype.showModal = function showModal(this: HTMLDialogElement) { this.open = true }
+    HTMLDialogElement.prototype.close = function close(this: HTMLDialogElement) { this.open = false }
+  })
+
+  it('draws the header, the body and the footer, and puts the caller\'s classes on the card and the content region', () => {
+    render(<Modal open onClose={() => {}} title="Rename" closeLabel="Close" description="A new name" className="wide" contentClassName="scrolls" footer={<button type="button">Save</button>}>Body</Modal>)
+    const card = screen.getByRole('dialog', { name: 'Rename' })
+    expect(card.classList.contains('wide')).toBe(true)
+    expect(screen.getByRole('heading', { name: 'Rename' })).toBeTruthy()
+    expect(screen.getByText('A new name')).toBeTruthy()
+    expect(card.querySelector('.scrolls')?.textContent).toContain('Body')
+    expect(screen.getByRole('button', { name: 'Save' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Close' })).toBeTruthy()
+  })
+
+  it('when headless draws the children alone in the card, with no header, close button or footer', () => {
+    render(<Modal open headless onClose={() => {}} title="A notice" closeLabel="Close" footer={<button type="button">Save</button>}><h2>Our promise</h2></Modal>)
+    const card = screen.getByRole('dialog', { name: 'A notice' })
+    expect(screen.getByRole('heading', { name: 'Our promise' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Save' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Close' })).toBeNull()
+    expect(card.textContent).toBe('Our promise')
   })
 })
 
