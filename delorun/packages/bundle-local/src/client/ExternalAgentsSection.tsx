@@ -10,7 +10,8 @@ import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { RUN_TIMEOUT_MINUTES, type AgentLevelView, type DelegationConsentSettings } from '@delorun/plugin-delegation-consent/wire'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
-import { Button, Input, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Input, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button } from '@delorun/brand'
 import type { ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { SettingsCard } from '@delorun/settings-controls'
@@ -153,7 +154,7 @@ function AgentsGroup({ t, listing, busy, revoke }: GroupProps<GrantsAnswer> & { 
             <div className={css.description}>{grant.workspace}</div>
             <div className={css.description}>{t('agents.allowedAt', { time: formatTime(t, grant.grantedAt) })}</div>
           </div>
-          <Button variant="outline" size="sm" disabled={busy} onClick={() => { void revoke(grant) }}>{t('agents.revoke')}</Button>
+          <Button variant="secondary" size="sm" disabled={busy} onClick={() => { void revoke(grant) }}>{t('agents.revoke')}</Button>
         </li>)}
       </ul>}
   </>

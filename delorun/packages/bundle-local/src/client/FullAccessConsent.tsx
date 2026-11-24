@@ -7,7 +7,8 @@
  * the home's own computer and offers no way to grant.
  */
 import { useState, type ReactNode } from 'react'
-import { Button, Checkbox, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Checkbox } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, Dialog } from '@delorun/brand'
 import type { HostObservable, InjectFace, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { FULL_ACCESS_PRESET, readEverywhere, reviewChat, setFullAccess, type WorkspaceAccess } from './consents-api.ts'
 import { ELEVATION_REQUIRED } from './gate.ts'
@@ -297,9 +298,9 @@ function OpenConsent({ consent, confirm, cancel, t }: OpenConsentProps): ReactNo
   const acknowledge = consent.acknowledge
     ? <Checkbox checked={acknowledged} onChange={setAcknowledged} label={t('consent.acknowledge')} disabled={consent.busy} className={css.text} />
     : null
-  return <Modal open onClose={close} title={t(short ? 'switch.title' : 'consent.title')} closeLabel={t('consent.close')}
-    footer={<>
-      <Button variant="outline" data-modal-autofocus disabled={consent.busy} onClick={close}>{t('consent.cancel')}</Button>
+  return <Dialog open onClose={close} title={t(short ? 'switch.title' : 'consent.title')} closeLabel={t('consent.close')}
+    actions={<>
+      <Button variant="secondary" data-modal-autofocus disabled={consent.busy} onClick={close}>{t('consent.cancel')}</Button>
       {consent.form === 'remote' ? null
         : <Button variant="primary" disabled={consent.busy || (consent.acknowledge && !acknowledged)} onClick={confirm}>{t(short ? 'switch.confirm' : 'consent.confirm')}</Button>}
     </>}>
@@ -331,5 +332,5 @@ function OpenConsent({ consent, confirm, cancel, t }: OpenConsentProps): ReactNo
         </details>
         {consent.failure === undefined ? null : <ConsentFailureLine t={t} failure={consent.failure} />}
       </div>}
-  </Modal>
+  </Dialog>
 }

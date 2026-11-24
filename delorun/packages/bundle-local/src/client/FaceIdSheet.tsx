@@ -8,7 +8,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button } from '@delorun/brand'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { PasskeyBrowser } from './face-id-browser.ts'
 import type { FaceIdAction, FaceIdKind, PasskeyApi } from './face-id-types.ts'
@@ -138,9 +138,9 @@ export function FaceIdSheetBody({ t, action, kind, api, browser, hasPasskey, fal
           ? <Button variant="primary" type="button" className={css.confirm} onClick={onOpenDevices}>{t('sheet.openDevices')}</Button>
           : null}
     {showFallback && fallback === 'pin' && !pinMain
-      ? <Button variant="outline" type="button" className={css.secondary} data-face-id-fallback="pin" onClick={onFallback}>{t('sheet.usePin')}</Button> : null}
+      ? <Button variant="secondary" type="button" className={css.secondary} data-face-id-fallback="pin" onClick={onFallback}>{t('sheet.usePin')}</Button> : null}
     {showFallback && fallback === 'computer' && !stranded ? <p className={css.status} data-face-id-fallback="computer">{t('sheet.askComputer')}</p> : null}
-    <Button variant="outline" type="button" className={css.secondary} onClick={onCancel}>{t('sheet.cancel')}</Button>
+    <Button variant="secondary" type="button" className={css.secondary} onClick={onCancel}>{t('sheet.cancel')}</Button>
   </>
 }
 

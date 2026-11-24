@@ -5,9 +5,8 @@
  */
 import { useState } from 'react'
 import type { FormEvent, ReactNode } from 'react'
-import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
-import { CodeCells, Keypad } from '@delorun/brand'
+import { Button, CodeCells, Keypad } from '@delorun/brand'
 import { isRefused } from './host-api.ts'
 import type { FaceIdAction, PasskeyApi } from './face-id-types.ts'
 import { FaceIdIcon } from './face-id-icons.tsx'
@@ -74,7 +73,7 @@ export function FaceIdPinBody({ t, action, api, secret, onGranted, onBack }: Omi
         autoCapitalize="off" spellCheck={false} disabled={busy} value={value} onChange={(event) => { setValue(event.target.value) }} />}
     {wrong === undefined ? null : <p className={css.failed} role="alert">{t(`pin.${wrong}`)}</p>}
     <Button variant="primary" type="submit" className={css.confirm} disabled={!ready}>{t(busy ? 'pin.checking' : 'pin.confirm')}</Button>
-    <Button variant="outline" type="button" className={css.secondary} onClick={onBack}>{t('pin.back')}</Button>
+    <Button variant="secondary" type="button" className={css.secondary} onClick={onBack}>{t('pin.back')}</Button>
   </form>
 }
 

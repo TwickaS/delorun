@@ -6,7 +6,8 @@
  */
 import { useState } from 'react'
 import type { ReactNode } from 'react'
-import { Button, Input } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Input } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button } from '@delorun/brand'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import { ChoiceGroup, RadioList, SettingRow, SettingsCard } from '@delorun/settings-controls'
@@ -118,7 +119,7 @@ function WaitingRequests({ t, time, requests, openCode, decline }: Pick<PairingS
         </div>
         <span className={css.approve}>
           <Button variant="primary" size="sm" onClick={() => { openCode(request.requestId) }}>{t('pairing.waiting.enter')}</Button>
-          <Button size="sm" onClick={() => { void decline(request.requestId) }}>{t('pairing.waiting.decline')}</Button>
+          <Button variant="ghost" size="sm" onClick={() => { void decline(request.requestId) }}>{t('pairing.waiting.decline')}</Button>
         </span>
       </li>)}
     </ul>

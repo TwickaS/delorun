@@ -6,7 +6,7 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button } from '@delorun/brand'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { PasskeyBrowser } from './face-id-browser.ts'
 import { hashArgs } from './face-id-hash.ts'
@@ -144,7 +144,7 @@ export function PasskeyDevices({ t, api, browser, kind, atComputer, secret, onAd
       {devices.map(device => <DeviceCard key={device.deviceId} t={t} kind={kind} device={device} canRemoveDevice={all && !device.thisDevice}
         onAdd={onAdd} onRemove={(target) => { void ask(target) }} />)}
     </div>}
-    {all ? null : <Button variant="outline" type="button" className={css.action} onClick={() => { void ask({ kind: 'list' }) }}>{t('devices.showAll')}</Button>}
+    {all ? null : <Button variant="secondary" type="button" className={css.action} onClick={() => { void ask({ kind: 'list' }) }}>{t('devices.showAll')}</Button>}
     {asked === undefined ? null : asked.pin && secret !== undefined
       ? <FaceIdPin t={t} action={asked.action} api={api} secret={secret} onGranted={done} onBack={() => { setAsked({ ...asked, pin: false }) }}
         onCancel={() => { setAsked(undefined) }} />
@@ -169,7 +169,7 @@ function DeviceCard({ t, kind, device, canRemoveDevice, onAdd, onRemove }: {
     {device.passkeys.length === 0 && device.thisDevice
       ? <Button variant="primary" type="button" className={css.action} onClick={onAdd}>{t('devices.add')}</Button> : null}
     {canRemoveDevice
-      ? <Button variant="outline" type="button" className={css.action} onClick={() => { onRemove({ kind: 'device', deviceId: device.deviceId, label: device.label }) }}>
+      ? <Button variant="secondary" type="button" className={css.action} onClick={() => { onRemove({ kind: 'device', deviceId: device.deviceId, label: device.label }) }}>
         {t('devices.removeOther')}
       </Button> : null}
   </section>
@@ -189,6 +189,6 @@ function PasskeyRow({ t, passkey, kind, owner, onRemove }: {
   return <div className={css.passkey} data-face-id-passkey={passkey.credentialId}>
     <p className={css.meta}>{t('devices.added', { date: day(t, passkey.createdAt) })} · {t(passkey.synced ? 'devices.synced' : 'devices.deviceOnly')}</p>
     <p className={css.meta}>{passkey.lastUsedAt === null ? t('devices.neverUsed') : t('devices.lastUsed', { date: day(t, passkey.lastUsedAt) })}</p>
-    <Button variant="outline" type="button" className={css.action} onClick={onRemove}>{label}</Button>
+    <Button variant="secondary" type="button" className={css.action} onClick={onRemove}>{label}</Button>
   </div>
 }

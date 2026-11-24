@@ -5,7 +5,8 @@
  */
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Button, Input, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Input } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, Dialog } from '@delorun/brand'
 import { failureSentence, isRefused, LOOPBACK_REQUIRED, type HostFetch } from './host-api.ts'
 import { beginDangerous, confirmDangerous, type DangerousBegun } from './run-settings-api.ts'
 import type { SetupCommandsLocaleKey } from './setup-commands-locales.ts'
@@ -69,14 +70,14 @@ export function DangerousDialog({ t, fetch, onClose, onDone }: {
       setBusy(false)
     }
   }
-  return <Modal open onClose={onClose} title={t('dangerous.title')} closeLabel={t('dangerous.close')} tone="warning"
-    footer={step === 'ask'
+  return <Dialog open onClose={onClose} title={t('dangerous.title')} closeLabel={t('dangerous.close')} tone="warning"
+    actions={step === 'ask'
       ? <>
         <Button variant="primary" data-modal-autofocus onClick={onClose}>{t('dangerous.no')}</Button>
-        <Button variant="outline" disabled={begun === undefined} onClick={() => { setStep('phrase') }}>{t('dangerous.yes')}</Button>
+        <Button variant="secondary" disabled={begun === undefined} onClick={() => { setStep('phrase') }}>{t('dangerous.yes')}</Button>
       </>
       : <>
-        <Button variant="outline" onClick={onClose}>{t('dangerous.no')}</Button>
+        <Button variant="secondary" onClick={onClose}>{t('dangerous.no')}</Button>
         <Button variant="primary" disabled={busy || begun === undefined || typed !== begun.phrase} onClick={() => { void confirm() }}>{t('dangerous.confirm')}</Button>
       </>}>
     {Array.from({ length: WARNING_LINES }, (_, index) => <p key={index} className={css.warning}>{t(`dangerous.line.${String(index + 1)}` as SetupCommandsLocaleKey)}</p>)}
@@ -89,5 +90,5 @@ export function DangerousDialog({ t, fetch, onClose, onDone }: {
       </label>
       : null}
     {failure === undefined ? null : <p className={css.failed} role="alert">{isRefused(failure, 'CODE_EXPIRED') ? t('dangerous.expired') : runFailureText(t, failure)}</p>}
-  </Modal>
+  </Dialog>
 }

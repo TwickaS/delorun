@@ -8,8 +8,7 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Button, Modal } from '@deepseek-ai/dsh-client-ui-primitives'
-import { CodeCells } from '@delorun/brand'
+import { Button, CodeCells, Dialog } from '@delorun/brand'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import {
   approveDevice, cancelPendingDevice, ELEVATION_POLL_MS, hostFailureOf, LOOPBACK_REQUIRED, openApprovalWindow,
@@ -309,7 +308,7 @@ function DeviceManager({ t, fetch, hasOwner, place }: { t: Translate; fetch: Hos
           </div>
           {removeFailure?.deviceId === device.id ? <div className={css.failed} role="alert">{removeFailure.text}</div> : null}
         </div>
-        <Button variant="outline" size="sm" onClick={() => { setRemoving(device) }}>{t('device.remove')}</Button>
+        <Button variant="secondary" size="sm" onClick={() => { setRemoving(device) }}>{t('device.remove')}</Button>
       </li>)}
     </ul>}
     {/* Adding a device is computer-only (E1): a device is told so instead of offered a button the home refuses. */}
@@ -327,14 +326,14 @@ function DeviceManager({ t, fetch, hasOwner, place }: { t: Translate; fetch: Hos
         failure={approveFailure?.requestId === request.requestId ? approveFailure.text : undefined}
         onApprove={typed => approve(request.requestId, typed)} onCancel={() => cancel(request.requestId)} />)}
     </div>}
-    {removing === undefined ? null : <Modal open onClose={() => { setRemoving(undefined) }}
+    {removing === undefined ? null : <Dialog open onClose={() => { setRemoving(undefined) }}
       title={t('remove.title', { label: removing.label })} closeLabel={t('remove.close')}
-      footer={<>
-        <Button variant="outline" onClick={() => { setRemoving(undefined) }}>{t('remove.cancel')}</Button>
+      actions={<>
+        <Button variant="secondary" onClick={() => { setRemoving(undefined) }}>{t('remove.cancel')}</Button>
         <Button variant="primary" data-modal-autofocus onClick={() => { void remove(removing) }}>{t('remove.confirm')}</Button>
       </>}>
       <p className={css.consent}>{t('remove.body')}</p>
-    </Modal>}
+    </Dialog>}
   </>
 }
 
@@ -373,7 +372,7 @@ function PendingRow({ t, request, failure, onApprove, onCancel }: {
     <form className={css.approve} onSubmit={(event) => { event.preventDefault(); void submit() }}>
       <div className={css.code}><CodeCells label={t('pending.code', { label: request.label })} length={CODE_LENGTH} value={typed} onChange={setTyped} autoComplete="one-time-code" disabled={busy} /></div>
       <Button variant="primary" size="sm" type="submit" disabled={busy || !isCompleteCode(typed)}>{t('pending.approve')}</Button>
-      <Button size="sm" type="button" disabled={busy} onClick={() => { void run(onCancel) }}>{t('pending.cancel')}</Button>
+      <Button variant="ghost" size="sm" type="button" disabled={busy} onClick={() => { void run(onCancel) }}>{t('pending.cancel')}</Button>
     </form>
   </div>
 }
@@ -445,7 +444,7 @@ function UnlockRequests({ t, fetch, devices }: { t: Translate; fetch: HostFetch;
           <div className={css.description}>{t('unlock.running.until', { time: clockTime(t, running.endsAt) })}</div>
           {failure?.id === running.id ? <div className={css.failed} role="alert">{failure.text}</div> : null}
         </div>
-        <Button variant="outline" size="sm" onClick={() => { void revoke(running.id) }}>{t('unlock.running.end')}</Button>
+        <Button variant="secondary" size="sm" onClick={() => { void revoke(running.id) }}>{t('unlock.running.end')}</Button>
       </div>)}
     </> : null}
   </div>
@@ -478,6 +477,6 @@ function UnlockRequestRow({ t, label, request, failure, onDecline }: {
       <div className={css.description}>{t('unlock.requests.asked', { time: formatTime(t, request.requestedAt) })}</div>
       {failure === undefined ? null : <div className={css.failed} role="alert">{failure}</div>}
     </div>
-    <Button variant="outline" size="sm" type="button" disabled={busy} onClick={() => { void run(onDecline) }}>{t('unlock.requests.decline')}</Button>
+    <Button variant="secondary" size="sm" type="button" disabled={busy} onClick={() => { void run(onDecline) }}>{t('unlock.requests.decline')}</Button>
   </div>
 }

@@ -4,7 +4,8 @@
  * render it.
  */
 import { useState, type ReactNode } from 'react'
-import { Button, Modal, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Switch } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, Dialog } from '@delorun/brand'
 import type { ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import type { PrivacyLocaleKey } from './locales.ts'
@@ -59,16 +60,16 @@ export function OptInRow({ id, t, form, mutation, unavailable, channelHost, setE
         onChange={(enabled) => { if (enabled) setAsking(true); else void setEnabled(false) }} />
       : null}
     {asking
-      ? <Modal open onClose={() => { setAsking(false) }} title={t(`${id}.confirm.title`)} closeLabel={t('confirm.close')}
-        footer={<>
-          <Button variant="outline" onClick={() => { setAsking(false) }}>{t('confirm.cancel')}</Button>
+      ? <Dialog open onClose={() => { setAsking(false) }} title={t(`${id}.confirm.title`)} closeLabel={t('confirm.close')}
+        actions={<>
+          <Button variant="secondary" onClick={() => { setAsking(false) }}>{t('confirm.cancel')}</Button>
           <Button variant="primary" data-modal-autofocus onClick={() => {
             setAsking(false)
             void setEnabled(true)
           }}>{t('confirm.accept')}</Button>
         </>}>
         <p className={css.consent}>{copy('confirm.body')}</p>
-      </Modal>
+      </Dialog>
       : null}
   </div>
 }

@@ -9,8 +9,9 @@
  */
 import { useEffect, useId, useState, type ReactNode } from 'react'
 import {
-  Button, CommandText, IconChevronDownOutlineRegular, IconShieldOutlineRegular, Modal, StateDot, Tooltip, type StateDotState,
+  CommandText, IconChevronDownOutlineRegular, IconShieldOutlineRegular, StateDot, Tooltip, type StateDotState,
 } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button, Dialog } from '@delorun/brand'
 import type { HostObservable, InjectFace, OwnerOf, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: the 'sidebar.footer.action' SlotMap entry.
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
@@ -278,7 +279,7 @@ function TrustPanel({ t, bill, checks, rows, useChecking, useOverview, useOvervi
     <>
       <div className={css.check}>
         <Button
-          variant="outline"
+          variant="secondary"
           size="sm"
           disabled={check === null || running}
           aria-busy={running}
@@ -299,7 +300,7 @@ function TrustPanel({ t, bill, checks, rows, useChecking, useOverview, useOvervi
     </>
   )
   return (
-    <Modal
+    <Dialog
       open
       onClose={onClose}
       title={t('overview.title')}
@@ -319,7 +320,7 @@ function TrustPanel({ t, bill, checks, rows, useChecking, useOverview, useOvervi
         checkBlock={checkBlock}
         message={message}
       />
-    </Modal>
+    </Dialog>
   )
 }
 

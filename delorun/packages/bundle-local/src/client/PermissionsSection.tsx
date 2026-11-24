@@ -11,7 +11,7 @@
  */
 import { useCallback, useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button } from '@delorun/brand'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import type { ConfigFormSnapshot } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { ObservableSnapshot } from '@deepseek-ai/dsh-client-store'
@@ -137,7 +137,7 @@ export function PermissionsSection({ t, fetch, ask, review, useMcpConsent, useMc
               {everywhere.grantedAt === undefined ? null : <div className={css.description}>{t('everywhere.since', { time: formatTime(t, Date.parse(everywhere.grantedAt)) })}</div>}
               <div className={css.description}>{t('everywhere.howBefore')} <code className={css.command}>{SETUP_PROMPTS_COMMAND}</code>{t('everywhere.howAfter')}</div>
             </div>
-            <Button variant="outline" size="sm" disabled={busy} onClick={() => { void turnOff() }}>{t('everywhere.off')}</Button>
+            <Button variant="secondary" size="sm" disabled={busy} onClick={() => { void turnOff() }}>{t('everywhere.off')}</Button>
           </div>
           : <p className={css.boxFailed} role="alert">{t('everywhere.problem', { problem: everywhere.problem ?? '' })}</p>}
       </SettingsCard>
@@ -208,12 +208,12 @@ function FullAccessGroup({ t, listing, busy, allow, revoke }: GroupProps<Workspa
     {granted.length === 0
       ? <p className={css.boxLine}>{t('access.none')}</p>
       : <ul className={css.list}>
-        {granted.map(access => row(access, <Button variant="outline" size="sm" disabled={busy} onClick={() => { void revoke(access) }}>{t('access.revoke')}</Button>))}
+        {granted.map(access => row(access, <Button variant="secondary" size="sm" disabled={busy} onClick={() => { void revoke(access) }}>{t('access.revoke')}</Button>))}
       </ul>}
     {others.length === 0 ? null : <details className={css.others} data-others="">
       <summary>{t('access.others', { count: String(others.length) })}</summary>
       <ul className={css.list}>
-        {others.map(access => row(access, <Button variant="outline" size="sm" disabled={busy} onClick={() => { void allow(access) }}>{t('access.allow')}</Button>))}
+        {others.map(access => row(access, <Button variant="secondary" size="sm" disabled={busy} onClick={() => { void allow(access) }}>{t('access.allow')}</Button>))}
       </ul>
     </details>}
   </>
@@ -245,7 +245,7 @@ function ServersGroup({ t, listing, busy, review, decline, revoke }: GroupProps<
           </div>
           <div className={css.buttons}>
             <Button variant="primary" size="sm" disabled={busy} onClick={() => { void review(server) }}>{t('mcp.review')}</Button>
-            <Button variant="outline" size="sm" disabled={busy} onClick={() => { void decline(server) }}>{t('mcp.decline')}</Button>
+            <Button variant="secondary" size="sm" disabled={busy} onClick={() => { void decline(server) }}>{t('mcp.decline')}</Button>
           </div>
         </li>)}
       </ul>
@@ -258,7 +258,7 @@ function ServersGroup({ t, listing, busy, review, decline, revoke }: GroupProps<
             <div className={css.title}>{server.serverName}</div>
             <div className={css.description}>{t(server.state === 'declined' ? 'mcp.state.declined' : 'mcp.state.revoked')}</div>
           </div>
-          <Button variant="outline" size="sm" disabled={busy} onClick={() => { void review(server) }}>{t('mcp.allow')}</Button>
+          <Button variant="secondary" size="sm" disabled={busy} onClick={() => { void review(server) }}>{t('mcp.allow')}</Button>
         </li>)}
       </ul>
     </>}
@@ -275,7 +275,7 @@ function ServersGroup({ t, listing, busy, review, decline, revoke }: GroupProps<
               <ServerStart t={t} start={start} />
             </details>
           </div>
-          <Button variant="outline" size="sm" disabled={busy} onClick={() => { void revoke(start) }}>{t('mcp.revoke')}</Button>
+          <Button variant="secondary" size="sm" disabled={busy} onClick={() => { void revoke(start) }}>{t('mcp.revoke')}</Button>
         </li>)}
       </ul>
     </>}
