@@ -219,6 +219,12 @@ export function gatesFor(base: string): readonly GateCheck[] {
       inputs: ['delorun/packages/*/src/**', 'delorun/upstream-patches.json', 'packages/client/**', `${GATE_DIR}/design-system.*`],
     },
     {
+      id: 'gates:brand-names',
+      title: 'No old spelling of Delorun, no old npm scope and no upstream name presented as Delorun\'s own in the files Delorun owns',
+      command: [TSX, `${GATE_DIR}/brand-names.ts`],
+      inputs: ['delorun/**', '.agents/skills/delorun-*/**', '.agents/notes/**/*-delorun-*', '.github/**', 'README*', 'BRAND_GUIDELINES*', 'CONTRIBUTING*', 'GOVERNANCE.md', 'LICENSE'],
+    },
+    {
       id: 'gates:dco',
       title: 'Every commit in the range is signed off by its author',
       command: [TSX, `${GATE_DIR}/dco.ts`, '--base', base],
