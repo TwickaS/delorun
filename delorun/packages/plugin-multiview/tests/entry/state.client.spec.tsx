@@ -88,6 +88,25 @@ describe('MultiviewStore open, layout and persistence', () => {
     expect(store.of(CHAT).getSnapshot().open).toBe(false)
   })
 
+  it('records a close the person made, and clears it on the next open', () => {
+    const { store, saves } = makeStore()
+    store.open(CHAT)
+    expect(store.of(CHAT).getSnapshot().closedByPerson).toBeUndefined()
+    store.closeByPerson(CHAT)
+    expect(store.of(CHAT).getSnapshot()).toMatchObject({ open: false, closedByPerson: true })
+    expect(saves.at(-1)?.value).toMatchObject({ open: false, closedByPerson: true })
+    store.open(CHAT)
+    expect(store.of(CHAT).getSnapshot()).toMatchObject({ open: true })
+    expect(store.of(CHAT).getSnapshot().closedByPerson).toBeUndefined()
+  })
+
+  it('leaves the person\'s close alone when the layer closes the chat for its own reason', () => {
+    const { store } = makeStore()
+    store.closeByPerson(CHAT)
+    store.close(CHAT)
+    expect(store.of(CHAT).getSnapshot()).toMatchObject({ open: false, closedByPerson: true })
+  })
+
   it('rearranges in a preset, which becomes the default, and resets a hand arrangement to it without closing a pane', () => {
     const { store } = makeStore()
     store.pinAll(CHAT, [A, B])

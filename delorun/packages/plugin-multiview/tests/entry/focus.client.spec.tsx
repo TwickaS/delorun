@@ -65,6 +65,20 @@ describe('the focus command', () => {
     expect(h.state(CHAT)).toMatchObject({ pins: [A, B], open: true, layout: before.layout })
   })
 
+  it('records its close as the person\'s, so a hand-off leaves Multiview closed until they open it again', async () => {
+    const h = harness({ shortcuts: true, list: { main: CHAT, catalogs: { [CHAT]: [A] } } })
+    await h.fiber.await()
+    h.store.pinAll(CHAT, [A])
+    h.store.open(CHAT)
+    expect(press(h)).toBeUndefined()
+    expect(h.state(CHAT)).toMatchObject({ open: false, closedByPerson: true })
+    h.setList({ main: CHAT, catalogs: { [CHAT]: [A, B] } })
+    expect(h.state(CHAT)).toMatchObject({ pins: [A, B], open: false })
+    expect(press(h)).toBeUndefined()
+    expect(h.state(CHAT)).toMatchObject({ open: true })
+    expect(h.state(CHAT).closedByPerson).toBeUndefined()
+  })
+
   it('pins the running agents and opens when nothing is pinned, as the toggle does', async () => {
     const h = harness({ shortcuts: true, list: { main: CHAT, catalogs: { [CHAT]: [A, B] }, running: [B] } })
     await h.fiber.await()

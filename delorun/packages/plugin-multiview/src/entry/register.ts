@@ -210,7 +210,11 @@ function observeChats(ctx: Context, store: MultiviewStore): () => void {
     const fresh = watcher.observe(main, catalog)
     if (main === undefined || fresh.length === 0) return
     store.pinAll(main, fresh)
-    if (store.settings.getSnapshot().autoOpen && store.of(main).getSnapshot().pins.length > 0) store.open(main)
+    // A hand-off opens Multiview unless the person closed it in this chat and has not opened it since: their close outranks the
+    // setting, which only says whether a hand-off opens Multiview at all.
+    const { autoOpen } = store.settings.getSnapshot()
+    const { pins, closedByPerson } = store.of(main).getSnapshot()
+    if (autoOpen && closedByPerson !== true && pins.length > 0) store.open(main)
   }
   const stop = ctx.sessions.list.subscribe(onSessions)
   onSessions()

@@ -106,13 +106,11 @@ describe('auto-pin on a hand-off', () => {
     expect(h.state(CHAT).open).toBe(true)
   })
 
-  it('opens again for every hand-off, also after the person closed it', async () => {
+  it('opens again for every hand-off while the person has not closed it', async () => {
     const h = harness({ list: { main: CHAT, catalogs: { [CHAT]: [] } } })
     await h.fiber.await()
     h.setList({ main: CHAT, catalogs: { [CHAT]: [A] } })
     expect(h.state(CHAT).open).toBe(true)
-    h.service.close(sid(CHAT))
-    expect(h.state(CHAT).open).toBe(false)
     h.setList({ main: CHAT, catalogs: { [CHAT]: [A, B] } })
     expect(h.state(CHAT)).toMatchObject({ pins: [A, B], open: true })
   })
@@ -146,11 +144,71 @@ describe('auto-pin on a hand-off', () => {
     expect(h.state(CHAT)).toMatchObject({ pins: [], open: false })
   })
 
-  it('with auto-open off pins the agent but leaves Multiview closed', async () => {
+  it('with auto-open off pins the agent but leaves Multiview closed, and never opens it by itself', async () => {
     const h = harness({ settings: { autoOpen: false }, list: { main: CHAT, catalogs: { [CHAT]: [] } } })
     await h.fiber.await()
     h.setList({ main: CHAT, catalogs: { [CHAT]: [A] } })
     expect(h.state(CHAT)).toMatchObject({ pins: [A], open: false })
+    h.setList({ main: CHAT, catalogs: { [CHAT]: [A, B] } })
+    expect(h.state(CHAT)).toMatchObject({ pins: [A, B], open: false })
+    // The setting stops auto-open; it does not close what the person opened.
+    h.service.open(sid(CHAT))
+    h.setList({ main: CHAT, catalogs: { [CHAT]: [A, B, C] } })
+    expect(h.state(CHAT)).toMatchObject({ pins: [A, B, C], open: true })
+  })
+
+  it('leaves Multiview closed after the person closed it, and pins the agent that arrives', async () => {
+    const h = harness({ list: { main: CHAT, catalogs: { [CHAT]: [] } } })
+    await h.fiber.await()
+    h.setList({ main: CHAT, catalogs: { [CHAT]: [A] } })
+    expect(h.state(CHAT).open).toBe(true)
+    h.service.closeByPerson(sid(CHAT))
+    expect(h.state(CHAT).open).toBe(false)
+    h.setList({ main: CHAT, catalogs: { [CHAT]: [A, B] } })
+    expect(h.state(CHAT)).toMatchObject({ pins: [A, B], open: false })
+    h.setList({ main: CHAT, catalogs: { [CHAT]: [A, B, C] } })
+    expect(h.state(CHAT)).toMatchObject({ pins: [A, B, C], open: false })
+  })
+
+  it('opens for a hand-off again once the person opened Multiview themselves', async () => {
+    const h = harness({ list: { main: CHAT, catalogs: { [CHAT]: [] } } })
+    await h.fiber.await()
+    h.setList({ main: CHAT, catalogs: { [CHAT]: [A] } })
+    h.service.closeByPerson(sid(CHAT))
+    h.setList({ main: CHAT, catalogs: { [CHAT]: [A, B] } })
+    expect(h.state(CHAT).open).toBe(false)
+    h.service.open(sid(CHAT))
+    expect(h.state(CHAT).open).toBe(true)
+    h.setList({ main: CHAT, catalogs: { [CHAT]: [A, B, C] } })
+    expect(h.state(CHAT)).toMatchObject({ pins: [A, B, C], open: true })
+  })
+
+  it('keeps a close the layer made for its own reasons from suppressing a hand-off', async () => {
+    const h = harness({ list: { main: CHAT, catalogs: { [CHAT]: [] } } })
+    await h.fiber.await()
+    h.setList({ main: CHAT, catalogs: { [CHAT]: [A] } })
+    expect(h.state(CHAT)).toMatchObject({ pins: [A], open: true })
+    // The layer closes an emptied catalog itself, since the toggle hides with it; that is not the person's choice.
+    h.setList({ main: CHAT, catalogs: { [CHAT]: [] } })
+    expect(h.state(CHAT)).toMatchObject({ pins: [A], open: false })
+    expect(h.state(CHAT).closedByPerson).toBeUndefined()
+    h.setList({ main: CHAT, catalogs: { [CHAT]: [A, B] } })
+    expect(h.state(CHAT)).toMatchObject({ pins: [A, B], open: true })
+  })
+
+  it('keeps a manual close across a reload, since the flag is saved with the chat', async () => {
+    const first = harness({ list: { main: CHAT, catalogs: { [CHAT]: [] } } })
+    await first.fiber.await()
+    first.setList({ main: CHAT, catalogs: { [CHAT]: [A] } })
+    first.service.closeByPerson(sid(CHAT))
+    const saved = first.saved.get(CHAT)
+    expect(saved).toMatchObject({ open: false, closedByPerson: true })
+    await first.fiber.dispose()
+    // A new page reads the saved record and starts from it.
+    const reloaded = harness({ initial: { [CHAT]: saved! }, list: { main: CHAT, catalogs: { [CHAT]: [A] } } })
+    await reloaded.fiber.await()
+    reloaded.setList({ main: CHAT, catalogs: { [CHAT]: [A, B] } })
+    expect(reloaded.state(CHAT)).toMatchObject({ pins: [A, B], open: false })
   })
 
   it('treats a chat as new each time it becomes the main view', async () => {

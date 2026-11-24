@@ -85,8 +85,12 @@ const shapeSchema: z.ZodType<LayoutShape> = z.object({ version: z.literal(1), ro
 
 const ARRANGEMENTS: readonly [ChatArrangement, ...ChatArrangement[]] = ['custom', ...LAYOUT_CHOICE_IDS]
 
+/** The version this module writes. Version 2 adds `closedByPerson`; a version 1 record has no such field and loads as it did. */
+const SAVED_VERSION = 2
+
 const saved = z.object({
-  v: z.literal(1),
+  // Version 1 is read as it was written: it has no `closedByPerson`, which reads as "the person has not closed it".
+  v: z.union([z.literal(1), z.literal(2)]),
   pins: z.array(sessionId).max(MAX_SAVED_PANES),
   // Every split has two children or more, so a layout of at most this many panes nests at most this many splits.
   layout: z.object({ version: z.literal(1), root: nodeWithin(MAX_SAVED_PANES - 1) }).nullable(),
@@ -95,6 +99,8 @@ const saved = z.object({
   arrangement: z.enum(ARRANGEMENTS).optional(),
   slots: z.array(sessionId).max(MAX_SAVED_PANES).optional(),
   shape: shapeSchema.optional(),
+  // Added with the manual close; a version 1 record has none of it and loads as it did.
+  closedByPerson: z.literal(true).optional(),
 })
 
 const index = z.array(sessionId).max(KEPT_CHATS_RANGE.max)
@@ -177,12 +183,15 @@ export function localPersistence(storage: () => MultiviewStorage | undefined, wa
       if (!parsed.success) return discard(target, chat, parsed.error.issues[0]?.message ?? 'wrong format')
       const problem = problemOf(parsed.data)
       if (problem !== undefined) return discard(target, chat, problem)
-      const { pins, layout, open, arrangement, slots, shape } = parsed.data
+      const { pins, layout, open, arrangement, slots, shape, closedByPerson } = parsed.data
       return {
         pins, layout, open,
         ...(arrangement === undefined ? {} : { arrangement }),
         ...(slots === undefined ? {} : { slots }),
         ...(shape === undefined ? {} : { shape }),
+        // The flag says the person closed Multiview and has not opened it since, so it means nothing while Multiview is open:
+        // a record that says both is read as open with no manual close recorded, which never suppresses a hand-off.
+        ...(closedByPerson === true && !open ? { closedByPerson: true as const } : {}),
       }
     },
     save(chat, value: ChatMultiview, keepChats) {
@@ -192,8 +201,9 @@ export function localPersistence(storage: () => MultiviewStorage | undefined, wa
       const evicted = kept.slice(Math.max(1, keepChats))
       try {
         target.setItem(key(chat), JSON.stringify({
-          v: 1, pins: value.pins, layout: value.layout, open: value.open,
+          v: SAVED_VERSION, pins: value.pins, layout: value.layout, open: value.open,
           arrangement: value.arrangement, slots: value.slots, shape: value.shape,
+          ...(value.closedByPerson === true ? { closedByPerson: true as const } : {}),
         }))
         target.setItem(indexKey, JSON.stringify(kept.slice(0, Math.max(1, keepChats))))
       } catch (error) {

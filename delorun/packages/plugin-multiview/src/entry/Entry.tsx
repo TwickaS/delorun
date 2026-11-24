@@ -133,14 +133,15 @@ export function Footer({ sessionId, useSessions, multiview, layoutsT, t }: Foote
 }
 
 /**
- * Open Multiview, pinning every running agent first when nothing is pinned; or close it while it shows.
+ * Open Multiview, pinning every running agent first when nothing is pinned; or close it while it shows. Both are the person's
+ * own choice: a close here keeps a hand-off from opening Multiview again, and an open lets it open again.
  * @param multiview - the service.
  * @param chat - the chat.
  * @param shown - whether Multiview shows now.
  * @param running - the running agents that are not pinned.
  */
 export function openOrClose(multiview: MultiviewService, chat: SessionId, shown: boolean, running: readonly SessionId[]): void {
-  if (shown) { multiview.close(chat); return }
+  if (shown) { multiview.closeByPerson(chat); return }
   if (multiview.of(chat).getSnapshot().pins.length === 0) multiview.pinAll(chat, running)
   if (multiview.of(chat).getSnapshot().pins.length > 0) multiview.open(chat)
 }
