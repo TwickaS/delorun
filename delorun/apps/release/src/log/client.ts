@@ -40,6 +40,12 @@ const CHECKPOINT_SIZE_LIMIT = 64 * 1024
 /** The size limit of a refusal body the submit step reads to name the log's reason. */
 const REFUSAL_BODY_LIMIT = 4 * 1024
 
+/** How many characters of a refusal's body its error quotes. */
+export const REFUSAL_EXCERPT_CHARACTERS = 500
+
+/** How many bytes of a refusal's body are read for the excerpt; the rest is not read. */
+const REFUSAL_READ_LIMIT = 4 * 1024
+
 /**
  * The only answers that mean the log refuses an entry's key type: HTTP 400 with a JSON body whose `message` is one of
  * these. Rekor v2 gives the first whenever it cannot build a `hashedrekord` entry from a request, which includes a key
@@ -61,11 +67,58 @@ export class LogSubmitError extends Error {
    * @param body - the answer's body as text.
    */
   constructor(url: string, status: number, body: string) {
-    super(`${url} answered HTTP ${String(status)}${body === '' ? '' : `: ${body.replace(/\s+/gu, ' ').trim()}`}`)
+    // The message carries the same stripped excerpt as any other refusal, so the log's own text cannot steer a terminal.
+    const excerpt = refusalExcerpt(body)
+    super(`${url} answered HTTP ${String(status)}${excerpt === '' ? '' : `: ${excerpt}`}`)
     this.name = 'LogSubmitError'
     this.status = status
     this.body = body
   }
+}
+
+/**
+ * Read a body's chunks until it ends or {@link REFUSAL_READ_LIMIT} bytes are read.
+ * @param reader - the body's reader.
+ * @param chunks - receives each chunk as it is read, so a read that fails part-way leaves the earlier ones.
+ */
+async function readInto(reader: ReadableStreamDefaultReader<Uint8Array>, chunks: Uint8Array[]): Promise<void> {
+  let read = 0
+  while (read < REFUSAL_READ_LIMIT) {
+    const { done, value } = await reader.read()
+    if (done) return
+    chunks.push(value)
+    read += value.byteLength
+  }
+}
+
+/**
+ * Read a refused response's body, stopping at {@link REFUSAL_READ_LIMIT} bytes and cancelling the rest, so a body that
+ * never ends cannot hold the request open.
+ * @param response - the refused response.
+ * @returns the body's text, at most {@link REFUSAL_READ_LIMIT} bytes; empty when it is empty or cannot be read.
+ */
+async function refusalBody(response: Response): Promise<string> {
+  const reader = response.body?.getReader()
+  if (reader === undefined) return ''
+  const chunks: Uint8Array[] = []
+  try {
+    await readInto(reader, chunks)
+  } catch {
+    // The body's read failed part-way (a reset connection or the request's timeout); the refusal is the error reported, and the bytes read so far still make its excerpt.
+  }
+  await reader.cancel().catch(() => undefined)
+  return new TextDecoder('utf-8', { fatal: false }).decode(Buffer.concat(chunks).subarray(0, REFUSAL_READ_LIMIT))
+}
+
+/**
+ * The start of a refused request's body, for its error: the log names its reason there, such as Rekor's
+ * `{"code":3,"message":"invalid hashedrekord request"}`.
+ * @param body - the refused response's body, as {@link refusalBody} read it.
+ * @returns at most {@link REFUSAL_EXCERPT_CHARACTERS} characters of the body, with each run of control, format and
+ * line-separator characters shown as one space so the log's text cannot steer a terminal; empty when the body is empty.
+ */
+function refusalExcerpt(body: string): string {
+  return [...body.replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]+/gu, ' ').trim()].slice(0, REFUSAL_EXCERPT_CHARACTERS).join('')
 }
 
 /**
@@ -97,13 +150,25 @@ export function isEntryTypeRefusal(error: unknown): boolean {
 async function submitEntry(url: string, entry: HashedRekordRequest): Promise<Response> {
   const response = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(entry), signal: AbortSignal.timeout(RELEASE_LOG_REQUEST_TIMEOUT_SECONDS * 1000) })
   if (response.ok) return response
-  const body = Buffer.from(await response.arrayBuffer().catch(() => new ArrayBuffer(0))).subarray(0, REFUSAL_BODY_LIMIT).toString('utf8')
-  throw new LogSubmitError(url, response.status, body)
+  // The body is read through the same capped, cancelling read as any other refusal, so a body that never ends cannot
+  // hold the submission open; the type refusal is decided on the JSON it carries.
+  throw new LogSubmitError(url, response.status, await refusalBody(response))
+}
+
+/**
+ * The error for a refused request.
+ * @param url - the request's URL.
+ * @param response - the refused response.
+ * @returns an error naming the URL, the status and the start of the body.
+ */
+async function refusal(url: string, response: Response): Promise<Error> {
+  const excerpt = refusalExcerpt(await refusalBody(response))
+  return new Error(`${url} answered HTTP ${String(response.status)}${excerpt === '' ? '' : `: ${excerpt}`}`)
 }
 
 async function respond(url: string, init?: RequestInit): Promise<Response> {
   const response = await fetch(url, { ...init, signal: AbortSignal.timeout(RELEASE_LOG_REQUEST_TIMEOUT_SECONDS * 1000) })
-  if (!response.ok) throw new Error(`${url} answered HTTP ${String(response.status)}`)
+  if (!response.ok) throw await refusal(url, response)
   return response
 }
 
@@ -124,7 +189,7 @@ async function fetchTile(prefix: string, path: string): Promise<Uint8Array | und
   const url = `${prefix.replace(/\/+$/u, '')}/${path}`
   const response = await fetch(url, { signal: AbortSignal.timeout(RELEASE_LOG_REQUEST_TIMEOUT_SECONDS * 1000) })
   if (response.status === 404) return undefined
-  if (!response.ok) throw new Error(`${url} answered HTTP ${String(response.status)}`)
+  if (!response.ok) throw await refusal(url, response)
   return bytesOf(url, response, TILE_WIDTH * 32)
 }
 
