@@ -632,7 +632,7 @@ const TOOL_PACKAGES: ToolPackage[] = [
       await ctx.plugin(ToolSubagent, { provider: 'mock', modelDiscovery: true })
     },
     note:
-      'The load-time `toolName` selects the delegation name (default `subagent`); `modelSelection` adds optional route fields. `modelDiscovery` defaults off and registers shared discovery on one instance per scope. Web and Desktop presets enable spawn discovery and route fields and leave `subagent_fork` route fields disabled. The Host settings service records authorization for each new top-level Session; child Sessions inherit it. Without a recorded policy, discovery and explicit selection permit only the current parent route. Every delegation returns the child\'s name promptly; local children accept follow-ups, while external backends report their single execution automatically.',
+      'The load-time `toolName` selects the delegation name (default `subagent`); `modelSelection` defaults on and adds optional route fields, so a child may run on any provider and model the person has configured, including a different provider from its parent, at any depth. `modelDiscovery` defaults off and registers shared discovery on one instance per scope. Web and Desktop presets enable spawn discovery and leave `subagent_fork` route fields off. The Host settings service records a route narrowing for each new top-level Session; child Sessions inherit it. An empty or absent narrowing leaves the live adapter as the authority, and a non-empty one narrows explicit selection to those routes. Every delegation returns the child\'s name promptly; local children accept follow-ups, while external backends report their single execution automatically.',
   },
   {
     pkg: '@deepseek-ai/dsh-tool-subagent-control',

@@ -120,10 +120,10 @@ describe('Subagent model selection fields', () => {
     expect(actions.toggleModel).toHaveBeenCalledWith('alpha\0deep')
   })
 
-  it('renders directory progress, failures, unavailable routes, and validation', () => {
-    renderSubagentModelSelection({ enabled: true, catalogStatus: 'loading', invalid: true })
+  it('renders directory progress, failures, unavailable routes, and the narrowing hint', () => {
+    renderSubagentModelSelection({ enabled: true, catalogStatus: 'loading' })
     expect(screen.getByText(en.subagentModelSelectionLoading)).toBeTruthy()
-    expect(screen.getByText(en.subagentModelSelectionRequired)).toBeTruthy()
+    expect(screen.getByText(en.subagentModelSelectionNarrowing)).toBeTruthy()
 
     cleanup()
     const errorActions = renderSubagentModelSelection({ enabled: true, catalogStatus: 'error' })

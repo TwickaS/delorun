@@ -111,7 +111,7 @@ describe('SubagentModelSelectionConfig', () => {
     await ctx.fiber.dispose()
   })
 
-  it('rejects duplicate routes, enabled empty settings, and an empty durable policy', async () => {
+  it('rejects duplicate routes and records an empty narrowing as a refusal', async () => {
     const ctx = ownContext(new Context())
     await mountAgentLoopTestDependencies(ctx, { workingDirectory: true })
     await ctx.plugin(AgentLoop, { agents: [] })
@@ -123,20 +123,22 @@ describe('SubagentModelSelectionConfig', () => {
     await selectionConfigs.get(ctx)!.update({ allowedModels: [...ALLOWED_MODELS, ...ALLOWED_MODELS] })
     await expect(capturePolicy(ctx)).rejects.toThrow('repeats route "alpha/fast-model"')
 
+    // Enabled with no narrowing records nothing, so the live adapter is the authority.
     await selectionConfigs.get(ctx)!.update({ enabled: true, allowedModels: [] })
-    await expect(capturePolicy(ctx)).rejects.toThrow('enabled subagent model selection requires at least one allowed model')
+    expect(await capturePolicy(ctx)).toBeUndefined()
+    // Disabled records an empty list, which refuses explicit selection.
     await selectionConfigs.get(ctx)!.update({
       enabled: false,
       allowedModels: ALLOWED_MODELS,
     })
-    expect(await capturePolicy(ctx)).toBeUndefined()
+    expect(await capturePolicy(ctx)).toEqual([])
     await selectionConfigs.get(ctx)!.update({ allowedModels: [] })
-    expect(await capturePolicy(ctx)).toBeUndefined()
+    expect(await capturePolicy(ctx)).toEqual([])
 
-    const invalid = Session.create(SessionId('empty-policy'))
-    invalid.append('subagent/model-selection-policy', { allowedModels: [] })
     const policy = await ctx.sessionProjections.register(subagentModelSelectionProjectionDefinition)
-    expect(() => subagentModelSelectionPolicy(policy, invalid)).toThrow('requires at least one route')
+    const empty = Session.create(SessionId('empty-policy'))
+    empty.append('subagent/model-selection-policy', { allowedModels: [] })
+    expect(subagentModelSelectionPolicy(policy, empty)).toEqual([])
 
     const malformed = Session.create(SessionId('malformed-policy'))
     malformed.append('subagent/model-selection-policy', {

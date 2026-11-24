@@ -99,15 +99,18 @@ describe('dsh-tool-subagent', () => {
     }
   })
 
-  it('exposes only task inputs without scheduling controls', async () => {
+  it('exposes task inputs and the shipped route fields without scheduling controls', async () => {
     const ctx = await setup({ provider: 'mock' })
     const schema = ctx.tools.schemas().find(s => s.name === 'subagent')
     const props = (schema!.parameters as { properties?: Record<string, unknown> }).properties ?? {}
     expect(Object.keys(props).sort()).toEqual([
       'cwd',
       'description',
+      'model',
       'name',
       'prompt',
+      'provider',
+      'reasoning_effort',
     ])
     expect(schema!.description).not.toContain('job_output')
   })

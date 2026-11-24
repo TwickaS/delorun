@@ -53,8 +53,10 @@ export interface Config extends PresetSelectionConfig {
   toolName?: string
   /**
    * Expose optional child `provider`, `model`, and `reasoning_effort` fields.
-   * Requires provider `agentOptions` support. Execution enforces the Session
-   * policy, or restricts explicit selection to the current parent route.
+   * Defaults to true. A Session that recorded a route policy narrows explicit
+   * selection to it; otherwise the live LLM adapter decides which configured
+   * routes are reachable. A provider that cannot apply child `agentOptions`
+   * offers no route fields, and an explicit `true` against one fails the mount.
    */
   modelSelection?: boolean
   /**
@@ -83,7 +85,7 @@ export interface Config extends PresetSelectionConfig {
 export const Config: z<Config> = z.object({
   provider: z.string().required(),
   toolName: z.string().default('subagent'),
-  modelSelection: z.boolean().default(false),
+  modelSelection: z.boolean(),
   modelDiscovery: z.boolean().default(false),
   // Prevent Schemastery from materializing omitted agentOptions as `{}`.
   agentOptions: z.object({
@@ -162,7 +164,10 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   if (config.maxDepth !== 'provider-managed') assertSubagentMaxDepth(config.maxDepth)
   const toolName = config.toolName ?? 'subagent'
 
-  const modelSelectionEnabled = config.modelSelection === true
+  // Resolved here rather than by a schema default so an explicit request stays
+  // distinguishable from an omission: only an explicit request can fail a mount.
+  const modelSelectionRequested = config.modelSelection === true
+  const modelSelectionEnabled = config.modelSelection ?? true
   const subagentModelSelectionProjectionHandle = await ctx.sessionProjections.register(subagentModelSelectionProjectionDefinition)
 
   const assertSubagentProviderConfiguration = (subagentProvider: SubagentProvider): void => {
@@ -178,7 +183,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
         `tool-subagent: provider "${subagentProvider.name}" does not support child agentOptions`,
       )
     }
-    if (modelSelectionEnabled && !subagentProvider.capabilities.agentOptions) {
+    if (modelSelectionRequested && !subagentProvider.capabilities.agentOptions) {
       throw new Error(
         `tool-subagent: provider "${subagentProvider.name}" does not support child model selection`,
       )
@@ -200,6 +205,10 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   let mounted: { subagentProvider: SubagentProvider; definition: ToolDefinition; disposeTool: () => void } | undefined
   const mount = (subagentProvider: SubagentProvider): void => {
     assertSubagentProviderConfiguration(subagentProvider)
+    // A provider that cannot apply child agentOptions has no route to offer, so
+    // the shipped default leaves its schema unchanged rather than advertising
+    // fields every call would reject.
+    const selectionOffered = modelSelectionEnabled && subagentProvider.capabilities.agentOptions
     const wording = providerWording(subagentProvider.inheritsParentContext)
     // An external provider's own description comes from the optional consent seam, which names the program it runs.
     const consentDescription = subagentProvider.prepareContinuable === undefined
@@ -216,8 +225,8 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
         + (subagentProvider.prepareContinuable !== undefined
           ? ' Use `send_message` to steer it while running or continue its conversation after it finishes.'
           : ' This backend does not accept follow-up messages.')
-        + (modelSelectionEnabled ? selectionDescription : '')
-        + (modelSelectionEnabled && subagentProvider.inheritsParentContext
+        + (selectionOffered ? selectionDescription : '')
+        + (selectionOffered && subagentProvider.inheritsParentContext
           ? ' Changing the route can prevent provider-side reuse of the inherited conversation prefix.'
           : ''),
       parameters: {
@@ -248,7 +257,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
             description: presets.description,
           },
         },
-        ...modelSelectionEnabled ? {
+        ...selectionOffered ? {
           provider: {
             type: 'string' as const,
             description: 'Child LLM provider id; requires `model`.',
@@ -296,9 +305,8 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
         const requestedChildAgentOptions = requestedAgentOptions(
           configuredChildAgentOptions,
           modelRequest,
-          modelSelectionEnabled,
+          selectionOffered,
           modelSelectionPolicy,
-          parentOptions,
         )
         if (requiresRoutePreflight) {
           const llm = ctx.get('llm')

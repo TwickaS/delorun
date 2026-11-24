@@ -52,21 +52,24 @@ describe('dsh-tool-subagent model selection', () => {
       .toThrow('requires non-empty provider and model ids')
   })
 
-  it('checks complete explicit routes against Session authorization or the current parent route', () => {
+  it('narrows complete explicit routes to a recorded policy and admits any route without one', () => {
     const policy = { routes: [{ provider: 'alpha', model: 'allowed-model' }] }
-    const parent = { provider: 'alpha', model: 'parent-model' }
     expect(() => {
-      assertAllowedModelSelection(policy, parent, { provider: 'alpha', model: 'allowed-model' })
+      assertAllowedModelSelection(policy, { provider: 'alpha', model: 'allowed-model' })
     }).not.toThrow()
     expect(() => {
-      assertAllowedModelSelection(policy, parent, parent)
+      assertAllowedModelSelection(policy, { provider: 'alpha', model: 'parent-model' })
     }).toThrow('alpha/parent-model')
     expect(() => {
-      assertAllowedModelSelection(undefined, parent, parent)
+      assertAllowedModelSelection(policy, { provider: 'beta', model: 'allowed-model' })
+    }).toThrow('beta/allowed-model')
+    // No recorded policy: the live adapter decides, so admission adds no rule of its own.
+    expect(() => {
+      assertAllowedModelSelection(undefined, { provider: 'alpha', model: 'other-model' })
     }).not.toThrow()
     expect(() => {
-      assertAllowedModelSelection(undefined, parent, { provider: 'alpha', model: 'other-model' })
-    }).toThrow('explicit selection is limited to the parent route')
+      assertAllowedModelSelection(undefined, { provider: 'unconfigured', model: 'any-model' })
+    }).not.toThrow()
   })
 
   it('leaves deployment or parent defaults outside the allowlist usable when the call selects nothing', async () => {
@@ -121,8 +124,11 @@ describe('dsh-tool-subagent model selection', () => {
     expect(text(result)).toContain('model selection is disabled for this tool instance')
   })
 
-  it('hides and rejects route fields without modelSelection', async () => {
-    const ctx = await setup({ provider: 'mock', parentAgentOptions: { provider: 'alpha', model: 'parent-model' } })
+  it('hides and rejects route fields when modelSelection is explicitly off', async () => {
+    const ctx = await setup({
+      provider: 'mock', modelSelection: false,
+      parentAgentOptions: { provider: 'alpha', model: 'parent-model' },
+    })
     const schema = ctx.tools.schemas().find(entry => entry.name === 'subagent')!
     const props = (schema.parameters as { properties?: Record<string, unknown> }).properties ?? {}
     expect(Object.keys(props).sort()).toEqual(['cwd', 'description', 'name', 'prompt'])
@@ -176,13 +182,15 @@ describe('dsh-tool-subagent model selection', () => {
     expect(start).not.toHaveBeenCalled()
   })
 
-  it('keeps settings-owned route fields visible but rejects other routes without a Session policy', async () => {
+  it('keeps settings-owned route fields visible and admits a configured route without a Session policy', async () => {
+    const requests: SubagentStartRequest[] = []
     const ctx = await setup({
       provider: 'mock',
       withModelSelection: true,
-      hostSelectionEnabled: false,
+      hostPolicyRecorded: false,
       parentAgentOptions: { provider: 'alpha', model: 'parent-model' },
-    })
+    }, { onStart: (request) => { requests.push(request) } })
+    ctx.llm.registerAdapter(['alpha'], new MockAdapter([], REASONING))
     const agent = modelSelectionSetupAgent(ctx)
     const schema = ctx.tools.schemas(agent).find(entry => entry.name === 'subagent')!
     const props = (schema.parameters as { properties?: Record<string, unknown> }).properties ?? {}
@@ -197,16 +205,16 @@ describe('dsh-tool-subagent model selection', () => {
       provider: 'alpha',
       model: 'fast-model',
     })
-    expect(result.isError).toBe(true)
-    expect(text(result)).toContain('is not allowed for this Session')
+    expect(result.isError, text(result)).toBe(false)
+    expect(requests[0]?.agentOptions).toEqual({ provider: 'alpha', model: 'fast-model' })
   })
 
-  it('discovers only the parent route without a Session policy and permits its explicit route and effort', async () => {
+  it('discovers every configured provider without a Session policy and selects across providers', async () => {
     const requests: SubagentStartRequest[] = []
     const ctx = await setup({
       provider: 'mock',
       withModelSelection: true,
-      hostSelectionEnabled: false,
+      hostPolicyRecorded: false,
       parentAgentOptions: parentWithRoute().options,
     }, { onStart: (request) => { requests.push(request) } })
     ctx.llm.registerAdapter(['alpha', 'other-provider'], new MockAdapter([], REASONING))
@@ -216,10 +224,12 @@ describe('dsh-tool-subagent model selection', () => {
       arguments: args, agent: parent, signal: new AbortController().signal,
     })
     expect(text(await discover({}))).toContain('alpha')
-    expect(text(await discover({}))).not.toContain('other-provider')
-    expect(text(await discover({ provider: 'alpha' }))).toContain('alpha/parent-model')
+    expect(text(await discover({}))).toContain('other-provider')
+    // This adapter advertises no catalog, so the provider query reports that and
+    // the exact-model query still resolves the route and its efforts.
+    expect(text(await discover({ provider: 'alpha' }))).toBe('(no advertised models for alpha)')
     expect(text(await discover({ provider: 'alpha', model: 'parent-model' }))).toContain('low')
-    expect((await discover({ provider: 'alpha', model: 'other-model' })).isError).toBe(true)
+    expect((await discover({ provider: 'alpha', model: 'other-model' })).isError).toBe(false)
 
     const omitted = await callSubagent(ctx, { description: 'inherit', prompt: 'work' })
     expect(omitted.isError, text(omitted)).toBe(false)
@@ -232,11 +242,13 @@ describe('dsh-tool-subagent model selection', () => {
     const effort = await callSubagent(ctx, { description: 'effort', prompt: 'work', provider: 'alpha', model: 'parent-model', reasoning_effort: 'low' })
     expect(effort.isError, text(effort)).toBe(false)
     expect(requests[2]?.agentOptions).toEqual({ provider: 'alpha', model: 'parent-model', reasoningEffort: 'low' })
-    const rejected = await callSubagent(ctx, {
-      description: 'other route', prompt: 'work', provider: 'alpha', model: 'other-model',
+    // Cross-provider: the child runs on a provider the parent is not using.
+    const crossProvider = await callSubagent(ctx, {
+      description: 'other provider', prompt: 'work', provider: 'other-provider', model: 'other-model',
     })
-    expect(rejected.isError).toBe(true)
-    expect(requests).toHaveLength(3)
+    expect(crossProvider.isError, text(crossProvider)).toBe(false)
+    expect(requests[3]?.agentOptions).toEqual({ provider: 'other-provider', model: 'other-model' })
+    expect(requests).toHaveLength(4)
   })
 
   it('rejects enabled model selection when the provider cannot apply Agent options', async () => {
@@ -575,9 +587,9 @@ describe('dsh-tool-subagent model selection', () => {
     expect(requests).toHaveLength(1)
   })
 
-  it('keeps fork model selection unavailable without instance opt-in even with Session authorization', async () => {
+  it('keeps fork model selection unavailable when the instance turns it off, even with Session authorization', async () => {
     const started = vi.fn()
-    const ctx = await setup({ provider: 'mock' }, {
+    const ctx = await setup({ provider: 'mock', modelSelection: false }, {
       inheritsParentContext: true,
       onStart: started,
     })
@@ -623,5 +635,84 @@ describe('dsh-tool-subagent model selection', () => {
     expect(result.isError).toBe(true)
     expect(text(result)).toContain('selected route unavailable')
     expect(starts).toBe(0)
+  })
+})
+
+describe('dsh-tool-subagent model selection denial', () => {
+  /**
+   * A route the person has not configured reaches no adapter, so the live LLM
+   * runtime refuses it before the child exists. The refusal is the guard: the
+   * tool adds no allowlist of its own, and the adapter registry is the one
+   * authority for what is configured.
+   */
+  it('refuses a provider the person has not configured, before child creation', async () => {
+    let starts = 0
+    const ctx = await setup(
+      { provider: 'mock', withModelSelection: true, hostPolicyRecorded: false },
+      { onStart: () => { starts += 1 } },
+    )
+    ctx.llm.registerAdapter(['alpha'], new MockAdapter([], REASONING))
+
+    const result = await callSubagent(ctx, {
+      description: 'unconfigured provider',
+      prompt: 'do it',
+      provider: 'unconfigured-provider',
+      model: 'some-model',
+    })
+
+    expect(result.isError).toBe(true)
+    expect(text(result)).toContain('no adapter registered for provider "unconfigured-provider"')
+    expect(starts).toBe(0)
+  })
+
+  /**
+   * A model the person has disabled is refused by its own adapter, which owns
+   * the catalog and the enablement decision. The tool must not start a child on
+   * a route the adapter rejects.
+   */
+  it('refuses a disabled model, before child creation', async () => {
+    let starts = 0
+    const ctx = await setup(
+      { provider: 'mock', withModelSelection: true, hostPolicyRecorded: false },
+      { onStart: () => { starts += 1 } },
+    )
+    const adapter = new MockAdapter([], REASONING)
+    vi.spyOn(adapter, 'resolveModel').mockRejectedValue(
+      new Error('DeepSeek model "retired-model" is not supported by DeepSeek Harness; current version is 0.1.0'),
+    )
+    ctx.llm.registerAdapter(['alpha'], adapter)
+
+    const result = await callSubagent(ctx, {
+      description: 'disabled model',
+      prompt: 'do it',
+      provider: 'alpha',
+      model: 'retired-model',
+    })
+
+    expect(result.isError).toBe(true)
+    expect(text(result)).toContain('is not supported by DeepSeek Harness')
+    expect(starts).toBe(0)
+  })
+
+  /**
+   * An unknown provider keeps the model-correctable diagnostic it has today:
+   * the message names the registered alternatives so the model can retry.
+   */
+  it('keeps the model-correctable diagnostic for an unknown provider', async () => {
+    const ctx = await setup({ provider: 'mock', withModelSelection: true, hostPolicyRecorded: false })
+    ctx.llm.registerAdapter(['alpha', 'beta'], new MockAdapter([], REASONING))
+    const agent = modelSelectionSetupAgent(ctx)
+
+    const result = await executeToolFixture(ctx, {
+      signal: new AbortController().signal,
+      callId: ToolCallId('unknown-provider-diagnostic'),
+      name: 'list_subagent_models',
+      arguments: { provider: 'typo-provider' },
+      agent,
+    })
+
+    expect(result.isError).toBe(true)
+    expect(text(result)).toContain('LLM provider "typo-provider" is not registered')
+    expect(text(result)).toContain('available providers: alpha, beta')
   })
 })

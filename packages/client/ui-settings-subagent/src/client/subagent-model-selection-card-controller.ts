@@ -264,8 +264,7 @@ export class SubagentModelSelectionCardController {
     const desiredEnabled = this.enabled()
     const desired = this.desiredRoutes()
     if (this.disposed || snapshot.status !== 'ready' || !snapshot.writable || this.saving
-      || (this.currentEnabled() === desiredEnabled && sameRoutes(this.currentRoutes(), desired))
-      || (desiredEnabled && desired.length === 0)) return
+      || (this.currentEnabled() === desiredEnabled && sameRoutes(this.currentRoutes(), desired))) return
     if (this.draftRoutes !== undefined && snapshot.revision !== this.draftRevision) {
       this.conflicted = true
       this.publish()
@@ -339,7 +338,8 @@ export class SubagentModelSelectionCardController {
       available: snapshot.status === 'ready',
       writable: snapshot.writable,
       dirty: this.currentEnabled() !== enabled || !sameRoutes(current, desired),
-      invalid: enabled && desired.length === 0,
+      // An empty narrowing is valid: it allows every configured model.
+      invalid: false,
       saving: this.saving,
       failed: this.failed,
       enabled,

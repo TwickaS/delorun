@@ -19,7 +19,8 @@ export type SubagentSettingsLocaleKey =
   | 'subagentModelSelectionLoading' | 'subagentModelSelectionLoadFailed' | 'subagentModelSelectionRetry'
   | 'subagentModelSelectionPartial' | 'subagentModelSelectionUnavailable'
   | 'subagentModelSelectionUnavailableGroup' | 'subagentModelSelectionEmpty'
-  | 'subagentModelSelectionRequired' | 'subagentModelSelectionConflict' | 'subagentModelSelectionOff'
+  | 'subagentModelSelectionConflict' | 'subagentModelSelectionOff'
+  | 'subagentModelSelectionNarrowing'
 
 /** English copy. */
 export const en: Record<SubagentSettingsLocaleKey, string> = {
@@ -46,8 +47,8 @@ export const en: Record<SubagentSettingsLocaleKey, string> = {
   subagentCapacityInvalid: 'Enter a whole number of 1 or more.',
   subagentModelSelectionTitle: 'Model selection',
   subagentModelSelectionToggle: 'Allow agents to choose models for Subagents',
-  subagentModelSelectionChoose: 'When enabled, agents can choose a provider, model, and reasoning effort for each Subagent from the authorized models below. Applies only to new sessions.',
-  subagentModelSelectionAllowed: 'Models agents may choose',
+  subagentModelSelectionChoose: 'When on, an agent can run a Subagent on any provider and model you have configured, including a different provider from its own, at any depth. Reasoning effort follows the chosen model unless the agent names one. Applies to new sessions.',
+  subagentModelSelectionAllowed: 'Limit the models agents may choose',
   subagentModelSelectionLoading: 'Loading models…',
   subagentModelSelectionLoadFailed: 'Models could not be loaded.',
   subagentModelSelectionRetry: 'Retry',
@@ -55,9 +56,9 @@ export const en: Record<SubagentSettingsLocaleKey, string> = {
   subagentModelSelectionUnavailable: 'Currently unavailable',
   subagentModelSelectionUnavailableGroup: 'Saved but currently unavailable',
   subagentModelSelectionEmpty: 'No model provider currently advertises a model.',
-  subagentModelSelectionRequired: 'Select at least one model before saving.',
   subagentModelSelectionConflict: 'Settings changed elsewhere. Discard your draft and try again.',
   subagentModelSelectionOff: 'Subagents use configured defaults or inherit the parent agent\'s model. Saved model choices are retained.',
+  subagentModelSelectionNarrowing: 'Leave every model unticked to allow any model you have configured. Ticking models narrows the choice to those routes.',
 }
 
 /** Simplified Chinese copy. */
@@ -85,8 +86,8 @@ export const zh: Record<SubagentSettingsLocaleKey, string> = {
   subagentCapacityInvalid: '请输入不小于 1 的整数。',
   subagentModelSelectionTitle: '模型选择',
   subagentModelSelectionToggle: '允许 Agent 为子智能体选择模型',
-  subagentModelSelectionChoose: '开启后，Agent 可以从下方授权模型中，为每个子智能体选择提供方、模型和推理强度。仅影响新会话。',
-  subagentModelSelectionAllowed: 'Agent 可选择的模型',
+  subagentModelSelectionChoose: '开启后，Agent 可以在任意层级，用你已配置的任意提供方和模型运行子智能体，包括与自身不同的提供方。推理强度默认采用所选模型自身的默认值，除非 Agent 另行指定。仅影响新会话。',
+  subagentModelSelectionAllowed: '限制 Agent 可选择的模型',
   subagentModelSelectionLoading: '正在加载模型…',
   subagentModelSelectionLoadFailed: '无法加载模型。',
   subagentModelSelectionRetry: '重试',
@@ -94,9 +95,9 @@ export const zh: Record<SubagentSettingsLocaleKey, string> = {
   subagentModelSelectionUnavailable: '当前不可用',
   subagentModelSelectionUnavailableGroup: '已保存但当前不可用',
   subagentModelSelectionEmpty: '当前没有模型提供方公布模型。',
-  subagentModelSelectionRequired: '保存前请至少选择一个模型。',
   subagentModelSelectionConflict: '设置已在其他位置更新。请放弃修改后重试。',
   subagentModelSelectionOff: '关闭后，子智能体使用配置的默认模型或继承父 Agent 的模型；已选模型会保留。',
+  subagentModelSelectionNarrowing: '全部不勾选时，允许使用你已配置的任意模型；勾选模型则把可选范围缩小到这些路由。',
 }
 
 /**
@@ -133,8 +134,8 @@ export const ja = {
   'subagentCapacityInvalid': '1以上の整数を入力してください。',
   'subagentModelSelectionTitle': 'モデル選択',
   'subagentModelSelectionToggle': 'エージェントによるサブエージェントのモデル選択を許可',
-  'subagentModelSelectionChoose': '有効にすると、エージェントは以下の許可されたモデルからサブエージェントごとにプロバイダー、モデル、推論強度を選択できます。新しいセッションにのみ適用されます。',
-  'subagentModelSelectionAllowed': 'エージェントが選択可能なモデル',
+  'subagentModelSelectionChoose': '有効にすると、エージェントは任意の階層で、設定済みの任意のプロバイダーとモデルでサブエージェントを実行できます。自身と異なるプロバイダーも含みます。推論強度は、エージェントが指定しない限り選択したモデルの既定値に従います。新しいセッションにのみ適用されます。',
+  'subagentModelSelectionAllowed': 'エージェントが選択できるモデルを制限',
   'subagentModelSelectionLoading': 'モデルを読み込み中…',
   'subagentModelSelectionLoadFailed': 'モデルを読み込めませんでした。',
   'subagentModelSelectionRetry': '再試行',
@@ -142,9 +143,9 @@ export const ja = {
   'subagentModelSelectionUnavailable': '現在利用不可',
   'subagentModelSelectionUnavailableGroup': '保存済みだが現在利用不可',
   'subagentModelSelectionEmpty': '現在、モデルを公開しているモデルプロバイダーはありません。',
-  'subagentModelSelectionRequired': '保存する前に少なくとも1つのモデルを選択してください。',
   'subagentModelSelectionConflict': '設定が別の場所で変更されました。下書きを破棄して再試行してください。',
   'subagentModelSelectionOff': 'サブエージェントは設定済みのデフォルトを使用するか、親エージェントのモデルを継承します。保存済みのモデル選択は保持されます。',
+  'subagentModelSelectionNarrowing': 'すべて未選択のままにすると、設定済みの任意のモデルを許可します。モデルを選択すると、選択範囲がそれらのルートに絞り込まれます。',
 } satisfies Record<keyof typeof en, string>
 
 /** Spanish dictionary, checked against the English keys. */
@@ -172,8 +173,8 @@ export const es = {
   subagentCapacityInvalid: 'Introduzca un número entero de 1 o más.',
   subagentModelSelectionTitle: 'Selección de modelo',
   subagentModelSelectionToggle: 'Permitir a los agentes elegir modelos para Subagentes',
-  subagentModelSelectionChoose: 'Cuando está habilitado, los agentes pueden elegir un proveedor, modelo y esfuerzo de razonamiento para cada subagente entre los modelos autorizados a continuación. Aplica sólo para sesiones nuevas.',
-  subagentModelSelectionAllowed: 'Los agentes modelos pueden elegir',
+  subagentModelSelectionChoose: 'Cuando está activado, un agente puede ejecutar un subagente en cualquier proveedor y modelo que hayas configurado, incluido un proveedor distinto del suyo, en cualquier nivel. El esfuerzo de razonamiento sigue al modelo elegido salvo que el agente indique uno. Se aplica a las sesiones nuevas.',
+  subagentModelSelectionAllowed: 'Limitar los modelos que los agentes pueden elegir',
   subagentModelSelectionLoading: 'Cargando modelos…',
   subagentModelSelectionLoadFailed: 'No se pudieron cargar los modelos.',
   subagentModelSelectionRetry: 'Reintentar',
@@ -181,9 +182,9 @@ export const es = {
   subagentModelSelectionUnavailable: 'Actualmente no disponible',
   subagentModelSelectionUnavailableGroup: 'Guardado pero actualmente no disponible',
   subagentModelSelectionEmpty: 'Ningún proveedor de modelos anuncia actualmente un modelo.',
-  subagentModelSelectionRequired: 'Seleccione al menos un modelo antes de guardar.',
   subagentModelSelectionConflict: 'La configuración cambió en otros lugares. Descarta tu borrador y vuelve a intentarlo.',
   subagentModelSelectionOff: 'Los subagentes utilizan valores predeterminados configurados o heredan el modelo del agente principal. Las opciones de modelo guardadas se conservan.',
+  subagentModelSelectionNarrowing: 'Deja todos los modelos sin marcar para permitir cualquier modelo que hayas configurado. Marcar modelos restringe la elección a esas rutas.',
 } satisfies Record<keyof typeof en, string>
 
 /** French dictionary, checked against the English keys. */
@@ -211,8 +212,8 @@ export const fr = {
   subagentCapacityInvalid: 'Entrez un nombre entier de 1 ou plus.',
   subagentModelSelectionTitle: 'Sélection du modèle',
   subagentModelSelectionToggle: 'Autoriser les agents à choisir des modèles pour les sous-agents',
-  subagentModelSelectionChoose: "Lorsque cette option est activée, les agents peuvent choisir un fournisseur, un modèle et un effort de raisonnement pour chaque sous-agent parmi les modèles autorisés ci-dessous. S'applique uniquement aux nouvelles sessions.",
-  subagentModelSelectionAllowed: 'Les agents modèles peuvent choisir',
+  subagentModelSelectionChoose: "Lorsque cette option est activée, un agent peut exécuter un sous-agent sur n'importe quel fournisseur et modèle que vous avez configuré, y compris un fournisseur différent du sien, à n'importe quel niveau. L'effort de raisonnement suit le modèle choisi, sauf si l'agent en indique un. S'applique aux nouvelles sessions.",
+  subagentModelSelectionAllowed: 'Limiter les modèles que les agents peuvent choisir',
   subagentModelSelectionLoading: 'Chargement des modèles…',
   subagentModelSelectionLoadFailed: "Les modèles n'ont pas pu être chargés.",
   subagentModelSelectionRetry: 'Réessayer',
@@ -220,9 +221,9 @@ export const fr = {
   subagentModelSelectionUnavailable: 'Actuellement indisponible',
   subagentModelSelectionUnavailableGroup: 'Enregistré mais actuellement indisponible',
   subagentModelSelectionEmpty: "Aucun fournisseur de modèles n'annonce actuellement un modèle.",
-  subagentModelSelectionRequired: 'Sélectionnez au moins un modèle avant de sauvegarder.',
   subagentModelSelectionConflict: 'Paramètres modifiés ailleurs. Supprimez votre brouillon et réessayez.',
   subagentModelSelectionOff: "Les sous-agents utilisent les valeurs par défaut configurées ou héritent du modèle de l'agent parent. Les choix de modèles enregistrés sont conservés.",
+  subagentModelSelectionNarrowing: "Laissez tous les modèles décochés pour autoriser n'importe quel modèle configuré. Cocher des modèles restreint le choix à ces routes.",
 } satisfies Record<keyof typeof en, string>
 
 /** German dictionary, checked against the English keys. */
@@ -250,8 +251,8 @@ export const de = {
   subagentCapacityInvalid: 'Geben Sie eine ganze Zahl von 1 oder mehr ein.',
   subagentModelSelectionTitle: 'Modellauswahl',
   subagentModelSelectionToggle: 'Erlauben Sie Agenten, Modelle für Subagenten auszuwählen',
-  subagentModelSelectionChoose: 'Wenn diese Option aktiviert ist, können Agenten aus den unten aufgeführten autorisierten Modellen einen Anbieter, ein Modell und einen Argumentationsaufwand für jeden Subagenten auswählen. Gilt nur für neue Sitzungen.',
-  subagentModelSelectionAllowed: 'Modelagenten können wählen',
+  subagentModelSelectionChoose: 'Wenn dies aktiviert ist, kann ein Agent einen Subagenten auf jeder Ebene auf jedem von Ihnen konfigurierten Anbieter und Modell ausführen, auch auf einem anderen Anbieter als seinem eigenen. Der Denkaufwand folgt dem gewählten Modell, sofern der Agent keinen angibt. Gilt nur für neue Sitzungen.',
+  subagentModelSelectionAllowed: 'Modelle einschränken, die Agenten wählen dürfen',
   subagentModelSelectionLoading: 'Modelle werden geladen…',
   subagentModelSelectionLoadFailed: 'Modelle konnten nicht geladen werden.',
   subagentModelSelectionRetry: 'Erneut versuchen',
@@ -259,9 +260,9 @@ export const de = {
   subagentModelSelectionUnavailable: 'Derzeit nicht verfügbar',
   subagentModelSelectionUnavailableGroup: 'Gespeichert, aber derzeit nicht verfügbar',
   subagentModelSelectionEmpty: 'Derzeit bewirbt kein Modelanbieter ein Model.',
-  subagentModelSelectionRequired: 'Wählen Sie vor dem Speichern mindestens ein Modell aus.',
   subagentModelSelectionConflict: 'Einstellungen wurden an anderer Stelle geändert. Verwerfen Sie Ihren Entwurf und versuchen Sie es erneut.',
   subagentModelSelectionOff: 'Subagenten verwenden konfigurierte Standardwerte oder erben das Modell des übergeordneten Agenten. Gespeicherte Modellauswahlen bleiben erhalten.',
+  subagentModelSelectionNarrowing: 'Lassen Sie alle Modelle unmarkiert, um jedes konfigurierte Modell zuzulassen. Markierte Modelle beschränken die Auswahl auf diese Routen.',
 } satisfies Record<keyof typeof en, string>
 
 /** Russian dictionary, checked against the English keys. */
@@ -289,8 +290,8 @@ export const ru = {
   subagentCapacityInvalid: 'Введите целое число от 1 или более.',
   subagentModelSelectionTitle: 'Выбор модели',
   subagentModelSelectionToggle: 'Разрешить агентам выбирать модели для субагентов',
-  subagentModelSelectionChoose: 'Если этот параметр включен, агенты могут выбирать поставщика, модель и усилия по обоснованию для каждого субагента из авторизованных моделей, указанных ниже. Применяется только к новым сеансам.',
-  subagentModelSelectionAllowed: 'Модели агенты могут выбирать',
+  subagentModelSelectionChoose: 'Если включено, агент может запускать субагента на любом настроенном вами провайдере и модели, включая провайдера, отличного от собственного, на любом уровне. Усилие рассуждения следует за выбранной моделью, если агент не указал своё. Действует только для новых сеансов.',
+  subagentModelSelectionAllowed: 'Ограничить модели, которые могут выбирать агенты',
   subagentModelSelectionLoading: 'Загрузка моделей…',
   subagentModelSelectionLoadFailed: 'Не удалось загрузить модели.',
   subagentModelSelectionRetry: 'Повторить',
@@ -298,9 +299,9 @@ export const ru = {
   subagentModelSelectionUnavailable: 'В настоящее время недоступен',
   subagentModelSelectionUnavailableGroup: 'Сохранено, но сейчас недоступно',
   subagentModelSelectionEmpty: 'Ни один поставщик моделей в настоящее время не рекламирует модель.',
-  subagentModelSelectionRequired: 'Прежде чем сохранить, выберите хотя бы одну модель.',
   subagentModelSelectionConflict: 'Настройки изменены в другом месте. Отмените черновик и повторите попытку.',
   subagentModelSelectionOff: 'Субагенты используют настроенные значения по умолчанию или наследуют модель родительского агента. Сохраненные варианты моделей сохраняются.',
+  subagentModelSelectionNarrowing: 'Оставьте все модели неотмеченными, чтобы разрешить любую настроенную модель. Отмеченные модели сужают выбор до этих маршрутов.',
 } satisfies Record<keyof typeof en, string>
 
 /** Portuguese dictionary, checked against the English keys. */
@@ -328,8 +329,8 @@ export const pt = {
   subagentCapacityInvalid: 'Insira um número inteiro de 1 ou mais.',
   subagentModelSelectionTitle: 'Seleção de modelo',
   subagentModelSelectionToggle: 'Permitir que os agentes escolham modelos para subagentes',
-  subagentModelSelectionChoose: 'Quando ativado, os agentes podem escolher um provedor, um modelo e um esforço de raciocínio para cada subagente dentre os modelos autorizados abaixo. Aplica-se apenas a novas sessões.',
-  subagentModelSelectionAllowed: 'Os agentes de modelos podem escolher',
+  subagentModelSelectionChoose: 'Quando ativado, um agente pode executar um subagente em qualquer provedor e modelo que você configurou, incluindo um provedor diferente do dele, em qualquer nível. O esforço de raciocínio segue o modelo escolhido, a menos que o agente indique um. Aplica-se apenas a novas sessões.',
+  subagentModelSelectionAllowed: 'Limitar os modelos que os agentes podem escolher',
   subagentModelSelectionLoading: 'Carregando modelos…',
   subagentModelSelectionLoadFailed: 'Não foi possível carregar os modelos.',
   subagentModelSelectionRetry: 'Tentar novamente',
@@ -337,7 +338,7 @@ export const pt = {
   subagentModelSelectionUnavailable: 'Atualmente indisponível',
   subagentModelSelectionUnavailableGroup: 'Salvo, mas atualmente indisponível',
   subagentModelSelectionEmpty: 'Atualmente, nenhum fornecedor de modelos anuncia um modelo.',
-  subagentModelSelectionRequired: 'Selecione pelo menos um modelo antes de salvar.',
   subagentModelSelectionConflict: 'Configurações alteradas em outro lugar. Descarte seu rascunho e tente novamente.',
   subagentModelSelectionOff: 'Os subagentes usam padrões configurados ou herdam o modelo do agente pai. As opções de modelo salvas são mantidas.',
+  subagentModelSelectionNarrowing: 'Deixe todos os modelos desmarcados para permitir qualquer modelo configurado. Marcar modelos restringe a escolha a essas rotas.',
 } satisfies Record<keyof typeof en, string>

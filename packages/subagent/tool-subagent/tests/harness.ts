@@ -38,6 +38,12 @@ type SetupConfig = toolConfig & {
   withModelSelection?: boolean
   /** Host setting sampled by a `withModelSelection` setup; defaults to enabled. */
   hostSelectionEnabled?: boolean
+  /**
+   * Whether the Host setting service records a policy at all. `false` mounts no
+   * settings service, so the Session records nothing and the live LLM adapter
+   * is the only authority. Defaults to true.
+   */
+  hostPolicyRecorded?: boolean
   parentAgentOptions?: AgentOptions
 }
 
@@ -52,13 +58,17 @@ const TEST_ALLOWED_MODELS = [
 
 export async function setup(toolConfig: SetupConfig, mockConfig: Partial<mock.Config> = {}): Promise<Context> {
   const ctx = ownContext(new Context())
-  const { withModelSelection, hostSelectionEnabled = true, parentAgentOptions, ...config } = toolConfig
+  const {
+    withModelSelection, hostSelectionEnabled = true, hostPolicyRecorded = true, parentAgentOptions, ...config
+  } = toolConfig
   await mountAgentLoopTestDependencies(ctx)
   if (withModelSelection === true) {
-    await ctx.plugin(SubagentModelSelectionConfig, {
-      enabled: hostSelectionEnabled,
-      allowedModels: TEST_ALLOWED_MODELS,
-    })
+    if (hostPolicyRecorded) {
+      await ctx.plugin(SubagentModelSelectionConfig, {
+        enabled: hostSelectionEnabled,
+        allowedModels: TEST_ALLOWED_MODELS,
+      })
+    }
     await ctx.plugin(AgentLoop, { agents: [] })
     await mountWorkingDirectoryFixture(ctx)
     await ctx.plugin(SubagentRuntime)

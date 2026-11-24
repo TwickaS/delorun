@@ -2160,7 +2160,7 @@
       "path": "packages/subagent/tool-subagent/src/index.ts",
       "class": "security",
       "reason": "An external provider's tool description opens with the consent's `describe` text when one is composed, and the tool remounts when the `delegationConsent` service appears or leaves; without it the wording is upstream's. Lead verdict (2026-11-13): approved after the lead review of the merged diff.",
-      "sha256": "ca16e9f93992fd6c208797395d0e94bd7142f8355b23c0c5e1c13ecf53fb9d54"
+      "sha256": "a04fd468aa6c076027e3a1e950a11466b7c823619861aaa1217b7170281439e6"
     },
     {
       "path": "packages/client/ui-permission-presets/src/client/PermissionSelect.tsx",
@@ -3547,6 +3547,48 @@
       "class": "delorun-feature",
       "feature": "phone-safe-areas",
       "reason": "Marks the header with the stable attribute `data-conversation-header`, which the theme's edge sheet selects to pad the header's content by the safe-area insets on a phone, so the title and the view tabs stay clear of the status bar while the surface behind them reaches the physical edge. Nothing else changes."
+    },
+    {
+      "path": "packages/client/ui-settings-subagent/src/client/SubagentModelSelectionFields.tsx",
+      "class": "delorun-feature",
+      "feature": "subagent-model-selection",
+      "reason": "Renders the route list as an optional narrowing and states that ticking nothing allows every configured model, matching A661."
+    },
+    {
+      "path": "packages/client/ui-settings-subagent/src/client/locales.ts",
+      "class": "delorun-feature",
+      "feature": "subagent-model-selection",
+      "reason": "Copy for the A661 rule in all eight locales: the switch lets agents choose a child route at all, a child may run on any configured provider including a different one from its parent, and the route list narrows rather than authorizes."
+    },
+    {
+      "path": "packages/client/ui-settings-subagent/src/client/subagent-model-selection-card-controller.ts",
+      "class": "delorun-feature",
+      "feature": "subagent-model-selection",
+      "reason": "An empty route list is a valid narrowing under A661, so the card no longer blocks saving it."
+    },
+    {
+      "path": "packages/subagent/tool-subagent/src/list-models.ts",
+      "class": "delorun-feature",
+      "feature": "subagent-model-selection",
+      "reason": "Discovery enumerates every configured provider and its advertised models under A661, and intersects them with a recorded narrowing only when one exists."
+    },
+    {
+      "path": "packages/subagent/tool-subagent/src/model-selection-settings.ts",
+      "class": "delorun-feature",
+      "feature": "subagent-model-selection",
+      "reason": "The Host preference defaults on and records three states under A661: no event leaves the adapter as the authority, an empty list refuses explicit selection, and a non-empty list narrows it."
+    },
+    {
+      "path": "packages/subagent/tool-subagent/src/model-selection-state.ts",
+      "class": "delorun-feature",
+      "feature": "subagent-model-selection",
+      "reason": "The durable policy admits an empty route list, which A661 uses to mean that explicit selection is refused."
+    },
+    {
+      "path": "packages/subagent/tool-subagent/src/model-selection.ts",
+      "class": "delorun-feature",
+      "feature": "subagent-model-selection",
+      "reason": "Admission under A661: a recorded policy narrows explicit selection, and without one the live LLM adapter decides which configured routes are reachable."
     }
   ],
   "retired": []
