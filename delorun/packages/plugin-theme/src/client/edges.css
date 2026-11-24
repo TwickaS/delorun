@@ -1,0 +1,108 @@
+/*
+ * The studio's edges: the colour at the top and bottom of the screen, which the browser's bars, the overscroll area and
+ * the safe-area insets take. `edges.ts` reads the surface at each edge and writes the resolved colours to
+ * `--edge-top-background` and `--edge-bottom-background`; a surface states its own colour in `--edge-top` and
+ * `--edge-bottom` and marks itself `data-delorun-edge-surface`, so the colour follows the real UI rather than a fixed
+ * theme colour. The theme adds this sheet to its style element, so it exists only while the Delorun look is on.
+ *
+ * Every full-screen surface bleeds to the physical edge and pads its content by the safe-area insets instead, so the
+ * background reaches behind the status bar and the home indicator while the text and controls stay clear of them.
+ */
+
+/* The page carries the top colour, so the overscroll area, the bounce and any gap beside the browser's bars blend in.
+   Both elements carry it: Safari samples whichever of the two it reaches first. */
+html,
+body {
+  background-color: var(--edge-top-background, var(--dsw-alias-bg-base));
+  overscroll-behavior: none;
+}
+
+/* The chat: the page's own surface at both edges. */
+[data-delorun-edge-surface='chat'] {
+  --edge-top: var(--dsw-alias-bg-base);
+  --edge-bottom: var(--dsw-alias-bg-base);
+}
+
+/* The sidebar column: its fill at both edges. */
+[data-delorun-edge-surface='sidebar'] {
+  --edge-top: var(--dsw-specific-sidebar-fill, var(--dsw-alias-bg-base));
+  --edge-bottom: var(--dsw-specific-sidebar-fill, var(--dsw-alias-bg-base));
+}
+
+/* The header art states the top edge itself, because a gradient has no single colour and `theme-color` takes one flat
+   value: the art's topmost stop is what the status bar continues. */
+[data-delorun-edge-surface='sidebar-art'] {
+  --edge-top: var(--stage-art-top, var(--dsw-specific-sidebar-fill, var(--dsw-alias-bg-base)));
+}
+
+/* Settings: the panel's own surface, which reaches every edge on a phone. The panel is opaque, so its fill is the colour
+   the person sees at the edge. */
+[data-delorun-edge-surface='settings'] {
+  --edge-top: var(--dsw-alias-bg-layer-2);
+  --edge-bottom: var(--dsw-alias-bg-layer-2);
+}
+
+/* A dialog's card, over the mask the edge stack tints. The card is the glass surface, so its fill is translucent and the
+   edge takes the solid colour the glass is mixed from, which is what the card reads as over the page. */
+[data-delorun-edge-surface='dialog'] {
+  --edge-top: var(--delorun-glass-fill-solid, var(--dsw-alias-bg-layer-2));
+  --edge-bottom: var(--delorun-glass-fill-solid, var(--dsw-alias-bg-layer-2));
+}
+
+/* The dim scrim beside the open drawer covers the whole screen, insets included, so no seam shows at either end. */
+[data-sidebar-mask] {
+  inset: 0;
+}
+
+/* The shell is fixed to the viewport, so a rubber-band bounce cannot expose the page behind it. The height follows the
+   visual viewport, which the on-screen keyboard shrinks, so the composer stays above the keyboard. */
+[data-shell] {
+  position: fixed;
+  inset: 0;
+  height: var(--dsh-viewport-height, 100dvh);
+  overscroll-behavior: none;
+}
+
+/* The sidebar's header and foot pad their own content by the insets, so the column's fill reaches the physical edge and
+   the search field and the foot's icons stay clear of the status bar and the home indicator. */
+[data-delorun-edge-surface='sidebar'] [class*='_header'] {
+  padding-top: max(var(--delorun-space-4), env(safe-area-inset-top));
+  padding-left: max(var(--delorun-space-4), env(safe-area-inset-left));
+  padding-right: max(var(--delorun-space-4), env(safe-area-inset-right));
+}
+
+[data-delorun-edge-surface='sidebar'] [class*='_footRow'] {
+  padding-bottom: max(var(--delorun-space-2), env(safe-area-inset-bottom));
+  padding-left: max(var(--delorun-space-4), env(safe-area-inset-left));
+  padding-right: max(var(--delorun-space-4), env(safe-area-inset-right));
+}
+
+/* The chat's header and composer pad their content by the insets, so the transcript and the input card stay clear of the
+   status bar and the home indicator while the surface behind them reaches the edge. */
+[data-delorun-edge-surface='chat'] [data-conversation-header] {
+  padding-top: max(10px, env(safe-area-inset-top));
+  padding-left: max(20px, env(safe-area-inset-left));
+  padding-right: max(28px, env(safe-area-inset-right));
+}
+
+[data-delorun-edge-surface='chat'] [data-composer-seat] {
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+/* Settings on a phone already pads its panel by the top inset; the bottom and side insets join it so the last row clears
+   the home indicator and the landscape notch. */
+[data-delorun-edge-surface='settings'][data-phone] {
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+
+/* A dialog's card keeps clear of the insets on every side, so its actions are never under the home indicator. */
+[data-delorun-edge-surface='dialog'] {
+  margin-top: env(safe-area-inset-top);
+  margin-bottom: env(safe-area-inset-bottom);
+  margin-left: env(safe-area-inset-left);
+  margin-right: env(safe-area-inset-right);
+}

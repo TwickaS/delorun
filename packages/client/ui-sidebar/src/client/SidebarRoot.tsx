@@ -556,6 +556,7 @@ export function SidebarRoot({
       aria-label={drawer ? t('navigation.label') : undefined}
       tabIndex={drawer ? -1 : undefined}
       data-sidebar-peek={peek === 'closed' ? undefined : peek}
+      data-delorun-edge-surface="sidebar"
       className={clsx(
         css.root, !wide && css.collapsed, !wide && animateRail.current && css.railIn,
         // The peek overlay replaces the collapse crossfade: it is already

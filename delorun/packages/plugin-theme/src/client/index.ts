@@ -50,6 +50,7 @@ import { COPY, COPY_ZH } from './copy.ts'
 import { VOCABULARY } from './vocabulary.ts'
 import fonts from './fonts.css?inline'
 import alerts from './alerts.css?inline'
+import edgesCss from './edges.css?inline'
 import { CHAT_NAMESPACE, type ChatDisplaySettings } from './conversation.ts'
 import { en as conversationEn, zh as conversationZh, type ConversationLocaleKey } from './conversation-locales.ts'
 import { ConversationSection, type ConversationInjected } from './ConversationSection.tsx'
@@ -58,7 +59,10 @@ import { en as lookEn, zh as lookZh, type LookLocaleKey } from './look-locales.t
 import { LookRow, type LookRowInjected } from './LookRow.tsx'
 
 export { LAYERS, PLUGIN_ID, ThemeController } from './controller.ts'
-export { EDGE_ATTRIBUTE, EdgeController, edgeColours, type EdgeColours } from './edges.ts'
+export {
+  EDGE_ATTRIBUTE, EDGE_RESOLVED, EDGE_SURFACE_ATTRIBUTE, EDGE_VARIABLES, EdgeController, VIEWPORT_HEIGHT_VARIABLE,
+  edgeCandidates, edgeColours, edgeColoursAt, type EdgeColours, type EdgeSurfaceBox, type EdgeViewport,
+} from './edges.ts'
 export {
   ACCENT_CHOICES, CONTRAST, DEFAULT_SETTINGS, DENSITIES, EFFORT_DISPLAYS, PALETTES, THEME_ROW_ID, TYPEFACES,
   type AccentChoice, type Density, type EffortDisplay, type PaletteChoice, type ThemeSettings, type Typeface,
@@ -260,7 +264,7 @@ function registerStockEntry(ctx: Context, form: ConfigForm<ThemeSettings>): Regi
  * @returns the registration set, which leaves upstream's look in place again once disposed.
  */
 function registerStudio(ctx: Context, form: ConfigForm<ThemeSettings>, initial: ThemeSettings): Registration {
-  const controller = new ThemeController(ctx.theme, `${fonts}\n${effortBarsCss()}\n${composerFocusCss()}\n${panelGlyphsCss()}\n${experimentalMoreCss()}\n${onDemandRowsCss()}\n${alerts}`, document)
+  const controller = new ThemeController(ctx.theme, `${fonts}\n${effortBarsCss()}\n${composerFocusCss()}\n${panelGlyphsCss()}\n${experimentalMoreCss()}\n${onDemandRowsCss()}\n${alerts}\n${edgesCss}`, document)
   const t = ctx.locale.bind(NS)
   const conversationT = ctx.locale.bind(CONVERSATION.ns)
   const useStockLook = (): Promise<boolean> => form.set('studioAdditions', false)

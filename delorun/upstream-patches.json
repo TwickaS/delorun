@@ -672,7 +672,7 @@
       "path": "packages/client/ui-layout/src/client/AppFrame.tsx",
       "class": "delorun-feature",
       "feature": "studio-seams",
-      "reason": "Reads the sidebar default width from the layout store, so a width set through ctx.layout.setSidebarWidths applies to the opened sidebar and to the drawer fallback. The frame hands the sidebar its expanded width so the peek matches the open column."
+      "reason": "Reads the sidebar default width from the layout store, so a width set through ctx.layout.setSidebarWidths applies to the opened sidebar and to the drawer fallback. The frame hands the sidebar its expanded width so the peek matches the open column. Marks the frame with the stable attribute `data-shell`, which the theme's edge sheet selects to fix the shell to the viewport at the visual viewport's height, so a rubber-band bounce cannot expose the page behind it and the composer stays above the on-screen keyboard."
     },
     {
       "path": "packages/client/ui-layout/src/client/columns.ts",
@@ -846,7 +846,7 @@
       "path": "packages/client/ui-settings-general/src/client/SettingsRoot.tsx",
       "class": "delorun-feature",
       "feature": "studio-seams",
-      "reason": "Renders the grouped Settings navigation and search and keeps the flat list when no layout is registered; grouped icons come from the section icon registration. Onboarding steps get `renderSection`, which draws one registered `settings.section` inside a step with a `close` that does nothing, and `completeStep`, which marks another step complete while the page is open. At 600px and below outside the desktop windows (`data-phone` on the panel) it shows the grouped list first, a page under a back arrow and the page title, and moves focus to the arrow and back to the opened row. The connection pill is also withdrawn from the foot row while a plugin marks the root with data-delorun-connection-alert (Delorun's pinned update and connection alert shows the state instead), so the foot row never wraps."
+      "reason": "Renders the grouped Settings navigation and search and keeps the flat list when no layout is registered; grouped icons come from the section icon registration. Onboarding steps get `renderSection`, which draws one registered `settings.section` inside a step with a `close` that does nothing, and `completeStep`, which marks another step complete while the page is open. At 600px and below outside the desktop windows (`data-phone` on the panel) it shows the grouped list first, a page under a back arrow and the page title, and moves focus to the arrow and back to the opened row. The connection pill is also withdrawn from the foot row while a plugin marks the root with data-delorun-connection-alert (Delorun's pinned update and connection alert shows the state instead), so the foot row never wraps. Marks the panel with `data-delorun-edge-surface=\"settings\"`, so the theme's edge controller reads the panel's surface as the colour behind the browser's bars while Settings is open, and the edge sheet pads the panel by the bottom and side safe-area insets on a phone."
     },
     {
       "path": "packages/client/ui-settings-general/src/client/index.ts",
@@ -948,7 +948,7 @@
       "path": "packages/client/ui-sidebar/src/client/SidebarRoot.tsx",
       "class": "delorun-feature",
       "feature": "studio-seams",
-      "reason": "Renders the lead panel row, the New Session button when shown, the panels in the foot, the one-row foot, the backdrop slot and the brand badge slot under the logo row. Collapsed, it also lifts the expanded shell over the page as a transient hover peek: a pointer dwell on the rail, a close on leaving, Escape or focus leaving, and never a change to the persisted collapsed state. The dwell and whether the peek opens at all come from the hoverPeek hook, so the Collapsed sidebar settings (sidebar-peek-setting) apply live. The one-row foot puts a spacer before the footer actions."
+      "reason": "Renders the lead panel row, the New Session button when shown, the panels in the foot, the one-row foot, the backdrop slot and the brand badge slot under the logo row. Collapsed, it also lifts the expanded shell over the page as a transient hover peek: a pointer dwell on the rail, a close on leaving, Escape or focus leaving, and never a change to the persisted collapsed state. The dwell and whether the peek opens at all come from the hoverPeek hook, so the Collapsed sidebar settings (sidebar-peek-setting) apply live. The one-row foot puts a spacer before the footer actions. Marks the column with `data-delorun-edge-surface=\"sidebar\"`, so the theme's edge controller reads the column's fill as the colour behind the browser's bars while the drawer is open, and the edge sheet pads the header and foot by the safe-area insets."
     },
     {
       "path": "packages/client/ui-sidebar/src/client/contract/slots.ts",
@@ -3102,7 +3102,7 @@
       "path": "packages/client/ui-primitives/src/Modal.tsx",
       "class": "delorun-feature",
       "feature": "studio-seams",
-      "reason": "Holds the dialog mask on the edge stack while a dialog is open, so the browser's status and bottom bars take the dimmed page colour on a phone and restore it, in order, as nested dialogs close."
+      "reason": "Holds the dialog mask on the edge stack while a dialog is open, so the browser's status and bottom bars take the dimmed page colour on a phone and restore it, in order, as nested dialogs close. Marks the dialog card with `data-delorun-edge-surface=\"dialog\"`, so the theme's edge controller reads the card's surface as the colour behind the browser's bars while a dialog is open, and the edge sheet keeps the card clear of the safe-area insets."
     },
     {
       "path": "packages/client/ui-primitives/src/edge-surface.ts",
@@ -3150,7 +3150,7 @@
       "path": "packages/client/ui-conversation/src/client/skeleton/ConversationMainPanel.tsx",
       "class": "delorun-feature",
       "feature": "multiview",
-      "reason": "Multiview U3: renders the main content (transcript and composer) inside the `conversation.main.body` hoc slot, so a layer can arrange it beside other chats; with no layer the content renders unchanged and the header stays outside. The content holds the main chat's pending approval card; approval safety rests on the Host's grants, not on this slot."
+      "reason": "Multiview U3: renders the main content (transcript and composer) inside the `conversation.main.body` hoc slot, so a layer can arrange it beside other chats; with no layer the content renders unchanged and the header stays outside. The content holds the main chat's pending approval card; approval safety rests on the Host's grants, not on this slot. Marks the conversation root with `data-delorun-edge-surface=\"chat\"`, so the theme's edge controller reads the chat's surface as the colour behind the browser's bars."
     },
     {
       "path": "packages/api/terminal-controller/src/client/model.ts",
@@ -3541,6 +3541,12 @@
       "class": "delorun-feature",
       "feature": "mcp-add-consent",
       "reason": "MCP consent origin (A631): `registered(name)` answers whether a server comes from a plugin's `register` call rather than the configured `servers` list, so the add-time consent tells a server the person configured in Settings, which starts without asking, from one a plugin contributed, which asks. Nothing else changes."
+    },
+    {
+      "path": "packages/client/ui-conversation/src/client/skeleton/ConversationHeader.tsx",
+      "class": "delorun-feature",
+      "feature": "phone-safe-areas",
+      "reason": "Marks the header with the stable attribute `data-conversation-header`, which the theme's edge sheet selects to pad the header's content by the safe-area insets on a phone, so the title and the view tabs stay clear of the status bar while the surface behind them reaches the physical edge. Nothing else changes."
     }
   ],
   "retired": []
