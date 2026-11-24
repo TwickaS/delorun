@@ -67,6 +67,7 @@ import { machineBudget, nodeSlotHost, privateSlotPaths } from './checks/slot-hos
 import { describeSlots, GRANT_ENV, grantFromEnv, grantToEnv, readSlots, takeSlots, type SlotGrant } from './checks/slots.ts'
 import { closureHostProblem } from './checks/closure.ts'
 import { gateFailure, logTail, probeDocker, runPlan, type Outcome, type Result } from './checks/run.ts'
+import { sharedCheckoutNote, sharedCheckoutRefusal } from './checks/shared-checkout.ts'
 import { findTreePass, recordTreePass, treeOfRef, treePassEnabled, treePassPath, treeRecordsDir, treeState, type RunFacts, type TreeState } from './checks/tree-pass.ts'
 import { openSharedStore, sharedCacheDir } from './checks/shared-cache.ts'
 import { declarationReaders, securityPackageDirs, sharingPolicy } from './checks/sharing.ts'
@@ -249,6 +250,21 @@ export function refuseTrunkNarrowing(pushInput: string | undefined, skip: readon
   if (pushInput === undefined || !pushesTrunk(pushInput)) return
   if (skip.length > 0) throw new Error(`a push of the trunk runs every check of the merge tier; unset DELORUN_PUSH_SKIP and drop --skip (${skip.join(', ')})`)
   if (only.length > 0) throw new Error(`a push of the trunk runs every check of the merge tier; drop --only (${only.join(', ')})`)
+}
+
+/**
+ * Refuse a push from a linked worktree while the clone's shared checkout holds changes to tracked content. The refusal
+ * sits before the plan, so no gate can be skipped with `DELORUN_PUSH_SKIP` and no stored tree pass can cover it, and the
+ * shared tree is what every worktree of the clone reads.
+ * @param root - the repository root of the worktree the push happens in.
+ * @param warn - told about untracked files in the shared checkout, which do not refuse the push.
+ * @throws Error naming the shared checkout and its changed paths.
+ */
+export function refuseSharedCheckout(root: string, warn: (line: string) => void = line => { console.warn(line) }): void {
+  const refusal = sharedCheckoutRefusal(root)
+  if (refusal !== undefined) throw new Error(refusal)
+  const note = sharedCheckoutNote(root)
+  if (note !== undefined) warn(`delorun checks: ${note}`)
 }
 
 /**
@@ -574,6 +590,7 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
   // A pre-push run reads the push lines once; a scoped child gets them on its standard input.
   const pushInput = values['pre-push'] ? readFileSync(0, 'utf8') : undefined
   refuseTrunkNarrowing(pushInput, list(values.skip), list(values.only))
+  if (values['pre-push']) refuseSharedCheckout(root)
   const fullGate = values['pre-push'] && env['DELORUN_FULL_GATE'] === '1'
   let plan: WithUnits<Planned>[]
   let mode: string

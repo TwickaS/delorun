@@ -243,6 +243,12 @@ export function gatesFor(base: string): readonly GateCheck[] {
       history: true,
     },
     {
+      id: 'gates:hook-skips',
+      title: 'No script, hook or workflow passes --no-verify to git or disables Lefthook',
+      command: [TSX, `${GATE_DIR}/hook-skips.ts`],
+      inputs: ['scripts/**', '.github/**', '**/package.json', '**/lefthook*.yml', '**/*.sh', `${GATE_DIR}/hook-skips.ts`],
+    },
+    {
       id: 'gates:spec-lanes',
       title: 'No unit spec starts a process, and every synchronous process call under a tests directory has a timeout',
       command: [TSX, `${GATE_DIR}/spec-lanes.ts`],
