@@ -26,6 +26,7 @@
     { "kind": "event", "name": "reach/state", "side": "host", "source": "delorun/packages/reach/src/service.ts" },
     { "kind": "service", "name": "delorunSidebar", "side": "browser", "source": "delorun/packages/plugin-sidebar/src/client/index.ts" },
     { "kind": "service", "name": "mcpReviews", "side": "host", "source": "delorun/packages/plugin-mcp-consent/src/review.ts" },
+    { "kind": "service", "name": "delorunPackLayers", "side": "host", "source": "delorun/packages/plugin-mcp-consent/src/layers.ts" },
     { "kind": "event", "name": "mcp-client/consent-accepted", "side": "host", "source": "delorun/packages/plugin-mcp-consent/src/index.ts" },
     { "kind": "service", "name": "permissionDefaults", "side": "host", "source": "delorun/packages/plugin-permission-defaults/src/index.ts" },
     { "kind": "service", "name": "delorunCommandNetwork", "side": "host", "source": "delorun/packages/plugin-permission-defaults/src/command-network.ts" },
