@@ -1842,7 +1842,7 @@ export function PluginManagerPage(props: PluginManagerPageProps): ReactNode {
         <div className={css.groupHead}>
           <h3 className={css.groupTitle}>{heading}</h3>
           {offersMore ? (
-            <Button size="sm" className={css.groupMore} onClick={() => { setView({ kind: 'more' }) }}>
+            <Button size="sm" className={css.groupMore} data-plugin-more-count={more.length} onClick={() => { setView({ kind: 'more' }) }}>
               {t('moreAction')}<IconChevronRightOutlineRegular size={14} aria-hidden="true" />
             </Button>
           ) : null}

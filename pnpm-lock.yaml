@@ -4514,6 +4514,9 @@ importers:
       '@deepseek-ai/dsh-host-webserver':
         specifier: workspace:*
         version: link:../../../packages/host/webserver
+      '@deepseek-ai/dsh-official-bundles':
+        specifier: workspace:*
+        version: link:../../../packages/util/official-bundles
       '@deepseek-ai/dsh-settings':
         specifier: workspace:*
         version: link:../../../packages/settings/settings
