@@ -16,6 +16,12 @@
  * replaced key, only to a higher version than the one stored and conditional on the entity tag read just before, so a racing re-signing wins and the publish stops
  * without replacing it.
  *
+ * R2 sometimes drops a connection mid-publish (`fetch failed`, undici's `UND_ERR_SOCKET`, "other side closed"). Every
+ * store call is therefore tried up to three times, with a growing pause between attempts ({@link retryingStore}); the
+ * writes are create-only or conditional, so a repeated attempt cannot publish anything twice. An HTTP answer is never
+ * retried: a 403 or a 412 is the bucket's decision, not a dropped connection, and the third dropped connection fails
+ * with the error the store raised.
+ *
  * `--mirror github` uploads the same release files to the GitHub release `--tag` of `--repo` with
  * `gh release upload`, without `--clobber`, after the bucket publish succeeds.
  *
@@ -24,6 +30,7 @@
 import { execFile } from 'node:child_process'
 import { readdir, readFile } from 'node:fs/promises'
 import { join, relative, sep } from 'node:path'
+import { setTimeout as delay } from 'node:timers/promises'
 import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
 import { promisify } from 'node:util'
@@ -41,6 +48,77 @@ export class PublishRefusal extends Error {
   constructor(message: string) {
     super(message)
     this.name = 'PublishRefusal'
+  }
+}
+
+/** The undici error code for a connection the other side closed, which R2 answers with under load. */
+export const SOCKET_CLOSED_CODE = 'UND_ERR_SOCKET'
+
+/** How many times a store call is tried in all before its socket error is raised. */
+export const SOCKET_ATTEMPTS = 3
+
+/** The pause before the second attempt, in milliseconds; each later pause is twice the one before. */
+export const SOCKET_BACKOFF_MS = 250
+
+/**
+ * Whether an error is a connection the other side closed. undici reports one as `TypeError: fetch failed` with the
+ * socket error as its cause, so the cause chain is walked; an HTTP answer is never one, because the store raises those
+ * as its own errors after reading the response.
+ * @param error - the error a store call raised.
+ * @returns whether the connection dropped.
+ */
+export function isSocketClosed(error: unknown): boolean {
+  let current: unknown = error
+  for (let depth = 0; depth < 8 && current !== null && current !== undefined; depth++) {
+    if (typeof current === 'object' && 'code' in current && (current as { readonly code?: unknown }).code === SOCKET_CLOSED_CODE) return true
+    current = typeof current === 'object' && 'cause' in current ? (current as { readonly cause?: unknown }).cause : undefined
+  }
+  return false
+}
+
+/** What {@link retryingStore} needs. */
+export interface RetryOptions {
+  /** How many attempts a call gets in all; {@link SOCKET_ATTEMPTS} by default. */
+  readonly attempts?: number
+  /** The pause before the second attempt in milliseconds; {@link SOCKET_BACKOFF_MS} by default. */
+  readonly backoffMs?: number
+  /** The pause, for tests; a real timer by default. */
+  readonly sleep?: (milliseconds: number) => Promise<void>
+  /** Receives one line per retry. */
+  readonly log?: (line: string) => void
+}
+
+/**
+ * Wrap a store so a call whose connection dropped is tried again, up to {@link SOCKET_ATTEMPTS} attempts in all, with a
+ * growing pause between them. Every write the publisher makes is create-only or conditional on an entity tag, so a
+ * repeated attempt publishes nothing twice. An HTTP answer is not retried: a 403 or a 412 is the bucket's decision.
+ * @param store - the store to wrap.
+ * @param options - the attempt count, the backoff and the log.
+ * @returns the store, with each call retried on a dropped connection.
+ * @throws the error the store raised, unchanged, when every attempt dropped the connection.
+ */
+export function retryingStore(store: PublishStore, options: RetryOptions = {}): PublishStore {
+  const attempts = options.attempts ?? SOCKET_ATTEMPTS
+  const backoffMs = options.backoffMs ?? SOCKET_BACKOFF_MS
+  const sleep = options.sleep ?? (async (milliseconds: number): Promise<void> => { await delay(milliseconds) })
+  const log = options.log ?? (() => {})
+  const attempt = async <T>(what: string, call: () => Promise<T>): Promise<T> => {
+    for (let tries = 1; ; tries++) {
+      try {
+        return await call()
+      } catch (error) {
+        if (!isSocketClosed(error) || tries >= attempts) throw error
+        const pause = backoffMs * 2 ** (tries - 1)
+        log(`retrying ${what} after a dropped connection (attempt ${String(tries)} of ${String(attempts)}): ${error instanceof Error ? error.message : String(error)}`)
+        await sleep(pause)
+      }
+    }
+  }
+  return {
+    read: async key => await attempt(`GET ${key}`, async () => await store.read(key)),
+    list: async prefix => await attempt(`LIST ${prefix}`, async () => await store.list(prefix)),
+    putIfAbsent: async (key, bytes) => await attempt(`PUT ${key}`, async () => await store.putIfAbsent(key, bytes)),
+    putIfMatch: async (key, bytes, etag) => await attempt(`PUT ${key}`, async () => await store.putIfMatch(key, bytes, etag)),
   }
 }
 
@@ -169,7 +247,8 @@ async function main(argv: readonly string[]): Promise<number> {
     const markSecret = process.env.DELORUN_MARK_SECRET
     if (values['mark-url'] === undefined || markSecret === undefined) throw new Error('pass --mark-url <the Resign Worker\'s /mark address, ending in /mark> and set DELORUN_MARK_SECRET, so the high-water mark moves when the timestamp is uploaded')
     const markUrl = parseMarkUrl(values['mark-url'])
-    await publishChannel(s3Store({ accountId: values.account, bucket: releaseBucket(values.stage), accessKeyId, secretAccessKey }), values.channel, console.log, postMark({ url: markUrl, secret: markSecret }))
+    const store = retryingStore(s3Store({ accountId: values.account, bucket: releaseBucket(values.stage), accessKeyId, secretAccessKey }), { log: console.log })
+    await publishChannel(store, values.channel, console.log, postMark({ url: markUrl, secret: markSecret }))
     if (values.mirror === 'github') {
       const uploaded = await mirrorToGithub({ channel: values.channel, tag: values.tag!, repo: values.repo! })
       console.log(`mirrored ${String(uploaded.length)} files to ${values.repo!} ${values.tag!}`)

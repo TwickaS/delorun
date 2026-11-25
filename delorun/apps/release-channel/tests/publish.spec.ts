@@ -1,9 +1,13 @@
-/** Publishing: order, create-only refusal naming the key, the conditional timestamp, and the mocked GitHub mirror. */
+/**
+ * Publishing: order, create-only refusal naming the key, the conditional timestamp, the mocked GitHub mirror, and the
+ * retry of a dropped connection, which never retries an HTTP answer.
+ */
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { mirrorToGithub, parseMarkUrl, publishChannel, publishPlan, PublishRefusal } from '../src/publish-release.ts'
+import { isSocketClosed, mirrorToGithub, parseMarkUrl, publishChannel, publishPlan, PublishRefusal, retryingStore, SOCKET_ATTEMPTS } from '../src/publish-release.ts'
+import type { PublishStore, StoredObject } from '../src/store.ts'
 import { MemoryStore, signedChannel } from './support.ts'
 
 const keys = signedChannel().keys
@@ -103,6 +107,88 @@ describe('release publishing', () => {
     expect(calls).toEqual([['release', 'upload', 'v0.1.0', ...uploaded, '--repo', 'owner/repo']])
     expect(calls[0]).not.toContain('--clobber')
     await expect(mirrorToGithub({ channel: directory, tag: 'v9.9.9', repo: 'owner/repo', run: async () => {} })).rejects.toThrow(/no files under/u)
+  })
+})
+
+/** The error undici raises when the other side closed the connection: `TypeError: fetch failed` over the socket error. */
+function socketClosed(): TypeError {
+  return new TypeError('fetch failed', { cause: Object.assign(new Error('other side closed'), { code: 'UND_ERR_SOCKET' }) })
+}
+
+/** A store that raises the given errors before answering from a memory store. */
+function flakyStore(errors: readonly unknown[], inner = new MemoryStore()): { store: PublishStore, calls: string[] } {
+  const calls: string[] = []
+  const next = (what: string): void => {
+    calls.push(what)
+    const error = errors[calls.length - 1]
+    if (error !== undefined) throw error
+  }
+  return {
+    calls,
+    store: {
+      read: async (key): Promise<StoredObject | undefined> => { next(`read ${key}`); return inner.read(key) },
+      list: async (prefix): Promise<string[]> => { next(`list ${prefix}`); return inner.list(prefix) },
+      putIfAbsent: async (key, bytes): Promise<boolean> => { next(`putIfAbsent ${key}`); return inner.putIfAbsent(key, bytes) },
+      putIfMatch: async (key, bytes, etag): Promise<boolean> => { next(`putIfMatch ${key}`); return inner.putIfMatch(key, bytes, etag) },
+    },
+  }
+}
+
+describe('a dropped connection', () => {
+  it('is recognised through the cause chain undici reports it in', () => {
+    expect(isSocketClosed(socketClosed())).toBe(true)
+    expect(isSocketClosed(Object.assign(new Error('other side closed'), { code: 'UND_ERR_SOCKET' }))).toBe(true)
+    expect(isSocketClosed(new Error('PUT k answered 403: denied'))).toBe(false)
+    expect(isSocketClosed(new TypeError('fetch failed', { cause: new Error('connect ECONNREFUSED') }))).toBe(false)
+    expect(isSocketClosed('other side closed')).toBe(false)
+  })
+
+  it('is retried, so a socket error then success uploads once', async () => {
+    const inner = new MemoryStore()
+    const flaky = flakyStore([socketClosed()], inner)
+    const pauses: number[] = []
+    const lines: string[] = []
+    const store = retryingStore(flaky.store, { sleep: async (milliseconds) => { pauses.push(milliseconds) }, log: line => lines.push(line) })
+    expect(await store.putIfAbsent('releases/download/v0.1.0/a.tar.gz', Buffer.from('archive'))).toBe(true)
+    expect(flaky.calls).toEqual(['putIfAbsent releases/download/v0.1.0/a.tar.gz', 'putIfAbsent releases/download/v0.1.0/a.tar.gz'])
+    expect(inner.writes).toEqual(['releases/download/v0.1.0/a.tar.gz'])
+    expect(pauses).toHaveLength(1)
+    expect(lines[0]).toMatch(/retrying PUT releases\/download\/v0\.1\.0\/a\.tar\.gz after a dropped connection/u)
+  })
+
+  it('is retried on a read and a list too, with a growing pause', async () => {
+    const flaky = flakyStore([socketClosed(), socketClosed()])
+    const pauses: number[] = []
+    const store = retryingStore(flaky.store, { sleep: async (milliseconds) => { pauses.push(milliseconds) } })
+    expect(await store.read('timestamp.json')).toBeUndefined()
+    expect(flaky.calls).toHaveLength(3)
+    expect(pauses[1]).toBeGreaterThan(pauses[0]!)
+  })
+
+  it('is not retried when the bucket answers: a 403 or a 412 is an answer, not a dropped connection', async () => {
+    for (const answer of [new Error('PUT k answered 403: denied'), new Error('GET k answered 412')]) {
+      const flaky = flakyStore([answer])
+      const store = retryingStore(flaky.store, { sleep: async () => {} })
+      await expect(store.putIfAbsent('k', Buffer.from('x'))).rejects.toThrow(answer.message)
+      expect(flaky.calls).toHaveLength(1)
+    }
+  })
+
+  it('fails with the original error after three dropped connections, not a wrapped one', async () => {
+    const first = socketClosed()
+    const flaky = flakyStore([first, socketClosed(), socketClosed()])
+    const store = retryingStore(flaky.store, { sleep: async () => {} })
+    await expect(store.putIfAbsent('k', Buffer.from('x'))).rejects.toBe(first)
+    expect(flaky.calls).toHaveLength(SOCKET_ATTEMPTS)
+  })
+
+  it('publishes the whole channel through the wrapper, retrying each dropped call once', async () => {
+    const inner = new MemoryStore()
+    const flaky = flakyStore([socketClosed(), socketClosed()], inner)
+    const store = retryingStore(flaky.store, { sleep: async () => {} })
+    const written = await publishChannel(store, channelDir())
+    expect(written).toEqual(['releases/download/v0.1.0/a.tar.gz', 'releases/download/v0.1.0/b.manifest.json', 'root/1.root.json', 'timestamp.json'])
+    expect(inner.writes).toEqual(written)
   })
 })
 
