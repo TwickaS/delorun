@@ -453,15 +453,25 @@ export function pressureOf(pressure: Pressure | undefined, resource: PressureRes
 }
 
 /**
- * The threshold above which a resource counts as overloaded, as a percentage of the window. The figures are far above the
- * baseline this machine runs at (cpu `some avg300` 12%, memory `full avg300` 0.11%, io `some avg300` 0.27%), so ordinary
- * work never reaches them: cpu at 50% of a five-minute window means half the machine's time was spent waiting for a CPU,
- * memory at 10% means the kernel was reclaiming for a tenth of it, and io at 50% means the disk was the limit throughout.
+ * The threshold at which a resource counts as overloaded, as a percentage of the window: saturation, and nothing less. The
+ * machine is meant to be used, and a queue that holds work while the machine is merely busy is the bottleneck the alarm
+ * exists to remove, so a resource must be stalled for nearly the whole window before the alarm holds anything. The
+ * baseline this machine runs at is cpu `some avg300` 12%, memory 0.04% and io 0.27%; a busy merge tier reaches perhaps
+ * half of cpu.
+ *
+ * The figure is 90 rather than 100 because a saturated machine's average bounces, and 100 is not reachable at all. Measured
+ * on this machine with 24 busy processes on its 12 CPUs — twice oversubscribed, unambiguously saturated — `cpu some avg60`
+ * peaked at 91.0% and then fell to 83.4%, 82.5%, 63.3% and 25.8% as tasks finished and restarted. A threshold of 100 would
+ * never fire, and 95 would fire only at the peak of a saturation far worse than any check run. At 90 the alarm means
+ * "saturated for the whole minute" in practice, and the bounce stays inside it.
  */
-export const OVERLOAD_PERCENT: Readonly<Record<PressureResource, number>> = { cpu: 50, memory: 10, io: 50 }
+export const OVERLOAD_PERCENT: Readonly<Record<PressureResource, number>> = { cpu: 90, memory: 90, io: 90 }
 
-/** The window the alarm averages over: five minutes, so a spike of a few seconds never trips it. */
-export const ALARM_WINDOW: PressureWindow = 300
+/**
+ * The window the alarm averages over: a minute, so a resource must be saturated for more than a minute before the alarm
+ * holds new grants. A spike of a few seconds never trips it, and a burst that the ceiling already caught never reaches it.
+ */
+export const ALARM_WINDOW: PressureWindow = 60
 
 /** Why the alarm is on, or undefined when the machine is not overloaded. */
 export interface Overload {
