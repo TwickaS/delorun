@@ -1,12 +1,16 @@
 // @vitest-environment jsdom
 /** The studio plugins' switches: what the card reads from the Host, and the write that turns a row on. */
 import { Context } from '@deepseek-ai/cordis'
+import type { ClientRemote } from '@deepseek-ai/dsh-api-remotes/client'
 import { TestRemote } from '@deepseek-ai/dsh-client-test-runtime'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createStudioRows } from '../src/client/studio-rows-store.ts'
 import { STUDIO_BUNDLE, STUDIO_ROWS } from '../src/client/studio-rows.ts'
 
 afterEach(() => { vi.restoreAllMocks() })
+
+/** What the plugin manager answers a row write with, as the generated client returns it. */
+type ChangeAnswer = Awaited<ReturnType<ClientRemote['pluginManager']['setPluginEnabled']>>
 
 /** One row as the Host's `listBundles` reports it. */
 function row(rowId: string, entryId: string | undefined, title: string) {
@@ -15,9 +19,9 @@ function row(rowId: string, entryId: string | undefined, title: string) {
 
 /** The Host's plugin manager, scripted: the bundle with its two rows, and the live entries behind them. */
 function manager(options: { readonly readOnly?: string } = {}) {
-  const setPluginEnabled = vi.fn(async (id: string, on: boolean) => ({
-    ok: true as const,
-    value: { changed: true, application: 'applied' as const, stage: 'enable' as const, target: id, enabled: on },
+  const setPluginEnabled = vi.fn(async (id: string, on: boolean): Promise<ChangeAnswer> => ({
+    ok: true,
+    value: { changed: true, application: 'applied', stage: 'enable', target: id, enabled: on },
   }))
   return {
     setPluginEnabled,
@@ -79,7 +83,7 @@ describe('the studio plugins\' switches', () => {
   it('says a write failed when the Host reports it did not apply', async () => {
     const { face, plugins } = bench()
     await settled(face)
-    plugins.setPluginEnabled.mockResolvedValueOnce({ ok: true as const, value: { changed: false, application: 'failed' as const, stage: 'enable' as const, target: 'entry-cost' } })
+    plugins.setPluginEnabled.mockResolvedValueOnce({ ok: true, value: { changed: false, application: 'failed', stage: 'enable', target: 'entry-cost' } })
     face.setEnabled('delorun-cost-meter', true)
     await vi.waitFor(() => { expect(face.hooks.rows.getSnapshot().failed).toBe('delorun-cost-meter') })
   })

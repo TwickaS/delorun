@@ -11,27 +11,28 @@ import { STUDIO_BUNDLE } from '../src/client/studio-rows.ts'
 afterEach(cleanup)
 
 /** A row of the bundle as the page hands it to the entry. */
-function subject(rowId: string, enabled: boolean, pkg = STUDIO_BUNDLE) {
+function subject(rowId: string, enabled: boolean, pkg = STUDIO_BUNDLE): StudioRowsProps['subject'] {
   return {
-    kind: 'row' as const,
-    pkg: { name: pkg, installed: true, availability: 'profile' as const, official: true, enabled: true, rows: [] },
+    kind: 'row',
+    pkg: { name: pkg, installed: true, availability: 'profile', official: true, enabled: true, rows: [] },
     row: { rowId, moduleName: `@delorun/plugin-${rowId}`, enabled },
   }
 }
 
-/** The store as the entry reads it. */
+/** The store as the entry reads it, bound as the renderer binds a `hooks` source. */
 function source(state: StudioRowsState) {
   return { getSnapshot: () => state, subscribe: () => () => {} }
 }
 
-/** Render the entry for one subject. */
+/** Render the entry for one subject, with the store's state and the write it records. */
 function open(state: StudioRowsState, row = subject('delorun-cost-meter', false), setEnabled = vi.fn()) {
-  const props = {
+  const rows = source(state)
+  const props: StudioRowsProps = {
     subject: row,
     t: makeTranslate(en),
     useRows: (selector: (value: StudioRowsState) => unknown) => selector(state),
     setEnabled,
-  } as unknown as StudioRowsProps
+  }
   render(<StudioRows {...props} />)
   return setEnabled
 }
@@ -76,20 +77,10 @@ describe('the studio plugins\' line on the bundle\'s card', () => {
   })
 
   it('renders nothing for a row it does not list, or for another bundle\'s card', () => {
-    const { container } = render(<StudioRows {...{
-      subject: subject('delorun-theme', true),
-      t: makeTranslate(en),
-      useRows: (selector: (value: StudioRowsState) => unknown) => selector(READY),
-      setEnabled: vi.fn(),
-    } as unknown as StudioRowsProps} />)
-    expect(container.firstChild).toBeNull()
+    const unlisted = render(<StudioRows subject={subject('delorun-theme', true)} t={makeTranslate(en)} useRows={selector => selector(READY)} setEnabled={vi.fn()} />)
+    expect(unlisted.container.firstChild).toBeNull()
     cleanup()
-    const other = render(<StudioRows {...{
-      subject: subject('delorun-cost-meter', false, '@deepseek-ai/dsh-experimental-voice-input-bundle'),
-      t: makeTranslate(en),
-      useRows: (selector: (value: StudioRowsState) => unknown) => selector(READY),
-      setEnabled: vi.fn(),
-    } as unknown as StudioRowsProps} />)
+    const other = render(<StudioRows subject={subject('delorun-cost-meter', false, '@deepseek-ai/dsh-experimental-voice-input-bundle')} t={makeTranslate(en)} useRows={selector => selector(READY)} setEnabled={vi.fn()} />)
     expect(other.container.firstChild).toBeNull()
   })
 
