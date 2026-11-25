@@ -7,6 +7,7 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import type { QueueFs, QueueHost } from '../src/checks/run-queue.ts'
+import { describeOverload, overloadOf, type Pressure } from '../src/checks/machine.ts'
 import { decide, describeSlots, grantFromEnv, grantToEnv, holdMachine, readSlots, SLOT_POLL_MILLISECONDS, stepsBack, takeSlots, unholdMachine, WAIT_REPORT_MILLISECONDS, type SlotBudget, type SlotDemand, type SlotGrant, type SlotPaths } from '../src/checks/slots.ts'
 
 const GIB = 1024 ** 3
@@ -811,5 +812,90 @@ describe('a machine hold', () => {
       'slots: 0 of 20 held, 2 disk-heavy places, 20.0 GiB of memory; 0 waiting',
     ])
     expect(describeSlots({ holders: [], waiting: [], oldWaiting: [] }, budget, 0)[0]).toBe('slots: 0 of 20 held, 2 disk-heavy places, 20.0 GiB of memory; 0 waiting')
+  })
+})
+
+describe('the pressure alarm', () => {
+  /** A machine's pressure at one figure for every resource and window, so a spec states only what it is about. */
+  const at = (some: number, full = 0): Pressure => ({
+    cpu: { 10: { some, full }, 60: { some, full }, 300: { some, full } },
+    memory: { 10: { some, full }, 60: { some, full }, 300: { some, full } },
+    io: { 10: { some, full }, 60: { some, full }, 300: { some, full } },
+  })
+  /** The pressure this machine runs at, measured: cpu some avg300 12%, memory full avg300 0.11%, io some avg300 0.27%. */
+  const baseline: Pressure = {
+    cpu: { 10: { some: 0.66, full: 0 }, 60: { some: 1.29, full: 0 }, 300: { some: 12, full: 0 } },
+    memory: { 10: { some: 0, full: 0 }, 60: { some: 0, full: 0 }, 300: { some: 0.04, full: 0.11 } },
+    io: { 10: { some: 0, full: 0 }, 60: { some: 0.09, full: 0.09 }, 300: { some: 0.27, full: 0.24 } },
+  }
+  const request = (pid: number, since: number) => ({ file: String(pid), pid, want: 4, min: 4, memoryBytes: 0, disk: false, priority: 1 as const, label: '', since })
+
+  it('does not fire on the pressure this machine runs at, so ordinary work is never held', () => {
+    expect(overloadOf(baseline)).toBeUndefined()
+    expect(decide({ holders: [], waiting: [request(1, 1)], oldWaiting: [], pressure: baseline }, 1, budget)).toEqual({ slots: 4, memoryBytes: 4 * GIB })
+  })
+
+  it('fires only on the five-minute window, so a spike of the last ten seconds never trips it', () => {
+    // A burst that has just started: the ten-second average is saturated, the one-minute one has not caught up.
+    const spike: Pressure = {
+      cpu: { 10: { some: 99, full: 90 }, 60: { some: 40, full: 20 }, 300: { some: 12, full: 0 } },
+      memory: { 10: { some: 99, full: 99 }, 60: { some: 30, full: 15 }, 300: { some: 0.04, full: 0.11 } },
+      io: { 10: { some: 99, full: 99 }, 60: { some: 45, full: 40 }, 300: { some: 0.27, full: 0.24 } },
+    }
+    expect(overloadOf(spike)).toBeUndefined()
+    expect('slots' in decide({ holders: [], waiting: [request(1, 1)], oldWaiting: [], pressure: spike }, 1, budget)).toBe(true)
+  })
+
+  it('fires when a resource has been over its threshold for the window, and names it', () => {
+    const overloaded = overloadOf({ ...at(0), cpu: { 10: { some: 0, full: 0 }, 60: { some: 97.4, full: 0 }, 300: { some: 0, full: 0 } } })
+    expect(overloaded).toEqual({ resources: [{ resource: 'cpu', percent: 97.4, threshold: 90 }], window: 60 })
+    expect(describeOverload(overloaded!)).toBe('the machine is overloaded: cpu 97.4% of the last 60 s (over 90%)')
+    // Memory and io are read the same way, on their `some` figure.
+    expect(overloadOf({ ...at(0), memory: { 10: { some: 0, full: 0 }, 60: { some: 91, full: 90 }, 300: { some: 0, full: 0 } } })?.resources).toEqual([{ resource: 'memory', percent: 91, threshold: 90 }])
+    // A machine that is busy but still serving work is not overloaded: the alarm is for saturation, not for load. A merge
+    // tier at half the CPUs, and a disk at three quarters, are both well under it.
+    expect(overloadOf({ ...at(0), cpu: { 10: { some: 0, full: 0 }, 60: { some: 50, full: 0 }, 300: { some: 50, full: 0 } } })).toBeUndefined()
+    expect(overloadOf({ ...at(0), io: { 10: { some: 0, full: 0 }, 60: { some: 89.9, full: 0 }, 300: { some: 89.9, full: 0 } } })).toBeUndefined()
+  })
+
+  it('holds every new grant while it is on, and never interrupts a holder', async () => {
+    const machine = new Machine()
+    machine.hold(7, { slots: 4 })
+    let pressure: Pressure | undefined = at(99)
+    const grant = takeSlots(machine.host(1), paths, budget, demand({ want: 2, min: 2 }), () => pressure)
+    machine.onSleep = (count) => {
+      // The holder keeps its grant throughout, and the alarm lifts when the pressure falls.
+      if (count === 2) expect(machine.files.has('/s/held-7.json')).toBe(true)
+      if (count === 3) pressure = baseline
+    }
+    expect(await grant).toEqual({ slots: 2, memoryBytes: GIB, waitedMs: 3000 })
+    expect(machine.said[0]).toContain('waiting for 2 of 20 slots: the machine is overloaded: cpu 99.0% of the last 60 s (over 90%)')
+  })
+
+  it('grants as before where the kernel reports no pressure, so a machine without it is never held', () => {
+    expect(overloadOf(undefined)).toBeUndefined()
+    expect(decide({ holders: [], waiting: [request(1, 1)], oldWaiting: [] }, 1, budget)).toEqual({ slots: 4, memoryBytes: 4 * GIB })
+  })
+
+  it('catches a burst: twenty lanes arriving at once start only what the ceiling allows, and the rest wait in order', () => {
+    // The ceiling the brief asks for: near the hardware, so a burst cannot start twenty lanes and then trip the alarm.
+    const ceiling: SlotBudget = { slots: 16, memoryBytes: 20 * GIB, diskRuns: 3 }
+    const lanes = Array.from({ length: 20 }, (_unused, index) => request(index + 1, 1000 + index))
+    const state = { holders: [], waiting: lanes, oldWaiting: [], pressure: baseline }
+    // Each lane asks for four slots: four start, and the fifth waits behind them rather than overfilling the machine.
+    const started = lanes.filter(lane => 'slots' in decide(state, lane.pid, ceiling))
+    expect(started.map(lane => lane.pid)).toEqual([1, 2, 3, 4])
+    expect(decide(state, 5, ceiling)).toEqual({ waits: '0 of 16 slots are free and it needs 4' })
+    // The alarm is the second line of defence: a burst that gets past the ceiling still stops new grants once the machine
+    // has been overloaded for the window, and the holders it started keep their grants.
+    const overloaded = { ...state, pressure: at(99) }
+    expect(decide(overloaded, 1, ceiling)).toEqual({ waits: 'the machine is overloaded: cpu 99.0% of the last 60 s (over 90%), memory 99.0% of the last 60 s (over 90%), io 99.0% of the last 60 s (over 90%)' })
+  })
+
+  it('is printed by --queue above the slots, so a person sees why new grants wait', () => {
+    const lines = describeSlots({ holders: [], waiting: [], oldWaiting: [], pressure: at(99) }, budget, 0)
+    expect(lines[0]).toBe('alarm: the machine is overloaded: cpu 99.0% of the last 60 s (over 90%), memory 99.0% of the last 60 s (over 90%), io 99.0% of the last 60 s (over 90%); new grants wait, holders keep theirs')
+    expect(lines[1]).toBe('slots: 0 of 20 held, 2 disk-heavy places, 20.0 GiB of memory; 0 waiting')
+    expect(describeSlots({ holders: [], waiting: [], oldWaiting: [], pressure: baseline }, budget, 0)).toHaveLength(1)
   })
 })

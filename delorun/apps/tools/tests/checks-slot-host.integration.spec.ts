@@ -8,9 +8,9 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { PassCache } from '../src/checks/cache.ts'
 import { checksToRun, concurrencyWithin, diskHeavy, fitToGrant, MIN_RUN_SLOTS, runDemand, withoutIdleNeeds } from '../src/checks/demand.ts'
-import { ioPressure } from '../src/checks/machine.ts'
+import { ioPressure, overloadOf, parsePressure, pressureOf, readPressure } from '../src/checks/machine.ts'
 import type { Planned } from '../src/checks/plan.ts'
-import { diskRotational, diskRunsFor, machineBudget, nodeSlotHost, privateSlotPaths, processAlive, processIsThread, processStart, processStartedAt, slotPaths } from '../src/checks/slot-host.ts'
+import { budgetWarning, diskRotational, diskRunsFor, machineBudget, nodeSlotHost, privateSlotPaths, processAlive, processIsThread, processStart, processStartedAt, slotPaths } from '../src/checks/slot-host.ts'
 import { takeSlots, type SlotBudget } from '../src/checks/slots.ts'
 import type { Unit } from '../src/checks/units.ts'
 import { runInherited, withSlots, type WrapperHost } from '../src/with-slots.ts'
@@ -66,6 +66,17 @@ describe('the machine\'s budget', () => {
     expect(machineBudget(22, 18 * GIB, { DELORUN_CHECKS_MEMORY_GIB: '' }).memoryBytes).toBe(18 * GIB)
     expect(() => machineBudget(22, 18 * GIB, { DELORUN_CHECKS_MEMORY_GIB: 'lots' })).toThrow('DELORUN_CHECKS_MEMORY_GIB must be a positive number of GiB, got lots')
     expect(() => machineBudget(22, 18 * GIB, { DELORUN_CHECKS_MEMORY_GIB: '0' })).toThrow('DELORUN_CHECKS_MEMORY_GIB must be a positive number of GiB, got 0')
+  })
+
+  it('reports a slot count far above the hardware rather than overriding the owner\'s figure', () => {
+    // The live mess: 64 slots on a 12-CPU box, a 5.3x overfill that the queue reported as "48 of 9 held".
+    const overfilled = machineBudget(12, 20.5 * GIB, { DELORUN_CHECKS_SLOTS: '64' })
+    expect(overfilled.slots).toBe(64)
+    expect(budgetWarning(overfilled, 12)).toBe('DELORUN_CHECKS_SLOTS=64 is 5.3 times this machine\'s 12 CPUs: set it near the hardware, or the queue overfills the machine and reserves memory by a share of a budget it does not have')
+    // A generous ceiling near the hardware is taken as given, and so is one a little over it.
+    expect(budgetWarning(machineBudget(12, 20.5 * GIB, { DELORUN_CHECKS_SLOTS: '16' }), 12)).toBeUndefined()
+    expect(budgetWarning(machineBudget(12, 20.5 * GIB, { DELORUN_CHECKS_SLOTS: '24' }), 12)).toBeUndefined()
+    expect(budgetWarning(machineBudget(12, 20.5 * GIB, { DELORUN_CHECKS_SLOTS: '25' }), 12)).toContain('2.1 times')
   })
 
   it('lives in the user\'s own directory under the temporary directory, beside the previous queue and lock', () => {
@@ -138,6 +149,27 @@ describe('the machine\'s budget', () => {
     expect(ioPressure(() => 'some avg10=45.57 avg60=52.73 avg300=53.03 total=1\nfull avg10=1.00 avg60=0 avg300=0 total=1\n')).toBe(45.57)
     expect(ioPressure(() => 'nothing')).toBeUndefined()
     expect(ioPressure(() => { throw new Error('ENOENT') })).toBeUndefined()
+  })
+
+  it('reads every resource and window the alarm needs, and none where the kernel reports none', () => {
+    const files: Record<string, string> = {
+      '/proc/pressure/cpu': 'some avg10=0.66 avg60=1.29 avg300=3.55 total=2495877427\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n',
+      '/proc/pressure/memory': 'some avg10=0.00 avg60=0.00 avg300=0.04 total=41429155\nfull avg10=0.00 avg60=0.00 avg300=0.01 total=32964888\n',
+      '/proc/pressure/io': 'some avg10=0.00 avg60=0.09 avg300=0.27 total=174324321\nfull avg10=0.00 avg60=0.09 avg300=0.24 total=136458631\n',
+    }
+    const pressure = readPressure(name => files[name] ?? '')
+    expect(pressureOf(pressure, 'cpu', 300)).toBe(3.55)
+    expect(pressureOf(pressure, 'memory', 300)).toBe(0.04)
+    expect(pressureOf(pressure, 'io', 300)).toBe(0.27)
+    expect(pressure?.memory[300]).toEqual({ some: 0.04, full: 0.01 })
+    // The alarm reads the five-minute window, and this machine is nowhere near its thresholds.
+    expect(overloadOf(pressure)).toBeUndefined()
+    // A kernel without pressure stall information reports nothing, which is no evidence of overload.
+    expect(readPressure(() => { throw new Error('ENOENT') })).toBeUndefined()
+    expect(overloadOf(undefined)).toBeUndefined()
+    // A file that names no window is no reading, so a machine that reports one resource and not another is no pressure.
+    expect(parsePressure('nothing')).toBeUndefined()
+    expect(readPressure(name => name === '/proc/pressure/cpu' ? files[name] ?? '' : (() => { throw new Error('ENOENT') })())).toBeUndefined()
   })
 })
 

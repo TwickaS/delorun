@@ -61,11 +61,11 @@ import { parseArgs } from 'node:util'
 import { z } from 'zod'
 import { cacheUse, contentId, createPassCache, type PassCache, type SharedUse } from './checks/cache.ts'
 import { FUNDAMENTALS_INPUTS, gatesFor, rangeBase, rangeBaseOverridden, unresolvedRangeBase } from './checks/gates/index.ts'
-import { canScope, cgroupBudget, checkEnvironment, ioPressure, memoryReport, removeScratch, pnpmExecAnswer, runMemoryBytes, scopeCommand, scratchDir, scratchPlace, statfsOf, workerCounts } from './checks/machine.ts'
+import { canScope, cgroupBudget, checkEnvironment, ioPressure, memoryReport, readPressure, removeScratch, pnpmExecAnswer, runMemoryBytes, scopeCommand, scratchDir, scratchPlace, statfsOf, workerCounts } from './checks/machine.ts'
 import { catalog, criticalPath, declineClosureOffHost, declineUnansweredDocker, declineWebsiteWithoutPictures, dependentsLeftForMerge, leftForMerge, readsPnpmScriptEnvironment, select, selectPreCommit, staleDelorunBuilds, websitePicturesProblem, type Budgets, type Check, type GateTier, type Planned, type UpstreamPackage, unknownSelectors } from './checks/plan.ts'
 import { checksToRun, fitToGrant, runDemand, withoutIdleNeeds } from './checks/demand.ts'
 import { isLightPlan, gatePriority } from './checks/run-queue.ts'
-import { DISK_RUNS_ENV, diskRotational, machineBudget, MEMORY_ENV, nodeSlotHost, privateSlotPaths, SLOTS_ENV } from './checks/slot-host.ts'
+import { budgetWarning, DISK_RUNS_ENV, diskRotational, machineBudget, MEMORY_ENV, nodeSlotHost, privateSlotPaths, SLOTS_ENV } from './checks/slot-host.ts'
 import { describeSlots, GRANT_ENV, grantFromEnv, grantToEnv, holdMachine, readSlots, takeSlots, unholdMachine, type BudgetOrigin, type SlotGrant } from './checks/slots.ts'
 import { closureHostProblem } from './checks/closure.ts'
 import { gateFailure, logTail, probeDocker, runPlan, type Outcome, type Result } from './checks/run.ts'
@@ -404,7 +404,8 @@ function budgetOrigin(machine: { readonly cpus: number, readonly memoryBytes: nu
     return value === undefined || value === '' ? [] : [`${name}=${value}`]
   })
   const rotational = diskRotational(tmpdir())
-  return { machineBytes: machine.memoryBytes, headroomBytes: machine.memoryBytes - memory, cpus, overrides, ...rotational === undefined ? {} : { rotational } }
+  const warning = budgetWarning(machineBudget(cpus, memory, env, rotational), cpus)
+  return { machineBytes: machine.memoryBytes, headroomBytes: machine.memoryBytes - memory, cpus, overrides, ...rotational === undefined ? {} : { rotational }, ...warning === undefined ? {} : { warning } }
 }
 
 /**
@@ -592,7 +593,7 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
 
   if (values.queue) {
     const budgetNow = machineBudget(cpus, memory, env, diskRotational(tmpdir()))
-    for (const line of describeSlots(readSlots(nodeSlotHost(text => process.stderr.write(text)), privateSlotPaths(tmpdir(), process.getuid?.() ?? -1)), budgetNow, Date.now(), budgetOrigin(budget, memory, cpus, env))) console.log(line)
+    for (const line of describeSlots(readSlots(nodeSlotHost(text => process.stderr.write(text)), privateSlotPaths(tmpdir(), process.getuid?.() ?? -1), () => readPressure(name => readFileSync(name, 'utf8'))), budgetNow, Date.now(), budgetOrigin(budget, memory, cpus, env))) console.log(line)
     return 0
   }
   const workers = workerCounts(cpus, memory)
@@ -717,7 +718,7 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
   let grant: SlotGrant | undefined = inherited
   if (!light && !preflight && inherited === undefined && running.length > 0 && !isLightPlan(running)) {
     const demand = runDemand(running, slotBudget, gatePriority(env, pushInput !== undefined && pushesTrunk(pushInput)), `${relative(dirname(root), root)}: ${running.map(check => check.id).slice(0, 6).join(', ')}${running.length > 6 ? ', ...' : ''}`)
-    grant = await takeSlots(nodeSlotHost(line => process.stderr.write(line)), privateSlotPaths(tmpdir(), process.getuid?.() ?? -1), slotBudget, { ...demand, cwd: process.cwd() })
+    grant = await takeSlots(nodeSlotHost(line => process.stderr.write(line)), privateSlotPaths(tmpdir(), process.getuid?.() ?? -1), slotBudget, { ...demand, cwd: process.cwd() }, () => readPressure(name => readFileSync(name, 'utf8')))
   }
   if (!light && !preflight && !values['no-scope'] && env[IN_SCOPE] === undefined && canScope()) {
     const [command = '', ...args] = scopeCommand([process.execPath, ...process.execArgv, ...process.argv.slice(1)], memory)
