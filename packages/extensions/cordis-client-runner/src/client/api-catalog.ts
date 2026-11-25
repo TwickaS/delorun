@@ -1017,7 +1017,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SlotEntryDef',
-    declaration: 'export interface SlotEntryDef {\n    kind: SlotKind;\n    scope: SlotScope;\n    inline?: true;\n    owner?: object;\n    keyProps?: Record<string, object>;\n    hookContext?: unknown;\n    inject?: object;\n}',
+    declaration: 'export interface SlotEntryDef {\n    kind: SlotKind;\n    scope: SlotScope;\n    inline?: true;\n    reserved?: SlotReservation;\n    owner?: object;\n    keyProps?: Record<string, object>;\n    hookContext?: unknown;\n    inject?: object;\n}',
   },
   {
     name: 'SlotFactoryMap',
@@ -1044,6 +1044,10 @@ export const TYPE_API: readonly TypeApiEntry[] = [
     declaration: 'export interface SlotMap {\n}',
   },
   {
+    name: 'SlotReservation',
+    declaration: 'export interface SlotReservation {\n    readonly minPriority: number;\n    readonly reason: string;\n}',
+  },
+  {
     name: 'SlotScope',
     declaration: 'export type SlotScope = \'root\' | \'session-maybe\' | \'session\';',
   },
@@ -1053,7 +1057,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'SlotSpec',
-    declaration: 'export type SlotSpec<E extends SlotEntryDef> = {\n    kind: E[\'kind\'];\n    scope: E[\'scope\'];\n    inline?: true;\n} & (\'inject\' extends keyof E ? E extends {\n    inject: infer Injected extends object;\n} ? {\n    inject: Injected;\n} : {\n    inject?: object;\n} : {\n    inject?: never;\n});',
+    declaration: 'export type SlotSpec<E extends SlotEntryDef> = {\n    kind: E[\'kind\'];\n    scope: E[\'scope\'];\n    inline?: true;\n    reserved?: SlotReservation;\n} & (\'inject\' extends keyof E ? E extends {\n    inject: infer Injected extends object;\n} ? {\n    inject: Injected;\n} : {\n    inject?: object;\n} : {\n    inject?: never;\n});',
   },
   {
     name: 'SnapshotSelectorHook',
