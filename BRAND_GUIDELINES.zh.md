@@ -8,7 +8,7 @@
 
 - 名称是 “Delorun”：一个词，大写 D，其余小写。
 - 命令是 `delorun`，使用代码字体。
-- 绝不写作 “Delo”、“Delo Run”、“Delo-Run” 或 “DeloRun”。
+- 绝不写作下列形式：Never write "Delo", "Delo Run", "Delo-Run" or "DeloRun".
 - “Delorun” 同时指产品、项目以及 delorun.com 上的托管服务。
 
 ## 标志与颜色
