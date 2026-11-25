@@ -16,7 +16,7 @@ import { RUN_ROUTES, type RunState } from '../src/client/run-settings-api.ts'
 import { TRUST_LINES } from '../src/client/RunReach.tsx'
 import { WARNING_LINES } from '../src/client/RunDangerous.tsx'
 import { en, zh } from '../src/client/setup-commands-locales.ts'
-import { isUsablePort, SETUP_COMMANDS, SetupCommandsSection, type SetupCommandsSectionProps } from '../src/client/SetupCommandsSection.tsx'
+import { isUsablePort, SETUP_COMMANDS, setupCommand, SetupCommandsSection, type SetupCommandsSectionProps } from '../src/client/SetupCommandsSection.tsx'
 import { fakeHost, type Answer, type RouteKey } from './fake-host.ts'
 
 afterEach(() => {
@@ -25,7 +25,7 @@ afterEach(() => {
 })
 
 const STATE: RunState = {
-  recorded: true, prompts: 'safer', dangerous: 'off', background: true, port: { chosen: 3080, running: 3080 }, reach: { on: false, address: '' },
+  profile: 'default', recorded: true, prompts: 'safer', dangerous: 'off', background: true, port: { chosen: 3080, running: 3080 }, reach: { on: false, address: '' },
 }
 
 const ok = (body: unknown): Answer => ({ status: 200, body })
@@ -93,6 +93,27 @@ describe('the rows', () => {
     const refused = within(row('prompts')).getByRole('button', { name: en['copy.label'].replace('{command}', SETUP_COMMANDS.prompts) })
     fireEvent.click(refused)
     await waitFor(() => { expect(refused.textContent).toBe(en['copy.failed']) })
+  })
+
+  it('leaves the default profile out of the command, as the CLI does', async () => {
+    renderSection(reads())
+    const button = within(row('prompts')).getByRole('button', { name: en['copy.label'].replace('{command}', SETUP_COMMANDS.prompts) })
+    expect(button.getAttribute('aria-label')).not.toContain('--profile')
+    expect(setupCommand('prompts', 'default')).toBe('delorun setup prompts')
+  })
+
+  it('names a profile other than the default in the command it copies and in its tooltip', async () => {
+    const writeText = vi.fn(() => Promise.resolve())
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    renderSection(reads({ ...STATE, profile: 'work' }))
+    const command = 'delorun setup prompts --profile work'
+    // The command names the profile once the home's state has arrived.
+    const button = await within(row('prompts')).findByRole('button', { name: en['copy.label'].replace('{command}', command) })
+    fireEvent.click(button)
+    await waitFor(() => { expect(writeText).toHaveBeenCalledWith(command) })
+    fireEvent.focus(button)
+    expect((await screen.findByRole('tooltip')).textContent).toBe(en['copy.tooltip'].replace('{command}', command))
+    expect(setupCommand('reach', 'work')).toBe('delorun setup reach --profile work')
   })
 
   it('names the command and what pressing does in the tooltip, which a keyboard reaches', async () => {

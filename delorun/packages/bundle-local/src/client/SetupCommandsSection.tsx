@@ -31,6 +31,19 @@ export const SETUP_COMMANDS = {
 /** The rows in screen order. */
 const ROWS = ['prompts', 'background', 'profile', 'reach'] as const
 
+/** The profile every command acts on unless it names another, which the CLI leaves out of its own commands too. */
+const DEFAULT_PROFILE = 'default'
+
+/**
+ * The command a row copies, naming the profile when it is not the default one.
+ * @param row - the row.
+ * @param profile - the profile this studio runs.
+ * @returns the command, as the CLI spells it.
+ */
+export function setupCommand(row: keyof typeof SETUP_COMMANDS, profile: string): string {
+  return profile === DEFAULT_PROFILE ? SETUP_COMMANDS[row] : `${SETUP_COMMANDS[row]} --profile ${profile}`
+}
+
 /** How long the copy button shows its answer before it returns to its resting state, in milliseconds. */
 const COPY_ANSWER_MS = 2000
 
@@ -134,7 +147,7 @@ export function SetupCommandsSection({ t, fetch, atComputer, openPin }: SetupCom
           {loaded === undefined ? null : <Controls row={row} t={t} fetch={fetch} state={loaded} computer={computer} openPin={openPin}
             onChanged={() => { void refresh() }} onRestart={() => { setRestart(true) }} />}
         </div>
-        <CommandCopy t={t} command={SETUP_COMMANDS[row]} />
+        <CommandCopy t={t} command={setupCommand(row, loaded?.profile ?? DEFAULT_PROFILE)} />
       </div>)}
     </SettingsCard>
     {restart ? <RestartNote t={t} fetch={fetch} /> : null}

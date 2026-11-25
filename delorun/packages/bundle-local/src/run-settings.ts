@@ -218,6 +218,7 @@ export class RunSettings {
     const record = readAnswersRecord(where.profileDir)
     const prompts = promptsOf(record)
     return {
+      profile: where.profile,
       recorded: record !== undefined,
       prompts,
       dangerous: await this.dangerousKind(where, prompts),

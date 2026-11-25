@@ -46,6 +46,8 @@ interface Options {
   readonly duringApply?: () => void
   /** Runs when every device is signed out. */
   readonly onSignOut?: () => void
+  /** The profile the service runs, which the state names; `default` unless a spec says otherwise. */
+  readonly profile?: string
 }
 
 /** A temporary home and profile, and a service over them with its dependencies faked. */
@@ -72,7 +74,7 @@ function world(options: Options = {}) {
   }
   let tail: Promise<unknown> = Promise.resolve()
   const dependencies: RunDependencies = {
-    where: () => ({ profile: 'default', profileDir, homeDir: home }),
+    where: () => ({ profile: options.profile ?? 'default', profileDir, homeDir: home }),
     runningPort: () => options.runningPort,
     reach: () => reach,
     reloaded: options.reload ?? (() => Promise.resolve(options.hotReload !== false && options.reloadFails !== true)),
@@ -119,8 +121,13 @@ describe('the state', () => {
   it('reports the recorded answers, the chosen and running ports and whether phone access is on', async () => {
     const { service } = world({ runningPort: 3081, patch: '- id: webserver\n  config:\n    host: 127.0.0.1\n    port: 3081\n' })
     expect(await service.state()).toEqual({
-      recorded: true, prompts: 'safer', dangerous: 'off', background: true, port: { chosen: 3081, running: 3081 }, reach: { on: false, address: '' },
+      profile: 'default', recorded: true, prompts: 'safer', dangerous: 'off', background: true, port: { chosen: 3081, running: 3081 }, reach: { on: false, address: '' },
     })
+  })
+
+  it('names the profile it runs, so the rows can put it in their commands', async () => {
+    const { service } = world({ profile: 'work' })
+    expect((await service.state()).profile).toBe('work')
   })
 
   it('reads setup\'s defaults for a profile without a record, and says it has none', async () => {
