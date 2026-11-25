@@ -49,6 +49,9 @@
       "path": "../../typert/protocol"
     },
     {
+      "path": "../../api/remote-access/tsconfig.host.json"
+    },
+    {
       "path": "../../sandbox/sandbox-policy"
     }
   ]

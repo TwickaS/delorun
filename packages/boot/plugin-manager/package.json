@@ -76,6 +76,7 @@
   ],
   "license": "MIT",
   "dependencies": {
+    "@deepseek-ai/dsh-api-remote-access": "workspace:*",
     "@deepseek-ai/dsh-app-boot": "workspace:*",
     "@deepseek-ai/dsh-settings": "workspace:*",
     "@deepseek-ai/dsh-atomic-write": "workspace:*",

@@ -11,6 +11,7 @@ import type { EntryOptions } from '@deepseek-ai/cordis-plugin-loader'
 import type { PatchOptions } from '@deepseek-ai/cordis-plugin-include'
 import z from '@deepseek-ai/schemastery'
 import semver from 'semver'
+import { peerAdmission } from '@deepseek-ai/dsh-api-remote-access'
 import { TypertRemoteService, Remote, RemoteError, remoteErrorOf } from '@deepseek-ai/dsh-typert-protocol'
 import { detailImageResponse, NPM_FILE_SOURCES } from '@deepseek-ai/dsh-plugin-detail'
 import type { NpmFileSource } from '@deepseek-ai/dsh-plugin-detail/types'
@@ -436,7 +437,11 @@ export class PluginManager extends TypertRemoteService {
     })
     ctx.inject(['connection'], (scope) => {
       scope.effect(() => scope.connection.fetch.register({
-        path: DETAIL_FILE_PATH, methods: ['GET'], requestBody: 'buffered', fetch: request => this.serveDetailFile(request),
+        path: DETAIL_FILE_PATH, methods: ['GET'], requestBody: 'buffered',
+        // The route serves an image beside a bundle's detail document, which `pluginManager/readBundleDetail` reads, and
+        // it names no Session: the policy decides it on the global resource.
+        admitPeer: peerAdmission({ action: 'pluginManager/readBundleDetail', resource: 'global' }, () => this.ctx.get('remoteAccess')),
+        fetch: request => this.serveDetailFile(request),
       }), `plugin-manager: ${DETAIL_FILE_PATH}`)
     })
   }
