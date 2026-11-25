@@ -61,16 +61,13 @@ describe('published document preview licenses', () => {
       expect([...client.matchAll(/require\.async\((["'`])(\.\/client[^"'`/]*\.js)\1\)/gu)].map(match => match[2]))
         .toEqual(['./client.frontmatter-fields.js', './client.pdf.js', './client.excel.js'])
       expect(client).not.toMatch(/\brequire\((["'`])\.\/client[^"'`/]*\.js\1\)/u)
-      // The PDF and spreadsheet chunks share one helper, so the bundler lifts it into its own chunk and both require
-      // it synchronously. It carries no third-party code, which is what this spec is about.
       expect([...pdf.matchAll(/require\((["'`])(\.\/client[^"'`/]*\.js)\1\)/gu)].map(match => match[2]))
-        .toEqual(['./client.worker-script-url.js'])
+        .toEqual([])
       expect(client).not.toContain('//! Bundled PDF.js license notices')
       expect(client).not.toContain('/pdfjs-dist/')
       expect(pdf).toContain('//! Bundled PDF.js license notices')
       const excel = run('tar', ['-xOf', resolve(packageRoot, packed.filename), 'package/lib/client.excel.js'], packageRoot, task.timeout)
-      expect([...excel.matchAll(/require\((["'`])(\.\/client[^"'`/]*\.js)\1\)/gu)].map(match => match[2]))
-        .toEqual(['./client.worker-script-url.js'])
+      expect(excel).not.toMatch(/\brequire\((["'`])\.\/client[^"'`/]*\.js\1\)/u)
       expect(client).not.toContain('FortuneSheet')
       expect(excel).toContain('//! Bundled spreadsheet license notices')
       expect(excel).toContain('Copyright (c) 2022 Suzhou Ruilisi Technology Co., Ltd')
@@ -101,8 +98,6 @@ describe('published document preview licenses', () => {
         const loaded = registration.factory((specifier) => {
           if (specifier === '@deepseek-ai/dsh-client-ui-primitives') return {}
           if (specifier === 'react' || specifier === 'react/jsx-runtime' || specifier === 'react-dom') return require(specifier)
-          // The bundler lifts the shared Worker-URL helper into its own chunk, which this one requires at load.
-          if (specifier === './client.worker-script-url.js') return { workerScriptUrl: (url: string) => url }
           throw new Error(`Unexpected browser dependency: ${specifier}`)
         })
         expect(typeof loaded.ExcelBody).toBe('function')

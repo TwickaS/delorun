@@ -1,6 +1,5 @@
 /** Browser lifetime for the isolated spreadsheet parser. */
 import workerSource from './worker.ts?raw'
-import { workerScriptUrl } from '../worker-script-url.ts'
 import type { ExcelFormat } from './format.ts'
 import { EXCEL_UNSUPPORTED_FEATURES, type ExcelLimits, type ExcelPreview } from './model.ts'
 
@@ -10,10 +9,13 @@ import { EXCEL_UNSUPPORTED_FEATURES, type ExcelLimits, type ExcelPreview } from 
  * @param format - Format selected by the registered filename suffix.
  * @param limits - File, matrix, and elapsed-time limits.
  * @param signal - Document body's lifetime.
+ * @param workerScriptUrl - mints the Worker URL through the page's Trusted Types policy; the main bundle supplies it,
+ * so this chunk carries no sibling-chunk import.
  * @returns Parsed sheets; rejects with a locale key on parser failures.
  */
 export function parseExcel(
   bytes: Uint8Array<ArrayBuffer>, format: ExcelFormat, limits: ExcelLimits, signal: AbortSignal,
+  workerScriptUrl: (url: string) => string,
 ): Promise<ExcelPreview> {
   signal.throwIfAborted()
   if (bytes.byteLength > limits.maxBytes) return Promise.reject(new Error('tooLarge'))

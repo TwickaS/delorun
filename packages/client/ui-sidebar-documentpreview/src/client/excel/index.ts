@@ -3,6 +3,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type {} from '../index.ts'
 import type { Config } from '../../config.ts'
 import { LazyExcelBody } from './LazyExcelBody.tsx'
+import { workerScriptUrl } from '../worker-script-url.ts'
 import { en, ja, es, fr, de, ru, pt, zh } from './locales.ts'
 
 /**
@@ -19,6 +20,6 @@ export function apply(ctx: Context, limits: Config['excel']): void {
     title: () => t('title'), loading: 'bytes-complete', wrap: false,
   }))
   ctx.effect(() => ctx.slots.inject('sidebar.right.tab.document', () => ctx.slots.register({
-    name: 'sidebar.right.tab.document', key: id, locale: 'sidebarExcel', inject: () => ({ limits }),
+    name: 'sidebar.right.tab.document', key: id, locale: 'sidebarExcel', inject: () => ({ limits, workerScriptUrl }),
   }, LazyExcelBody)))
 }

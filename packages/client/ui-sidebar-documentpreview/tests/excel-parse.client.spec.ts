@@ -2,8 +2,11 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { parseExcel } from '../src/client/excel/parse.ts'
 import { Config } from '../src/config.ts'
+import { workerScriptUrl as mintsThroughPolicy } from '../src/client/worker-script-url.ts'
 
 const limits = Config({}).excel
+/** Stand-in for the main bundle's Worker-URL helper, which the lazy chunk receives as a prop. */
+const workerScriptUrl = (url: string): string => url
 const preview = { sheets: [{ name: 'Sheet', celldata: [] }], missingResults: 0, unsupportedFeatures: ['charts'] }
 let instance: ParserWorker
 const revokeUrl = vi.fn()
@@ -26,7 +29,7 @@ afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals(
 
 it('transfers a private copy and releases the Worker and URL after parsing', async () => {
   const input = new Uint8Array([1, 2, 3])
-  const result = parseExcel(input, 'xlsx', limits, new AbortController().signal)
+  const result = parseExcel(input, 'xlsx', limits, new AbortController().signal, workerScriptUrl)
   const [message, transfer] = instance.postMessage.mock.calls[0]!
   expect(message.bytes).toEqual(input)
   expect(message.bytes).not.toBe(input)
@@ -42,7 +45,7 @@ it('mints the parser Worker URL through the page\'s delorun-blob-worker policy',
   const createScriptURL = vi.fn((url: string) => `trusted:${url}`)
     ;(globalThis as { __DSH_TRUSTED_TYPES__?: unknown }).__DSH_TRUSTED_TYPES__ = { blobWorker: { createScriptURL } }
   try {
-    const result = parseExcel(new Uint8Array([1]), 'xlsx', limits, new AbortController().signal)
+    const result = parseExcel(new Uint8Array([1]), 'xlsx', limits, new AbortController().signal, mintsThroughPolicy)
     expect(createScriptURL).toHaveBeenCalledWith('blob:excel-test')
     instance.onmessage!({ data: { ok: true, value: preview } })
     await expect(result).resolves.toEqual(preview)
@@ -55,7 +58,7 @@ it('mints the parser Worker URL through the page\'s delorun-blob-worker policy',
 it('reports an invalid workbook when the policy refuses the blob URL, and releases the URL', async () => {
   ;(globalThis as { __DSH_TRUSTED_TYPES__?: unknown }).__DSH_TRUSTED_TYPES__ = { blobWorker: { createScriptURL: () => null } }
   try {
-    await expect(parseExcel(new Uint8Array([1]), 'xlsx', limits, new AbortController().signal))
+    await expect(parseExcel(new Uint8Array([1]), 'xlsx', limits, new AbortController().signal, mintsThroughPolicy))
       .rejects.toThrow('invalid')
     expect(revokeUrl).toHaveBeenCalledWith('blob:excel-test')
   } finally {
@@ -66,14 +69,14 @@ it('reports an invalid workbook when the policy refuses the blob URL, and releas
 it('does not allocate a Worker for aborted or oversized input', async () => {
   const worker = vi.fn()
   vi.stubGlobal('Worker', worker)
-  expect(() => parseExcel(new Uint8Array(), 'xlsx', limits, AbortSignal.abort())).toThrow()
-  await expect(parseExcel(new Uint8Array(2), 'xlsx', { ...limits, maxBytes: 1 }, new AbortController().signal)).rejects.toThrow('tooLarge')
+  expect(() => parseExcel(new Uint8Array(), 'xlsx', limits, AbortSignal.abort(), workerScriptUrl)).toThrow()
+  await expect(parseExcel(new Uint8Array(2), 'xlsx', { ...limits, maxBytes: 1 }, new AbortController().signal, workerScriptUrl)).rejects.toThrow('tooLarge')
   expect(worker).not.toHaveBeenCalled()
 })
 
 it('cancels an active parser without retaining callbacks or timers', async () => {
   const controller = new AbortController()
-  const result = parseExcel(new Uint8Array(), 'xlsx', limits, controller.signal)
+  const result = parseExcel(new Uint8Array(), 'xlsx', limits, controller.signal, workerScriptUrl)
   const rejection = expect(result).rejects.toThrow('closed')
   controller.abort(new Error('closed'))
   await rejection
@@ -83,7 +86,7 @@ it('cancels an active parser without retaining callbacks or timers', async () =>
 })
 
 it('terminates a parser that exceeds its time budget', async () => {
-  const result = parseExcel(new Uint8Array(), 'xlsx', limits, new AbortController().signal)
+  const result = parseExcel(new Uint8Array(), 'xlsx', limits, new AbortController().signal, workerScriptUrl)
   const rejection = expect(result).rejects.toThrow('timeout')
   await vi.advanceTimersByTimeAsync(limits.timeoutMs)
   await rejection
@@ -96,14 +99,14 @@ it.each([null, 7, {}, { ok: true, value: null }, { ok: true, value: { sheets: []
   { ok: true, value: { ...preview, unsupportedFeatures: ['unknown'] } },
   { ok: true, value: { ...preview, unsupportedFeatures: [7] } },
   { ok: false, code: 'surprise' }, { ok: false, code: 'invalid' }])('rejects invalid Worker message %j', async (data) => {
-  const result = parseExcel(new Uint8Array(), 'xlsx', limits, new AbortController().signal)
+  const result = parseExcel(new Uint8Array(), 'xlsx', limits, new AbortController().signal, workerScriptUrl)
   instance.onmessage!({ data })
   await expect(result).rejects.toThrow('invalid')
   expect(instance.terminate).toHaveBeenCalledOnce()
 })
 
 it.each(['onerror', 'onmessageerror'] as const)('releases a failed parser on %s', async (event) => {
-  const result = parseExcel(new Uint8Array(), 'xlsx', limits, new AbortController().signal)
+  const result = parseExcel(new Uint8Array(), 'xlsx', limits, new AbortController().signal, workerScriptUrl)
   instance[event]!()
   await expect(result).rejects.toThrow('invalid')
   expect(instance.terminate).toHaveBeenCalledOnce()
@@ -111,7 +114,7 @@ it.each(['onerror', 'onmessageerror'] as const)('releases a failed parser on %s'
 
 it('revokes the URL when Worker construction fails', async () => {
   vi.stubGlobal('Worker', vi.fn(function () { throw new Error('unavailable') }))
-  await expect(parseExcel(new Uint8Array(), 'xlsx', limits, new AbortController().signal)).rejects.toThrow('invalid')
+  await expect(parseExcel(new Uint8Array(), 'xlsx', limits, new AbortController().signal, workerScriptUrl)).rejects.toThrow('invalid')
   expect(revokeUrl).toHaveBeenCalledOnce()
 })
 
@@ -121,7 +124,7 @@ it('terminates the Worker when posting the copied buffer fails', async () => {
     instance.postMessage.mockImplementation(() => { throw new Error('transfer failed') })
     return instance
   }))
-  await expect(parseExcel(new Uint8Array(), 'xlsx', limits, new AbortController().signal)).rejects.toThrow('invalid')
+  await expect(parseExcel(new Uint8Array(), 'xlsx', limits, new AbortController().signal, workerScriptUrl)).rejects.toThrow('invalid')
   expect(instance.terminate).toHaveBeenCalledOnce()
   expect(vi.getTimerCount()).toBe(0)
 })

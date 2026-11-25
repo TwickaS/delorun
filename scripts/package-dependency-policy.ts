@@ -52,6 +52,9 @@ const DUPLICATE_SAFE_PACKAGES: readonly string[] = [
  */
 const SAFE_HOST_DEPENDENCY_EXPORTS = {
   '@deepseek-ai/dsh-atomic-write': ['withFileLock', 'writeFileAtomic'],
+  // A pure factory: it builds a route's admitPeer closure over the caller's own accessor and holds no module state, so
+  // a second copy decides exactly as the installed one does. Reviewed by the owner (A704).
+  '@deepseek-ai/dsh-api-remote-access': ['peerAdmission'],
   '@deepseek-ai/dsh-computer-use/brand': ['ComputerUseProviderName'],
   '@deepseek-ai/dsh-credentials': ['credentialKey'],
   '@deepseek-ai/dsh-deque': ['Deque'],

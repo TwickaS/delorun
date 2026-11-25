@@ -1,6 +1,5 @@
 /** One real module Worker and PDF.js loading task per mounted binary document. */
 import { getDocument, PDFWorker } from 'pdfjs-dist'
-import { workerScriptUrl } from '../worker-script-url.ts'
 import { createPdfBinaryDataFactory, workerSource } from './assets.ts'
 import type { PdfSession } from './document.ts'
 import { PdfWorkerFailure } from './errors.ts'
@@ -15,9 +14,14 @@ const WORKER_READY = 'dsh-pdf-worker-ready'
  * @param data - complete PDF bytes retained by the preview; the worker receives a copy.
  * @param signal - document/body lifetime.
  * @param reportFailure - reports a fatal Worker failure, including failures after document loading.
+ * @param workerScriptUrl - mints the Worker URL through the page's Trusted Types policy; the main bundle supplies it,
+ * so this chunk carries no sibling-chunk import.
  * @returns the pending document and idempotent asynchronous cleanup.
  */
-export function openPdf(data: Uint8Array<ArrayBuffer>, signal: AbortSignal, reportFailure: (error: PdfWorkerFailure) => void): PdfSession {
+export function openPdf(
+  data: Uint8Array<ArrayBuffer>, signal: AbortSignal, reportFailure: (error: PdfWorkerFailure) => void,
+  workerScriptUrl: (url: string) => string,
+): PdfSession {
   const lifetime = new AbortController()
   const stopped = AbortSignal.any([signal, lifetime.signal])
   const failed = Promise.withResolvers<never>()
