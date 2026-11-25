@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 /**
- * The "How Delorun runs" section: each row shows the terminal command and a control, the controls send the routes'
- * requests, dangerous mode takes the warning, a No-first question and the typed phrase, a studio away from the computer
- * is offered only what the home answers it, and the warning and the trust statement are the words the command shows.
+ * The "How Delorun runs" section: each row shows a control and a copy button that copies the terminal command making the
+ * same change and names it in its tooltip, the controls send the routes' requests, dangerous mode takes the warning, a
+ * No-first question and the typed phrase, a studio away from the computer is offered only what the home answers it, and
+ * the warning and the trust statement are the words the command shows.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
@@ -58,15 +59,48 @@ const row = (name: keyof typeof SETUP_COMMANDS): HTMLElement => {
 const posts = (host: ReturnType<typeof fakeHost>, path: string) => host.received.filter(request => request.key === `POST ${path}`).map(request => request.body)
 
 describe('the rows', () => {
-  it('show each of the four choices with the exact command that makes the same change', async () => {
+  it('show each of the four choices with a copy button that names the exact command that makes the same change', async () => {
     renderSection(reads())
     expect(Object.values(SETUP_COMMANDS)).toEqual(['delorun setup prompts', 'delorun setup background', 'delorun setup profile', 'delorun setup reach'])
     expect(screen.getByText(en.intro)).toBeTruthy()
     for (const name of ['prompts', 'background', 'profile', 'reach'] as const) {
-      expect(within(row(name)).getByLabelText(en.command).textContent).toBe(SETUP_COMMANDS[name])
+      const button = within(row(name)).getByRole('button', { name: en['copy.label'].replace('{command}', SETUP_COMMANDS[name]) })
+      expect(button.textContent).toBe(en['copy.action'])
       expect(within(row(name)).getByText(en[`${name}.title`]).textContent).toBe(en[`${name}.title`])
     }
     await screen.findByText(en['port.next'].replace('{port}', '3080'))
+  })
+
+  it('shows no bare command line: the command lives in the copy button alone', async () => {
+    renderSection(reads())
+    await screen.findByText(en['port.next'].replace('{port}', '3080'))
+    for (const command of Object.values(SETUP_COMMANDS)) expect(screen.queryByText(command)).toBeNull()
+  })
+
+  it('copies the row\'s command and says so, and says when the clipboard refuses', async () => {
+    const writeText = vi.fn(() => Promise.resolve())
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+    renderSection(reads())
+    const button = within(row('background')).getByRole('button', { name: en['copy.label'].replace('{command}', SETUP_COMMANDS.background) })
+    fireEvent.click(button)
+    await waitFor(() => { expect(writeText).toHaveBeenCalledWith(SETUP_COMMANDS.background) })
+    // The button's own label carries the answer, and the live region repeats it for a screen reader.
+    await waitFor(() => { expect(button.textContent).toBe(en['copy.done']) })
+    expect(within(row('background')).getByRole('status').textContent).toBe(en['copy.done'])
+    cleanup()
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText: () => Promise.reject(new Error('no')) }, configurable: true })
+    renderSection(reads())
+    const refused = within(row('prompts')).getByRole('button', { name: en['copy.label'].replace('{command}', SETUP_COMMANDS.prompts) })
+    fireEvent.click(refused)
+    await waitFor(() => { expect(refused.textContent).toBe(en['copy.failed']) })
+  })
+
+  it('names the command and what pressing does in the tooltip, which a keyboard reaches', async () => {
+    renderSection(reads())
+    const button = within(row('profile')).getByRole('button', { name: en['copy.label'].replace('{command}', SETUP_COMMANDS.profile) })
+    fireEvent.focus(button)
+    const tooltip = await screen.findByRole('tooltip')
+    expect(tooltip.textContent).toBe(en['copy.tooltip'].replace('{command}', SETUP_COMMANDS.profile))
   })
 
   it('show the answers the home holds: the prompts choice, the background switch, the port and phone access', async () => {

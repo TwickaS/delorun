@@ -416,6 +416,12 @@ describe('the copy', () => {
     expect(describeAgent('codex')).toContain('own Codex sign-in and account')
     expect(describeAgent('codex')).toContain('Every run waits until the person approves it at their computer, unless they allowed Codex for this workspace')
     expect(askText({ provider: 'codex', workspace: '/w', cwd: '/w', label: undefined })).not.toContain('Task:')
+    // A173's facts stay, and the ask adds that the agent reads the workspace's own project settings.
+    expect(askText({ provider: 'codex', workspace: '/w', cwd: '/w', label: undefined })).toContain('runs as its own program, outside Delorun\'s sandbox and approval prompts')
+    expect(askText({ provider: 'claude-code', workspace: '/w', cwd: '/w', label: undefined }))
+      .toContain('It reads this workspace\'s own project settings, including any MCP servers the project declares, under its own rules rather than Delorun\'s MCP consent.')
+    expect(askTextZh({ provider: 'claude-code', workspace: '/w', cwd: '/w', label: undefined }))
+      .toContain('它会读取此工作区自己的项目设置，包括项目声明的任何 MCP 服务器，并按其自身的规则处理，而不是 Delorun 的 MCP 同意。')
     expect(askTextZh({ provider: 'codex', workspace: '/w', cwd: '/w', label: 'x' })).toContain('要在 /w 中启动 Codex 吗？任务')
     expect(askTextZh({ provider: 'codex', workspace: '/w', cwd: '/w', label: undefined })).not.toContain('任务')
     expect(notApprovedRefusal('codex', 'cancelled', '/w')).toContain('withdrawn')
