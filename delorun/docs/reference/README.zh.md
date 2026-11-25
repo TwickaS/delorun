@@ -8,7 +8,7 @@ description: "Delorun 开发者参考资料索引：面向所有人的、用平�
 
 > 英文页面是当前版本；本页可能落后于它。
 
-Most readers want the [glossary](glossary.zh.md), which explains every word the guide uses. The other pages are notes for people who maintain Delorun's fork of DeepSeek Harness: how it differs from upstream and how that is checked. To learn how to use Delorun, read the [user guide](../guide/README.zh.md). To build a plugin, start with [Your first plugin](../guide/plugin-guides/first-plugin.zh.md) and [Write a plugin for Delorun](../guide/plugin-guides/plugins.zh.md).
+大多数读者想要的是[术语表](glossary.zh.md)，它解释指南所用的每个词。其余页面是给维护 Delorun 的 DeepSeek Harness 分支的人看的说明：它与上游有何不同，以及那一点如何被检查。要学习如何使用 Delorun，请阅读[用户指南](../guide/README.zh.md)。要构建插件，请从[你的第一个插件](../guide/plugin-guides/first-plugin.zh.md)和[为 Delorun 写一个插件](../guide/plugin-guides/plugins.zh.md)开始。
 
 ## 面向所有人
 
