@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { hostNotes, timed } from '../../src/compat-bench/stages.ts'
+import { hostNotes, timed, waitForLink } from '../../src/compat-bench/stages.ts'
 
 describe('timing a stage', () => {
   it('measures the work rather than the moment before it started', async () => {
@@ -44,5 +44,20 @@ describe('the host report a card keeps', () => {
 
   it('says nothing when the host printed nothing', () => {
     expect(hostNotes('delorun doctor', '')).toEqual([])
+  })
+})
+describe('asking the host for its sign-in link', () => {
+  it('asks again when the host reports no Host for a moment after a start', async () => {
+    const answers = [{ ok: false }, { ok: true, link: 'http://127.0.0.1:18590/?token=one' }]
+    let asked = 0
+    const link = await waitForLink(async () => answers[asked++] ?? { ok: false }, { attempts: 3, waitMs: 1 })
+    expect(link).toBe('http://127.0.0.1:18590/?token=one')
+    expect(asked).toBe(2)
+  })
+
+  it('fails with the same words when every ask prints none', async () => {
+    let asked = 0
+    await expect(waitForLink(async () => { asked++; return { ok: false } }, { attempts: 3, waitMs: 1 })).rejects.toThrow('the host printed no sign-in link')
+    expect(asked).toBe(3)
   })
 })

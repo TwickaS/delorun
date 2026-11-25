@@ -42,14 +42,32 @@ async function openStudio(page, origin) {
   await ensureWorkspace(page, origin)
 }
 
+/** The visible dialogs, topmost first: a later one paints above an earlier one, its mask included. */
+async function visibleDialogs(page) {
+  const dialogs = page.getByRole('dialog')
+  const shown = []
+  for (let index = (await dialogs.count()) - 1; index >= 0; index--) {
+    const dialog = dialogs.nth(index)
+    if (await dialog.isVisible().catch(() => false)) shown.push(dialog)
+  }
+  return shown
+}
+
+/**
+ * Close the first-use dialogs, topmost first. A plugin may open a dialog of its own before the studio's own first-run
+ * guide does: the guide then paints above it, so a click aimed at the first dialog in the page is intercepted by the
+ * guide's mask and never lands, and the plugin's dialog is never closed.
+ */
 async function dismissDialogs(page) {
-  for (let attempt = 0; attempt < 4; attempt++) {
-    const dialog = page.getByRole('dialog').first()
-    if (!await dialog.isVisible().catch(() => false)) return
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const [dialog] = await visibleDialogs(page)
+    if (dialog === undefined) return
     const name = (await dialog.getAttribute('aria-label').catch(() => null)) ?? ''
-    const button = dialog.getByRole('button', { name: /^(Continue|OK|Got it|Close|Finish later|Dismiss|Skip)$/i }).first()
-    if (await button.isVisible().catch(() => false)) { await button.click(); await page.waitForTimeout(400) } else if (/settings/i.test(name)) return
-    else { await page.keyboard.press('Escape'); await page.waitForTimeout(300) }
+    if (/settings/i.test(name)) return
+    const button = dialog.getByRole('button', { name: /^(Continue|OK|Got it|Close|Finish later|Dismiss|Skip|Done|Start)$/i }).first()
+    const clicked = await button.isVisible().catch(() => false) && await button.click({ timeout: 10_000 }).then(() => true, () => false)
+    await page.waitForTimeout(400)
+    if (!clicked) { await page.keyboard.press('Escape'); await page.waitForTimeout(300) }
   }
 }
 

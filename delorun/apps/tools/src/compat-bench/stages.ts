@@ -188,16 +188,37 @@ export async function start(state: RunState): Promise<StageResult> {
   })
 }
 
+/** How often, and how long after the first ask, the bench asks the host for a sign-in link. */
+const LINK_ATTEMPTS = 6
+/** The wait between two asks for a sign-in link, in milliseconds. */
+const LINK_WAIT_MS = 2_500
+
 /**
- * The link the browser signs in with.
+ * Ask a host for a sign-in link until it prints one.
+ * @param ask - one ask.
+ * @param timing - how many asks, and how long to wait between them.
+ * @returns the link.
+ * @throws Error when every ask printed none.
+ */
+export async function waitForLink(ask: () => Promise<{ readonly ok: boolean, readonly link?: unknown }>, timing: { readonly attempts: number, readonly waitMs: number }): Promise<string> {
+  for (let attempt = 0; attempt < timing.attempts; attempt++) {
+    if (attempt > 0) await new Promise(done => setTimeout(done, timing.waitMs))
+    const answer = await ask()
+    if (answer.ok === true && typeof answer.link === 'string') return answer.link
+  }
+  throw new Error('the host printed no sign-in link')
+}
+
+/**
+ * The link the browser signs in with. The studio answers on its port before the home process reports a Host, so
+ * `delorun open --print` answers STUDIO_UNAVAILABLE for a moment after a start; the bench asks again rather than
+ * failing a stage on that.
  * @param state - the run.
  * @returns the link.
- * @throws Error when the host printed none.
+ * @throws Error when every ask printed none.
  */
 export async function signInLink(state: RunState): Promise<string> {
-  const answer = await state.box.script('ctl', ['link'], { timeoutMs: 90_000 })
-  if (answer.ok !== true || typeof answer.link !== 'string') throw new Error('the host printed no sign-in link')
-  return answer.link
+  return await waitForLink(async () => await state.box.script('ctl', ['link'], { timeoutMs: 90_000 }), { attempts: LINK_ATTEMPTS, waitMs: LINK_WAIT_MS })
 }
 
 /**
