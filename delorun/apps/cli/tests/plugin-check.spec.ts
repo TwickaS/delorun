@@ -66,8 +66,8 @@ describe('delorun plugin check', () => {
     expect(out.split('\n')).toEqual([
       expect.stringMatching(/^example@1\.4\.0, read from .*package\.json; none of its files ran\.$/u),
       'This is Delorun 0.1.3 on DSH 0.2.2.',
-      'DSH axis: engines.dsh ">=0.2.2 <0.3.0" admits DSH 0.2.2; without engines.dsh every DSH peer must admit it, and engines.dsh alone decides when it is declared.',
-      'Delorun axis: engines.delorun admits Delorun 0.1.3.',
+      'DSH axis: not checked on Delorun, because engines.delorun decides alone; its engines.dsh and DSH peers are read only by DeepSeek Harness itself.',
+      'Delorun axis: engines.delorun admits Delorun 0.1.3, and decides alone: the DSH ranges are not checked on Delorun.',
       'The installer admits it on this release.',
       'Within one Delorun minor the DSH version stays the same; the plugin guide states what each Delorun version promises a plugin.',
       '',
@@ -90,13 +90,13 @@ describe('delorun plugin check', () => {
     const { exit, out } = await check(plugin({ name: 'stock-plugin', version: '1.0.0' }))
     expect(exit).toBe(EXIT.ok)
     expect(out).toContain('DSH axis: undeclared, so the plugin loads on any DSH. Declare "engines": { "dsh": "^0.2.2" }')
-    expect(out).toContain('Delorun axis: undeclared, so the plugin loads on any Delorun and Delorun promises it nothing. To target Delorun 0.1.3 and its patches, declare "engines": { "delorun": "^0.1.0-0" }.')
+    expect(out).toContain('Delorun axis: undeclared, so the DSH axis above decides on Delorun. To target Delorun 0.1.3 and its patches, declare "engines": { "delorun": "^0.1.0-0" }; Delorun then checks that range alone and no longer reads engines.dsh.')
   })
 
   it('refuses a plugin whose Delorun range does not admit this release, with the installer\'s own message', async () => {
     const { exit, out } = await check(plugin({ name: 'future', version: '2.0.0', engines: { delorun: '>=0.2.0' } }))
     expect(exit).toBe(EXIT.failed)
-    expect(out).toContain('Delorun axis: engines.delorun ">=0.2.0" does not admit Delorun 0.1.3.')
+    expect(out).toContain('Delorun axis: engines.delorun ">=0.2.0" does not admit Delorun 0.1.3, and it decides alone: the DSH ranges are not checked on Delorun.')
     expect(out).toContain('The installer refuses it on this release: future@2.0.0 requires Delorun >=0.2.0; this is Delorun 0.1.3 on DSH 0.2.2.')
   })
 
@@ -108,8 +108,24 @@ describe('delorun plugin check', () => {
     expect(out).toContain('The installer refuses it on this release: Plugin peers@1.0.0 is incompatible with dsh 0.2.2')
   })
 
+  it('admits a plugin whose engines.delorun is met and whose engines.dsh is not, and says the DSH ranges are not checked', async () => {
+    const { exit, out } = await check(plugin({ name: 'both', version: '1.0.0', engines: { dsh: '^0.1.0', delorun: '^0.1.0' } }))
+    expect(exit).toBe(EXIT.ok)
+    expect(out).toContain('DSH axis: not checked on Delorun, because engines.delorun decides alone')
+    expect(out).not.toContain('which DSH 0.2.2 does not meet')
+    expect(out).toContain('The installer admits it on this release.')
+  })
+
+  it('refuses a plugin whose engines.delorun is unmet and whose engines.dsh is met, with no DSH verdict', async () => {
+    const { exit, out } = await check(plugin({ name: 'both', version: '1.0.0', engines: { dsh: '^0.2.0', delorun: '>=0.2.0' } }))
+    expect(exit).toBe(EXIT.failed)
+    expect(out).toContain('DSH axis: not checked on Delorun')
+    expect(out).not.toContain('admits DSH 0.2.2')
+    expect(out).toContain('The installer refuses it on this release: both@1.0.0 requires Delorun >=0.2.0')
+  })
+
   it('refuses declarations it cannot read', async () => {
-    expect((await check(plugin({ name: 'a', version: '1.0.0', engines: { delorun: 1 } }))).out).toContain('Delorun axis: engines.delorun is declared in a form Delorun cannot read, so Delorun refuses the plugin. Declare a range such as "^0.1.0-0".')
+    expect((await check(plugin({ name: 'a', version: '1.0.0', engines: { delorun: 1 } }))).out).toContain('Delorun axis: engines.delorun is declared in a form Delorun cannot read, so Delorun refuses the plugin, and the DSH ranges are not read in its place. Declare a range such as "^0.1.0-0".')
     const dsh = await check(plugin({ name: 'b', version: '1.0.0', engines: { dsh: 1 } }))
     expect([dsh.exit, dsh.out.includes('DSH axis: engines.dsh or a DSH peer is declared in a form Delorun cannot read.'), dsh.out.includes('The installer refuses it: ')]).toEqual([EXIT.failed, true, true])
     const peer = await check(plugin({ name: 'c', version: '1.0.0', peerDependencies: { '@deepseek-ai/dsh': 3 } }))
@@ -152,11 +168,50 @@ describe('delorun plugin check', () => {
     expect(out).toContain('evil')
   })
 
+  /**
+   * Run the check with `--json`.
+   * @param directory - the plugin.
+   * @returns the exit code and the parsed record.
+   */
+  async function checkJson(directory: string): Promise<{ readonly exit: number | undefined, readonly record: unknown, readonly lines: number }> {
+    let out = ''
+    const exit = await runPluginCheck([directory, '--json'], { env: {}, stdout: (text) => { out += text }, stderr: () => {} }, RUNNING)
+    return { exit, record: JSON.parse(out), lines: out.trimEnd().split('\n').length }
+  }
+
+  it('prints one decision record with --json for each fixture shape, and exits as the installer does', async () => {
+    const fixtures = [
+      ['only engines.delorun', { engines: { delorun: '^0.1.0' } }, EXIT.ok, { decidedBy: 'delorun', range: '^0.1.0', checkedAgainst: '0.1.3', verdict: 'admitted', readable: true }],
+      ['only engines.dsh', { engines: { dsh: '^0.2.0' } }, EXIT.ok, { decidedBy: 'dsh', range: '^0.2.0', checkedAgainst: '0.2.2', verdict: 'admitted', readable: true }],
+      ['only engines.dsh, refusing', { engines: { dsh: '^0.3.0' } }, EXIT.failed, { decidedBy: 'dsh', range: '^0.3.0', checkedAgainst: '0.2.2', verdict: 'refused', readable: true }],
+      ['both, engines.delorun admitting and engines.dsh refusing', { engines: { dsh: '^0.3.0', delorun: '^0.1.0' } }, EXIT.ok, { decidedBy: 'delorun', range: '^0.1.0', checkedAgainst: '0.1.3', verdict: 'admitted', readable: true }],
+      ['both, engines.delorun refusing and engines.dsh admitting', { engines: { dsh: '^0.2.0', delorun: '^0.2.0' } }, EXIT.failed, { decidedBy: 'delorun', range: '^0.2.0', checkedAgainst: '0.1.3', verdict: 'refused', readable: true }],
+      ['nothing declared', {}, EXIT.ok, { decidedBy: 'none', range: null, checkedAgainst: null, verdict: 'admitted', readable: true }],
+    ] as const
+    for (const [label, fields, exit, record] of fixtures) {
+      const result = await checkJson(plugin({ name: 'fixture', version: '1.0.0', ...fields }))
+      expect([label, result.exit, result.record, result.lines]).toEqual([label, exit, record, 1])
+    }
+  })
+
+  it('writes C1 controls and bidirectional marks in the --json range as \\uXXXX, and reads back as the same range', async () => {
+    for (const range of ['\u009b2J', '^0.1.0\u202e', '\u2066^0.1.0\u2069']) {
+      let out = ''
+      await runPluginCheck([plugin({ name: 'fixture', version: '1.0.0', engines: { delorun: range } }), '--json'], { env: {}, stdout: (text) => { out += text }, stderr: () => {} }, RUNNING)
+      expect(out).not.toMatch(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f\u202a-\u202e\u2066-\u2069]/u)
+      expect(out).toContain('\\u')
+      expect(out.trimEnd().split('\n')).toHaveLength(1)
+      expect(JSON.parse(out)).toMatchObject({ decidedBy: 'delorun', range: range.trim() })
+    }
+  })
+
   it('takes exactly one directory, through delorun plugin check', async () => {
     const context = { env: {}, stdout: () => {}, stderr: () => {} }
     await expect(runPluginCheck([], context, RUNNING)).rejects.toMatchObject({ exit: EXIT.usage })
     await expect(runPluginCheck(['a', 'b'], context, RUNNING)).rejects.toMatchObject({ exit: EXIT.usage })
     await expect(runPluginCheck(['--json'], context, RUNNING)).rejects.toMatchObject({ exit: EXIT.usage })
+    await expect(runPluginCheck(['a', '--json', '--json'], context, RUNNING)).rejects.toMatchObject({ exit: EXIT.usage })
+    await expect(runPluginCheck(['a', '--other'], context, RUNNING)).rejects.toMatchObject({ exit: EXIT.usage })
     const directory = plugin({ name: 'e', version: '1.0.0' })
     mkdirSync(join(directory, 'sub'))
     let out = ''

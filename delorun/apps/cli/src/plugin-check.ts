@@ -1,10 +1,12 @@
 /**
  * `delorun plugin check <directory>` (contract C17, "Checking a plugin before it is installed"; contract C22): what a
  * plugin's declared version ranges admit against the release that runs. It reads the plugin's `package.json` as JSON,
- * imports and runs none of its files, and decides both axes with `@delorun/update`'s `evaluatePluginAxes`, which is
- * upstream's `evaluatePluginCompatibility` and `evaluateDelorunRequirement`, the evaluation the installer, the start's
- * preflight and the update report run, with no exemption. It prints, for each axis, what is
- * declared and whether this release meets it, what is undeclared, and the range that targets the running Delorun minor.
+ * imports and runs none of its files, and decides it with `@delorun/update`'s `evaluatePluginAxes` and
+ * `decidePluginVersion`, which are upstream's `evaluatePluginCompatibility`, the evaluation the installer, the start's
+ * preflight and the update report run, with no exemption. A plugin that declares `engines.delorun` is decided on that range
+ * alone: the DSH ranges are not checked on Delorun, and the DSH line says so instead of giving a verdict. It prints, for each
+ * axis, what is declared and whether this release meets it, what is undeclared, and the range that targets the running
+ * Delorun minor; with `--json` it prints the one decision record instead (contract C22, "Checking a plugin").
  *
  * @module @delorun/cli/plugin-check
  */
@@ -15,7 +17,7 @@ import { evaluatePluginCompatibility, pluginCompatibilityWarning } from '@deepse
 import type { VersionOutput } from '@delorun/contract-plugin-versions'
 import { messageOf } from '@delorun/install'
 import { targetRange } from '@delorun/plugin-scaffold'
-import { evaluatePluginAxes, type AxisDecision } from '@delorun/update'
+import { decidePluginVersion, evaluatePluginAxes, type AxisDecision } from '@delorun/update'
 import { CliError, EXIT } from './exit.ts'
 import type { CommandContext, CommandResult } from './command.ts'
 import { printable } from './terminal-text.ts'
@@ -25,7 +27,7 @@ import { versions } from './version.ts'
 export const PLUGIN_MANIFEST_LIMIT = 1_048_576
 
 /** The usage line. */
-const USAGE = 'usage: delorun plugin check <directory>'
+const USAGE = 'usage: delorun plugin check <directory> [--json]'
 
 /**
  * Whether a value is a plain JSON object.
@@ -119,6 +121,8 @@ function dshLine(decision: AxisDecision, manifest: Readonly<Record<string, unkno
     case 'undeclared':
     case 'none':
       return `DSH axis: undeclared, so the plugin loads on any DSH. Declare "engines": { "dsh": "^${dsh}" }, or the range you test against, to state it.`
+    case 'not-checked':
+      return 'DSH axis: not checked on Delorun, because engines.delorun decides alone; its engines.dsh and DSH peers are read only by DeepSeek Harness itself.'
     case 'unreadable':
       return 'DSH axis: engines.dsh or a DSH peer is declared in a form Delorun cannot read.'
     case 'unmet':
@@ -138,21 +142,23 @@ function delorunLine(decision: AxisDecision, delorun: string): string {
   switch (decision.kind) {
     case 'none':
     case 'undeclared':
-      return `Delorun axis: undeclared, so the plugin loads on any Delorun and Delorun promises it nothing. To target Delorun ${delorun} and its patches, declare "engines": { "delorun": "${targetRange(delorun)}" }.`
+      return `Delorun axis: undeclared, so the DSH axis above decides on Delorun. To target Delorun ${delorun} and its patches, declare "engines": { "delorun": "${targetRange(delorun)}" }; Delorun then checks that range alone and no longer reads engines.dsh.`
     case 'unreadable':
-      return `Delorun axis: engines.delorun is declared in a form Delorun cannot read, so Delorun refuses the plugin. Declare a range such as "${targetRange(delorun)}".`
+      return `Delorun axis: engines.delorun is declared in a form Delorun cannot read, so Delorun refuses the plugin, and the DSH ranges are not read in its place. Declare a range such as "${targetRange(delorun)}".`
     case 'compatible':
-      return `Delorun axis: engines.delorun admits Delorun ${delorun}.`
+      return `Delorun axis: engines.delorun admits Delorun ${delorun}, and decides alone: the DSH ranges are not checked on Delorun.`
+    case 'not-checked':
+      return 'Delorun axis: not checked.'
     case 'unmet':
     case 'exempted':
     case 'not-carried':
-      return `Delorun axis: engines.delorun "${decision.requirement}" does not admit Delorun ${delorun}.`
+      return `Delorun axis: engines.delorun "${decision.requirement}" does not admit Delorun ${delorun}, and it decides alone: the DSH ranges are not checked on Delorun.`
   }
 }
 
 /**
  * Run `delorun plugin check`.
- * @param args - the arguments after `check`: one directory.
+ * @param args - the arguments after `check`: one directory, and `--json` to print the decision record instead of the lines.
  * @param context - where the command writes.
  * @param running - the release to check against; this Delorun's two versions by default.
  * @returns 0 when the installer would admit the plugin on this release, 1 when it would refuse it.
@@ -160,11 +166,20 @@ function delorunLine(decision: AxisDecision, delorun: string): string {
  *   read.
  */
 export async function runPluginCheck(args: readonly string[], context: CommandContext, running: VersionOutput = versions()): Promise<CommandResult> {
-  if (args.length !== 1 || args[0]!.startsWith('-')) throw new CliError(EXIT.usage, `delorun plugin check: ${USAGE}`)
-  const directory = resolve(args[0]!)
+  const json = args.includes('--json')
+  const operands = args.filter(arg => arg !== '--json')
+  if (operands.length !== 1 || operands[0]!.startsWith('-') || args.length - operands.length > 1) throw new CliError(EXIT.usage, `delorun plugin check: ${USAGE}`)
+  const directory = resolve(operands[0]!)
   const manifest = await readPluginManifest(directory)
   const name = typeof manifest['name'] === 'string' ? manifest['name'] : '(no name)'
   const version = typeof manifest['version'] === 'string' ? manifest['version'] : '(no version)'
+  if (json) {
+    // One object of stable fields for tools: the decision, never English text. The range is the manifest's own string, so
+    // every control, bidirectional and invisible character is written as \uXXXX, which JSON reads back as the same string.
+    const decision = decidePluginVersion(manifest, running.delorun, running.dsh)
+    context.stdout(`${printable(JSON.stringify(decision))}\n`)
+    return decision.verdict === 'admitted' ? EXIT.ok : EXIT.failed
+  }
   const lines = [
     `${name}@${version}, read from ${join(directory, 'package.json')}; none of its files ran.`,
     `This is Delorun ${running.delorun} on DSH ${running.dsh}.`,

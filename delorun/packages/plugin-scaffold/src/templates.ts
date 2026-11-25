@@ -409,7 +409,7 @@ export function readme(names: ScaffoldNames, kind: PluginKind, template: KindTem
     ...template.guide,
     ['cordis.patch.yml', 'the rows a profile adds when it lists this package as a bundle'],
     ['locale/en.json', 'the title and description the plugin list shows'],
-    ['package.json', '`engines.dsh` and `engines.delorun`, the DSH and Delorun versions the plugin was made for, which `delorun plugin check` reads'],
+    ['package.json', '`engines.delorun`, the Delorun versions the plugin was made for, which alone decide on Delorun, and `engines.dsh`, the DSH versions, which stock DeepSeek Harness checks; `delorun plugin check` reads both'],
   ].filter(([path], index, all) => all.findIndex(([other]) => other === path) === index)
   return `# ${names.name}
 

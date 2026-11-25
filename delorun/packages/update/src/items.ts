@@ -69,6 +69,7 @@ function axisItem(plugin: InstalledPluginFact, axis: VersionAxis, decision: Axis
   switch (decision.kind) {
     case 'compatible':
     case 'none':
+    case 'not-checked':
       return undefined
     case 'undeclared':
       // C3 states this only for the DSH axis, which is the axis whose absence leaves compatibility unstated.

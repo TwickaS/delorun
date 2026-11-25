@@ -240,7 +240,16 @@ describe('readBundleLayers', () => {
       const exemptions = { 'both@1.0.0': [v('0.3.0')] }
 
       expect(await skipOf('delorun-new')).toEqual({ package: 'delorun-new', reason: 'it requires Delorun >=2.0.0 and the target installs Delorun 1.1.0', verification: 'verified' })
-      expect(await skipOf('both', { ...OPTIONS, exemptions })).toEqual({ package: 'both', reason: 'it requires DSH ^0.2.0 and the target runs DSH 0.3.0; it requires Delorun >=2.0.0 and the target installs Delorun 1.1.0', verification: 'verified' })
+      expect(await skipOf('both', { ...OPTIONS, exemptions })).toEqual({ package: 'both', reason: 'it requires Delorun >=2.0.0 and the target installs Delorun 1.1.0', verification: 'verified' })
+    })
+
+    it('loads a bundle whose engines.delorun the target meets although its engines.dsh and DSH peers do not (A567)', async () => {
+      writeBundle('target', 'delorun-led', bundle('delorun-led', { engines: { dsh: '^0.2.0', delorun: '^1.0.0' }, peerDependencies: { '@deepseek-ai/dsh-shell-env': '0.2.2' } }))
+      writeBundle('target', 'delorun-bad-dsh', bundle('delorun-bad-dsh', { engines: { dsh: 3, delorun: '^1.0.0' } }))
+
+      const read = await readBundleLayers(['delorun-led', 'delorun-bad-dsh'], OPTIONS)
+      expect(read.skipped).toEqual([])
+      expect(read.layers.map(layer => layer.layer)).toEqual(['delorun-led', 'delorun-bad-dsh'])
     })
 
     it('keeps reading the list after a bundle it skips', async () => {
@@ -286,6 +295,7 @@ describe('readBundleLayers', () => {
       expect(await unverified('null-engines', bundle('null-engines', { engines: null }))).toBe('its package.json declares engines in a form Delorun cannot read')
       expect(await unverified('number-dsh', bundle('number-dsh', { engines: { dsh: 3 } }))).toBe('its package.json declares engines in a form Delorun cannot read')
       expect(await unverified('number-delorun', bundle('number-delorun', { engines: { delorun: false } }))).toBe('its package.json declares engines in a form Delorun cannot read')
+      expect(await unverified('blank-delorun', bundle('blank-delorun', { engines: { delorun: '  ', dsh: '^0.3.0' } }))).toBe('its package.json declares engines in a form Delorun cannot read')
       expect(await unverified('number-peer', bundle('number-peer', { peerDependencies: { 'left-pad': 1 } }))).toBe('its package.json declares peerDependencies in a form Delorun cannot read')
       expect(await unverified('nameless', { version: '1.0.0', dsh: { bundle: { patch: './cordis.patch.yml' } }, engines: { dsh: '^0.2.0' } })).toBe('its package.json declares its name or version in a form Delorun cannot read')
       expect(await unverified('blank-version', bundle('blank-version', { version: ' ', engines: { dsh: '^0.2.0' } }))).toBe('its package.json declares its name or version in a form Delorun cannot read')

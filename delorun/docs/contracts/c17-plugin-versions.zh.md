@@ -67,7 +67,9 @@ Delorun 有自己的语义化版本，并基于一个上游 DSH 版本构建，�
 
 - `engines.dsh` 原样遵循上游规则：存在时，它单独决定上游轴；不存在时，每个 `@deepseek-ai/dsh` 或 `@deepseek-ai/dsh-*` 对等依赖都必须匹配，其中 `workspace:^`、`workspace:~` 与 `workspace:*` 表示正在运行的版本。
 - `engines.delorun` 是一个语义化版本范围字符串。它单独决定 Delorun 轴；对 `@delorun/*` 包的对等依赖不用于该轴。
+- **On Delorun, `engines.delorun` decides alone when it is declared.** Delorun then reads neither `engines.dsh` nor the `@deepseek-ai/dsh*` peers, so a range there that Delorun's base DSH version does not meet, or a malformed one, changes nothing. Stock DSH ignores `engines.delorun` and checks `engines.dsh` as always.
 - 未声明 `engines.delorun` 的插件没有 Delorun 要求。
+- Package-manager peer warnings are not this check. pnpm may print a warning for an unmet `@deepseek-ai/dsh*` peer when it installs the plugin; Delorun leaves it, and it neither admits nor refuses the plugin.
 - 插件索引的索引文件把两个范围复制到每个版本条目中（[C13](c13-catalogue-revocation.zh.md#catalogue-index)）。
 
 <a id="evaluation"></a>
@@ -80,11 +82,11 @@ Delorun 有自己的语义化版本，并基于一个上游 DSH 版本构建，�
 | --- | --- | --- |
 | 版本满足的范围 | 满足 | 满足 |
 | 版本不满足的范围 | 未满足 | 未满足 |
-| 空字符串、`workspace:` 值或无效范围 | 未满足 | 未满足 |
+| 空字符串、`workspace:` 值或无效范围 | 未满足 | 未满足 (an empty or whitespace-only `engines.delorun` is unreadable) |
 | 非字符串 | 不可读 | 不可读 |
 | 不存在 | 由对等依赖规则决定：满足或未满足；插件没有 DSH 对等依赖时为 `none` | `none` |
 
-不可读的声明按未满足处理：上游拒绝它无法校验的要求元数据，Delorun 轴同样如此。评估只读取插件的 manifest，从不导入插件代码。
+不可读的声明按未满足处理：上游拒绝它无法校验的要求元数据，Delorun 轴同样如此。An unreadable `engines.delorun` is refused and the upstream axis is not consulted in its place. An empty or whitespace-only `engines.delorun` is unreadable: it never means any version, and it never silences a DSH range, so the plugin is refused with `requirement-unreadable` even when its `engines.dsh` is met. 评估只读取插件的 manifest，从不导入插件代码。
 
 各轴在以下时机接受检查：
 
@@ -192,7 +194,9 @@ DSH 0.2.2
 | `c17-newer-delorun-required-refused` | 插件版本 | `engines.delorun` 为 `>=2.0.0` 的插件在 Delorun 1.x 上安装时被拒绝，消息写明两个版本。 |
 | `c17-unmet-delorun-disabled-at-start` | 插件版本 | 已安装插件的 `engines.delorun` 不被正在运行的 Delorun 满足时，该插件在导入之前被停用，并在 studio 中报告。 |
 | `c17-unreadable-delorun-refused` | 插件版本 | `engines.delorun` 为数字的插件作为不可读被拒绝。 |
-| `c17-exemption-one-axis-only` | 插件版本 | Delorun 轴的豁免不会放行上游要求同样未满足的插件。 |
+| `c17-exemption-one-axis-only` | 插件版本 | A DSH-axis exemption does not admit a plugin whose `engines.delorun` is unmet. |
+| `c17-delorun-decides-alone-admitted` | 插件版本 | A plugin whose `engines.delorun` the running Delorun meets and whose `engines.dsh` or DSH peer it does not is admitted at install, at start and in the update report. |
+| `c17-delorun-decides-alone-refused` | 插件版本 | A plugin whose `engines.delorun` the running Delorun does not meet and whose `engines.dsh` it meets is refused, with no DSH requirement named. |
 | `c17-exemption-needs-accept-risk` | 插件版本 | 未带 `--accept-risk`、或写明的 Delorun 版本不是正在运行版本的授予被拒绝。 |
 | `c17-stock-plugin-unaffected` | 插件版本 | 没有 `engines.delorun` 的插件的安装与加载与在 stock DSH 上完全相同。 |
 | `plugin-check-imports-no-code` | update-notice | `delorun plugin check` 读取 manifest，且不运行插件的任何文件。 |

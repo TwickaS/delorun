@@ -22,4 +22,4 @@ Upstream's app-boot compatibility hunk, `delorun/apps/cli/src/version.ts`, the p
 
 ## Known limitations
 
-- Range matching itself is upstream's `evaluatePluginCompatibility` with `semver`; the package types its results for both axes and does not evaluate ranges.
+- Range matching itself is upstream's `evaluatePluginCompatibility` with `semver`; the package types its results for both axes and does not evaluate ranges. Which declaration decides is C17's rule: on Delorun a plugin that declares `engines.delorun` is checked on that range alone, and its upstream axis has the status `not-checked`.

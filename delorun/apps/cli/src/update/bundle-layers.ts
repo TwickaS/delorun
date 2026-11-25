@@ -6,8 +6,8 @@
  *
  * Upstream's rules, in upstream's order: the bundle resolves from the target's install anchor first and the profile
  * second; its `package.json` declares `dsh.bundle`; `dsh.bundle.platforms`, when present, lists this machine's
- * platform; its DSH requirement (`engines.dsh`, else its `@deepseek-ai/dsh*` peers) is met by the target's DSH or
- * exempted for this exact version, and its `engines.delorun` is met by the target's Delorun; and every patch file parses as
+ * platform; its `engines.delorun` is met by the target's Delorun and decides alone (A567), or, when it declares none, its DSH
+ * requirement (`engines.dsh`, else its `@deepseek-ai/dsh*` peers) is met by the target's DSH or exempted for this exact version; and every patch file parses as
  * a list of patch entries. A rule that decides from metadata Delorun read makes a `verified` skip. Metadata Delorun cannot
  * read as upstream's format raises {@link BundleReadError}, and the bundle is reported as an `unverified` skip: upstream
  * skips such a bundle too, but the report cannot know that its own reading matches upstream's.
@@ -205,16 +205,18 @@ function declarationOf(bundle: string, manifest: Record<string, unknown>): Bundl
   return parsed.data
 }
 
-const enginesSchema = z.looseObject({ dsh: z.string().optional(), delorun: z.string().optional() })
+/** `engines.dsh` is read only when `engines.delorun` is absent (A567), so a malformed one is refused there and not here. */
+const enginesSchema = z.looseObject({ dsh: z.unknown().optional(), delorun: z.string().optional() })
 const peersSchema = z.record(z.string(), z.string())
 /** Upstream's identity rule: a name and a version that are not blank, used as written in the exemption key. */
 const identitySchema = z.looseObject({ name: z.string().refine(text => text.trim() !== ''), version: z.string().refine(text => text.trim() !== '') })
 
 /**
  * The bundle's own requirements the target does not meet, as upstream's `evaluatePluginCompatibility` decides them for
- * a bundle: `engines.dsh` decides the DSH axis alone, otherwise every `@deepseek-ai/dsh` or `@deepseek-ai/dsh-*` peer
- * must match, with a `workspace:` peer read as the target's DSH; `engines.delorun` is checked against the target's Delorun;
- * and an exact-version DSH exemption admits a DSH mismatch only while the Delorun axis is met.
+ * a bundle: `engines.delorun`, when declared, decides alone against the target's Delorun and the DSH ranges are not read;
+ * otherwise `engines.dsh` decides alone, and without it every `@deepseek-ai/dsh` or `@deepseek-ai/dsh-*` peer must match,
+ * with a `workspace:` peer read as the target's DSH. An exact-version DSH exemption admits a DSH mismatch only while the
+ * Delorun axis is met, and a bundle decided on `engines.delorun` has no DSH mismatch to admit.
  * @param bundle - the bundle's package name.
  * @param manifest - its `package.json`.
  * @param options - the target's versions and the profile's DSH exemptions.
@@ -228,16 +230,23 @@ function unmetRequirements(bundle: string, manifest: Record<string, unknown>, op
   const engines = enginesSchema.safeParse(Object.hasOwn(manifest, 'engines') ? manifest['engines'] : {})
   if (!engines.success) throw malformed('engines')
   const dshUnmet: string[] = []
-  if (engines.data.dsh !== undefined) {
-    if (!satisfiesRange(dsh, engines.data.dsh)) dshUnmet.push(`it requires DSH ${engines.data.dsh} and the target runs DSH ${dsh}`)
-  } else if (Object.hasOwn(manifest, 'peerDependencies')) {
-    const peers = peersSchema.safeParse(manifest['peerDependencies'])
-    if (!peers.success) throw malformed('peerDependencies')
-    for (const [name, range] of Object.entries(peers.data)) {
-      if (name !== '@deepseek-ai/dsh' && !name.startsWith('@deepseek-ai/dsh-')) continue
-      if (!WORKSPACE_RANGES.includes(range) && !satisfiesRange(dsh, range)) dshUnmet.push(`it requires ${name} ${range} and the target runs DSH ${dsh}`)
+  // A bundle that declares `engines.delorun` is decided on that range alone (A567); its DSH ranges are not read.
+  if (engines.data.delorun === undefined) {
+    if (Object.hasOwn(engines.data, 'dsh')) {
+      const range = engines.data.dsh
+      if (typeof range !== 'string') throw malformed('engines')
+      if (!satisfiesRange(dsh, range)) dshUnmet.push(`it requires DSH ${range} and the target runs DSH ${dsh}`)
+    } else if (Object.hasOwn(manifest, 'peerDependencies')) {
+      const peers = peersSchema.safeParse(manifest['peerDependencies'])
+      if (!peers.success) throw malformed('peerDependencies')
+      for (const [name, range] of Object.entries(peers.data)) {
+        if (name !== '@deepseek-ai/dsh' && !name.startsWith('@deepseek-ai/dsh-')) continue
+        if (!WORKSPACE_RANGES.includes(range) && !satisfiesRange(dsh, range)) dshUnmet.push(`it requires ${name} ${range} and the target runs DSH ${dsh}`)
+      }
     }
   }
+  // An empty or whitespace-only `engines.delorun` is unreadable, as upstream reads it, and never means any version.
+  if (engines.data.delorun !== undefined && engines.data.delorun.trim() === '') throw malformed('engines')
   const delorunUnmet = engines.data.delorun !== undefined && !satisfiesRange(delorun, engines.data.delorun) ? [`it requires Delorun ${engines.data.delorun} and the target installs Delorun ${delorun}`] : []
   if (dshUnmet.length === 0 && delorunUnmet.length === 0) return []
   const identity = identitySchema.safeParse(manifest)

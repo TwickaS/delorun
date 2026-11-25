@@ -43,9 +43,15 @@ describe('the Delorun axis at, below and above the requirement', () => {
     expect(evaluateDelorunRequirement(manifest(RANGE), '1.4.0-rc.1')?.status).toBe('met')
   })
 
-  it('does not satisfy an empty, workspace or invalid range', () => {
-    for (const range of ['', 'workspace:*', 'not-a-range']) {
+  it('does not satisfy a workspace or invalid range', () => {
+    for (const range of ['workspace:*', 'not-a-range']) {
       expect(evaluateDelorunRequirement(manifest(range), DELORUN)?.status).toBe('unmet')
+    }
+  })
+
+  it('reads an empty or whitespace-only range as unreadable, never as any version', () => {
+    for (const range of ['', ' ', '  ', '\t\n']) {
+      expect(evaluateDelorunRequirement(manifest(range), DELORUN)).toEqual({ delorunVersion: DELORUN, status: 'unreadable' })
     }
   })
 })
@@ -87,6 +93,8 @@ describe('refusals', () => {
     expect(evaluateDelorunRequirement(manifest(), DELORUN)).toBeUndefined()
     expect(evaluatePluginCompatibility(manifest(undefined, '>=0.0.0'), {}, DSH, DELORUN)).toBeUndefined()
     expect(evaluatePluginCompatibility(manifest(), {}, DSH, DELORUN)).toBeUndefined()
+    // Its dsh range still decides, as on stock DSH.
+    expect(evaluatePluginCompatibility(manifest(undefined, '<0.0.1'), {}, DSH, DELORUN)?.requirements).toEqual({ 'engines.dsh': '<0.0.1' })
   })
 
   it('checks no Delorun axis when Delorun\'s version is unknown', () => {
@@ -108,16 +116,53 @@ describe('refusals', () => {
   })
 })
 
+describe('engines.delorun decides alone (A567)', () => {
+  it('admits a plugin whose engines.delorun is met and whose engines.dsh is unmet', () => {
+    expect(evaluatePluginCompatibility(manifest(RANGE, '<0.0.1'), {}, DSH, DELORUN)).toBeUndefined()
+  })
+
+  it('admits it when a dsh peer is unmet too, and when the dsh declarations are malformed', () => {
+    const peers = { name: 'p', version: '1.0.0', engines: { delorun: RANGE, dsh: 7 }, peerDependencies: { '@deepseek-ai/dsh-session': '^99' } }
+    expect(evaluatePluginCompatibility(peers, {}, DSH, DELORUN)).toBeUndefined()
+    expect(evaluatePluginCompatibility({ ...peers, peerDependencies: 'not an object' }, {}, DSH, DELORUN)).toBeUndefined()
+  })
+
+  it('refuses a plugin whose engines.delorun is unmet and whose engines.dsh is met, naming no dsh requirement', () => {
+    const issue = evaluatePluginCompatibility(manifest('>=2.0.0', '>=0.0.0'), {}, DSH, DELORUN)
+    expect(issue?.delorun).toEqual({ delorunVersion: DELORUN, status: 'unmet', requirement: '>=2.0.0' })
+    expect(issue?.requirements).toEqual({})
+    expect(pluginCompatibilityWarning(issue!)).not.toContain('is incompatible with dsh')
+  })
+
+  it('refuses an unreadable engines.delorun without falling back to a met engines.dsh', () => {
+    const issue = evaluatePluginCompatibility(manifest(2, '>=0.0.0'), {}, DSH, DELORUN)
+    expect(issue?.delorun?.status).toBe('unreadable')
+  })
+
+  it.each(['', ' ', '  '])('refuses an engines.delorun of %j as unreadable beside a met engines.dsh, and an unmet one too', (range) => {
+    for (const dsh of ['>=0.0.0', '<0.0.1']) {
+      const issue = evaluatePluginCompatibility(manifest(range, dsh), {}, DSH, DELORUN)
+      expect(issue?.delorun?.status).toBe('unreadable')
+      expect(issue?.requirements).toEqual({})
+      expect(issue?.exempted).toBe(false)
+    }
+  })
+
+  it('reads engines.dsh again on stock DSH, where Delorun\'s version is unknown', () => {
+    expect(evaluatePluginCompatibility(manifest(RANGE, '<0.0.1'), {}, DSH, undefined)?.requirements).toEqual({ 'engines.dsh': '<0.0.1' })
+  })
+})
+
 describe('exemptions', () => {
   it('does not let the dsh exemption admit an unmet Delorun requirement', () => {
     const issue = evaluatePluginCompatibility(manifest('>=2.0.0', '<0.0.1'), { 'example-delorun-plugin@1.4.0': [DSH] }, DSH, DELORUN)
-    expect(issue?.requirements).toEqual({ 'engines.dsh': '<0.0.1' })
+    expect(issue?.requirements).toEqual({})
     expect(issue?.exempted).toBe(false)
     expect(pluginCompatibilityWarning(issue!)).toContain('Exact-version exemption: not active.')
   })
 
-  it('still admits an upstream-only mismatch the person exempted', () => {
-    const issue = evaluatePluginCompatibility(manifest(RANGE, '<0.0.1'), { 'example-delorun-plugin@1.4.0': [DSH] }, DSH, DELORUN)
+  it('still admits a dsh-only mismatch the person exempted, for a plugin without engines.delorun', () => {
+    const issue = evaluatePluginCompatibility(manifest(undefined, '<0.0.1'), { 'example-delorun-plugin@1.4.0': [DSH] }, DSH, DELORUN)
     expect(issue?.exempted).toBe(true)
     expect(pluginCompatibilityWarning(issue!)).toContain('Exact-version exemption: active.')
   })

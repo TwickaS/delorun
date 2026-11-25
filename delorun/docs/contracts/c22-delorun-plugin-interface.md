@@ -8,7 +8,7 @@ English | [中文](c22-delorun-plugin-interface.zh.md)
 
 ## Summary
 
-A plugin runs on two version axes ([C17](c17-plugin-versions.md)): upstream's, `engines.dsh`, and Delorun's, `engines.delorun`. The axes are independent; a range on one never stands in for the other. This page states what Delorun's version promises a plugin that declares `engines.delorun`: which interfaces the promise covers, what each kind of release may change, that a minor release keeps one upstream base, and how versions before 1.0 are read. The release tool refuses a patch release that would break the promise as far as it can check mechanically. `delorun plugin check <directory>` shows an author what their ranges admit. The inventory's types live in [`@delorun/contract-plugin-versions`](../../packages/contract-plugin-versions/README.md).
+A plugin can declare two version ranges ([C17](c17-plugin-versions.md)): upstream's, `engines.dsh`, and Delorun's, `engines.delorun`. On Delorun, a plugin that declares `engines.delorun` is checked on that range alone and its DSH ranges are not checked; a plugin that declares none is checked on its upstream range, as on stock DSH. This page states what Delorun's version promises a plugin that declares `engines.delorun`: which interfaces the promise covers, what each kind of release may change, that a minor release keeps one upstream base, and how versions before 1.0 are read. The release tool refuses a patch release that would break the promise as far as it can check mechanically. `delorun plugin check <directory>` shows an author what their ranges admit. The inventory's types live in [`@delorun/contract-plugin-versions`](../../packages/contract-plugin-versions/README.md).
 
 ## Status
 
@@ -65,18 +65,30 @@ A plugin that uses a covered interface declares `engines.delorun`:
 - Before 1.0, `^0.<minor>.0`, the minor it was tested on and its patches.
 - From 1.0, `^<major>.<minor>.0`, the minor it needs and every later minor of that major.
 
-It also declares `engines.dsh` for the upstream interfaces it uses, because a later Delorun minor may move the upstream base. A plugin that uses no covered interface declares no `engines.delorun` and runs on any Delorun, as on stock DSH.
+`engines.delorun` decides alone on Delorun, so a plugin that targets Delorun needs no `engines.dsh` there. It declares `engines.dsh` as well only so that the same package also runs on stock DeepSeek Harness, which ignores `engines.delorun` and checks `engines.dsh`; Delorun does not read that range when `engines.delorun` is declared. A plugin that uses no covered interface declares no `engines.delorun`, is checked on its `engines.dsh` or DSH peers against the DSH version Delorun reports, and runs on any Delorun that DSH version satisfies, as on stock DSH. A later Delorun minor may move the upstream base, which a plugin that declares `engines.delorun` states by the Delorun range it tests on.
 
 ## Checking a plugin
 
-`delorun plugin check <directory>` reads the directory's `package.json` as JSON, at most 1 MiB, and runs none of the plugin's files. It refuses a `package.json` that is a symbolic link, a FIFO or anything but a regular file, without following or waiting on it, and prints the manifest's strings with terminal control characters escaped. It evaluates both axes against the running release with upstream's `evaluatePluginCompatibility`, the evaluation the installer and the start's preflight run, with no exemption, and prints:
+`delorun plugin check <directory> [--json]` reads the directory's `package.json` as JSON, at most 1 MiB, and runs none of the plugin's files. It refuses a `package.json` that is a symbolic link, a FIFO or anything but a regular file, without following or waiting on it, and prints the manifest's strings with terminal control characters escaped. It decides the plugin against the running release with upstream's `evaluatePluginCompatibility`, the evaluation the installer and the start's preflight run, with no exemption, and prints:
 
 - the plugin's name and version, and the running Delorun and DSH versions;
-- for the upstream axis, `engines.dsh` and whether it admits the running DSH, or each `@deepseek-ai/dsh*` peer range and whether it does, or that nothing is declared;
-- for the Delorun axis, `engines.delorun` and whether it admits the running Delorun, or that nothing is declared and the range that targets the running minor;
+- for the Delorun axis, `engines.delorun` and whether it admits the running Delorun, and that it decides alone, so that the DSH ranges are not checked on Delorun; or that nothing is declared and the range that targets the running minor;
+- for the upstream axis, when `engines.delorun` is declared, that it is not checked on Delorun, and no verdict; otherwise `engines.dsh` and whether it admits the running DSH, or each `@deepseek-ai/dsh*` peer range and whether it does, or that nothing is declared;
 - whether the installer admits the plugin on this release, and its refusal message when it does not.
 
 It exits 0 when the installer admits the plugin and 1 when it refuses it or cannot read its declarations.
+
+With `--json` it prints one JSON object on one line, and no other output, for tools that must not read English text. Its fields, all always present:
+
+| Field | Meaning |
+| --- | --- |
+| `decidedBy` | `delorun` when `engines.delorun` is declared, else `dsh` when `engines.dsh` is, else `peer` when a `@deepseek-ai/dsh*` peer is, else `none`. |
+| `range` | The range that decided, with leading and trailing whitespace trimmed; for `peer`, each DSH peer as `<name> <range>` joined by `, `; `null` for `none`, when `engines.delorun` or `engines.dsh` is not a string, and for an empty or whitespace-only `engines.delorun`, which is unreadable. |
+| `checkedAgainst` | The version the range was checked against: the running Delorun's for `delorun`, the running DSH's for `dsh` and `peer`; `null` for `none`. |
+| `verdict` | `admitted` or `refused`: the installer's decision on this release. |
+| `readable` | `false` when a declaration is in a form Delorun cannot read, which is refused. |
+
+A declaration Delorun cannot read is refused with `readable` false: a `peerDependencies` that is not an object gives `decidedBy` `none`, `range` `null`, `checkedAgainst` `null` and `verdict` `refused`; a DSH peer whose range is not a string gives `decidedBy` `peer`, `verdict` `refused`, and the peer as `<name> <value>` in `range`. The exit code is the same as without `--json`. The record is the return value of `decidePluginVersion` in `@delorun/update`, a pure function of a parsed manifest, a Delorun version and a DSH version: prereleases take part in ranges, no exemption applies, and nothing reads a file or the environment. The four shapes a tool most needs to tell apart are decided as follows: only `engines.delorun` (`decidedBy` `delorun`); only `engines.dsh` (`dsh`, with peers read only when `engines.dsh` is absent); both, which `engines.delorun` decides, so one that admits is `admitted` whatever `engines.dsh` says; and both with `engines.delorun` refusing, which is `refused` whatever `engines.dsh` says.
 
 ## The patch rule
 

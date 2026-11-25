@@ -9,8 +9,9 @@
  *   (a profile resolves a shipped package before a profile install, see [installation](./installation.ts)) and an
  *   unknown kind are refused with the kind `usage`; a folder that cannot take the scaffold, with `failed`.
  * - It writes only inside the folder, creates no file that exists, and removes what it wrote when a write fails.
- * - The package declares `engines.dsh` as `^<running DSH>` and `engines.delorun` as the range `delorun plugin check`
- *   recommends for the running Delorun; the DSH packages a plugin with code shares with the host are peer and
+ * - The package declares `engines.delorun` as the range `delorun plugin check` recommends for the running Delorun, which
+ *   alone decides on Delorun (A567), and `engines.dsh` as `^<running DSH>`, which stock DeepSeek Harness checks, so one
+ *   package runs on both; the DSH packages a plugin with code shares with the host are peer and
  *   development dependencies on `^<running DSH>`, and `@deepseek-ai/cordis` on `~<installed cordis>`.
  *
  * @module @delorun/plugin-scaffold/create

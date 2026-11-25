@@ -113,6 +113,8 @@ The report is stored in the snapshot's history version, so the history shows wha
 
 ## Reasons
 
+The report judges the target's plugins with the running release's rule, because the running release builds it: a plugin that declares `engines.delorun` is judged on that range alone ([C17](c17-plugin-versions.md)). This holds for a rollback's report too, which judges the release rolled back to by the release that rolls back.
+
 | Reason | Kind | Effect | Message |
 | --- | --- | --- | --- |
 | `dsh-requirement-unmet` | plugin | disabled | `<plugin> requires DSH <range>; Delorun <to.delorun> runs DSH <to.dsh>.` |
@@ -120,7 +122,7 @@ The report is stored in the snapshot's history version, so the history shows wha
 | `requirement-unreadable` | plugin | disabled | `<plugin> declares engines.<axis> in a form Delorun cannot read.` |
 | `requirement-exempted` | plugin | kept | `<plugin> requires <DSH or Delorun> <range>; your exemption for this exact version covers <version>.` |
 | `exemption-not-carried` | plugin | disabled | `<plugin> runs today under your exemption for <from version>; the exemption does not cover <to version>.` |
-| `requirement-undeclared` | plugin | kept | `<plugin> declares no DSH requirement, so its compatibility with DSH <to.dsh> is not stated.` Given only when the plugin declares neither `engines.dsh` nor a `@deepseek-ai/dsh` or `@deepseek-ai/dsh-*` peer. |
+| `requirement-undeclared` | plugin | kept | `<plugin> declares no DSH requirement, so its compatibility with DSH <to.dsh> is not stated.` Given only when the plugin declares none of `engines.delorun`, `engines.dsh` and a `@deepseek-ai/dsh` or `@deepseek-ai/dsh-*` peer: `engines.delorun` states compatibility on its own and decides alone on Delorun ([C17](c17-plugin-versions.md)). |
 | `plugin-revoked` | plugin | disabled | `<plugin> is revoked: <reason>, <message>.` ([C13](c13-catalogue-revocation.md#revocation-list)) |
 | `manifest-unreadable` | plugin | kept | `Delorun could not read <plugin>'s package.json; it cannot predict what the update does to it.` |
 | `bundle-retired` | bundle | removed | `<bundle> is retired in DSH <to.dsh> and leaves the bundle list.` (upstream's `RETIRED_BUNDLES`) |

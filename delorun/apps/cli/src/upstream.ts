@@ -376,7 +376,7 @@ export async function pluginMirror(args: readonly string[], context: CommandCont
 }
 
 /** The usage line of `delorun plugin`, shown when it is run without arguments. */
-const PLUGIN_USAGE = 'Usage: delorun plugin [--profile <name>] <list | add <package> | remove <package> | update>\n       delorun plugin check <directory>\n       delorun plugin mirror on|off'
+const PLUGIN_USAGE = 'Usage: delorun plugin [--profile <name>] <list | add <package> | remove <package> | update>\n       delorun plugin check <directory> [--json]\n       delorun plugin mirror on|off'
 
 /**
  * `delorun plugin --profile <name> <pnpm-args…>`: upstream's plugin management, then Changes' check of the profile;
