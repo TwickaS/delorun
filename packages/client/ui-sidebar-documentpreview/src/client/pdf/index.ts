@@ -8,6 +8,7 @@ import { LazyPdfBody } from './LazyPdfBody.tsx'
 import type { BoundActions } from '@deepseek-ai/dsh-client-store'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import { createPdfStore, type PdfStore } from './store.ts'
+import { workerScriptUrl } from '../worker-script-url.ts'
 import { ZoomViewport, zoomSurfaceClass } from '../zoom/ZoomViewport.tsx'
 import { en, ja, es, fr, de, ru, pt, zh } from './locales.ts'
 
@@ -51,6 +52,7 @@ export function pdfBodyRegistration(ctx: Context): {
       retainTab: (tabId, signal) => { retainTab(tabId, signal, actions.forget) },
       ZoomViewport,
       zoomSurfaceClass,
+      workerScriptUrl,
     }),
   }
 }

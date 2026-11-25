@@ -11,6 +11,7 @@ vi.mock('../src/client/pdf/assets.ts', () => ({
 }))
 import { openPdf } from '../src/client/pdf/runtime.ts'
 import { PdfWorkerFailure } from '../src/client/pdf/errors.ts'
+import { workerScriptUrl as mintsThroughPolicy } from '../src/client/worker-script-url.ts'
 
 const NativeURL = URL
 const workers: ControlledWorker[] = []
@@ -51,7 +52,7 @@ afterEach(async () => {
   }
 })
 
-function setup(controller = new AbortController(), failed = vi.fn()) {
+function setup(controller = new AbortController(), failed = vi.fn(), mint: (url: string) => string = (url: string) => url) {
   const loading = Promise.withResolvers<PdfDocument>()
   const entered = Promise.withResolvers<unknown>()
   const destroy = vi.fn(async () => {})
@@ -60,7 +61,7 @@ function setup(controller = new AbortController(), failed = vi.fn()) {
     return { promise: loading.promise, destroy }
   })
   const data = new TextEncoder().encode('%PDF-test')
-  const session = openPdf(data, controller.signal, failed)
+  const session = openPdf(data, controller.signal, failed, mint)
   sessions.push(session)
   void session.document.catch(() => {})
   return { loading, entered, destroy, controller, failed, session, data }
@@ -100,7 +101,7 @@ describe('PDF Worker lifecycle', () => {
     const createScriptURL = vi.fn((url: string) => `trusted:${url}`)
     ;(globalThis as { __DSH_TRUSTED_TYPES__?: unknown }).__DSH_TRUSTED_TYPES__ = { blobWorker: { createScriptURL } }
     try {
-      const h = setup()
+      const h = setup(new AbortController(), vi.fn(), mintsThroughPolicy)
       expect(createScriptURL).toHaveBeenCalledWith('blob:pdf-worker')
       expect(workers[0]!.url).toBe('trusted:blob:pdf-worker')
       workers[0]!.ready()
@@ -115,7 +116,7 @@ describe('PDF Worker lifecycle', () => {
   it('reports a Worker failure when the policy refuses the blob URL, and releases the URL', async () => {
     ;(globalThis as { __DSH_TRUSTED_TYPES__?: unknown }).__DSH_TRUSTED_TYPES__ = { blobWorker: { createScriptURL: () => null } }
     try {
-      const h = setup()
+      const h = setup(new AbortController(), vi.fn(), mintsThroughPolicy)
       await expect(h.session.document).rejects.toThrow('refused by the delorun-blob-worker policy')
       expect(workers).toHaveLength(0)
       expect(revokeURL).toHaveBeenCalledWith('blob:pdf-worker')

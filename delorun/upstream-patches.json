@@ -3655,6 +3655,48 @@
       "class": "delorun-feature",
       "feature": "long-chat-load-measurement",
       "reason": "Long-chat load measurement: compiles the measurement worker beside the other benchmark workers, so the timed code runs as plain Node against built package entries exactly as the other benchmark cases do."
+    },
+    {
+      "path": "packages/client/ui-sidebar-documentpreview/src/client/excel/LazyExcelBody.tsx",
+      "class": "delorun-feature",
+      "feature": "reach-trusted-types",
+      "reason": "Reach listener Content Security Policy (C4): the Worker is built from a Blob, and the reach listener enforces Trusted Types for script, so the Worker constructor refuses a plain string. The URL is minted through the page boot policy. The helper is supplied through the registration inject face by the main bundle rather than imported by the lazy chunk, because the client module loader cannot answer a synchronous sibling-chunk request and the import made both previews fail to load. No upstream export is removed or renamed."
+    },
+    {
+      "path": "packages/client/ui-sidebar-documentpreview/src/client/excel/excel.tsx",
+      "class": "delorun-feature",
+      "feature": "reach-trusted-types",
+      "reason": "Reach listener Content Security Policy (C4): the Worker is built from a Blob, and the reach listener enforces Trusted Types for script, so the Worker constructor refuses a plain string. The URL is minted through the page boot policy. The helper is supplied through the registration inject face by the main bundle rather than imported by the lazy chunk, because the client module loader cannot answer a synchronous sibling-chunk request and the import made both previews fail to load. No upstream export is removed or renamed."
+    },
+    {
+      "path": "packages/client/ui-sidebar-documentpreview/src/client/excel/index.ts",
+      "class": "delorun-feature",
+      "feature": "reach-trusted-types",
+      "reason": "Reach listener Content Security Policy (C4): the Worker is built from a Blob, and the reach listener enforces Trusted Types for script, so the Worker constructor refuses a plain string. The URL is minted through the page boot policy. The helper is supplied through the registration inject face by the main bundle rather than imported by the lazy chunk, because the client module loader cannot answer a synchronous sibling-chunk request and the import made both previews fail to load. No upstream export is removed or renamed."
+    },
+    {
+      "path": "packages/client/ui-sidebar-documentpreview/src/client/excel/model.ts",
+      "class": "delorun-feature",
+      "feature": "reach-trusted-types",
+      "reason": "Reach listener Content Security Policy (C4): the Worker is built from a Blob, and the reach listener enforces Trusted Types for script, so the Worker constructor refuses a plain string. The URL is minted through the page boot policy. The helper is supplied through the registration inject face by the main bundle rather than imported by the lazy chunk, because the client module loader cannot answer a synchronous sibling-chunk request and the import made both previews fail to load. No upstream export is removed or renamed."
+    },
+    {
+      "path": "packages/client/ui-sidebar-documentpreview/src/client/pdf/index.ts",
+      "class": "delorun-feature",
+      "feature": "reach-trusted-types",
+      "reason": "Reach listener Content Security Policy (C4): the Worker is built from a Blob, and the reach listener enforces Trusted Types for script, so the Worker constructor refuses a plain string. The URL is minted through the page boot policy. The helper is supplied through the registration inject face by the main bundle rather than imported by the lazy chunk, because the client module loader cannot answer a synchronous sibling-chunk request and the import made both previews fail to load. No upstream export is removed or renamed."
+    },
+    {
+      "path": "packages/client/ui-sidebar-documentpreview/src/client/pdf/pdf.tsx",
+      "class": "delorun-feature",
+      "feature": "reach-trusted-types",
+      "reason": "Reach listener Content Security Policy (C4): the Worker is built from a Blob, and the reach listener enforces Trusted Types for script, so the Worker constructor refuses a plain string. The URL is minted through the page boot policy. The helper is supplied through the registration inject face by the main bundle rather than imported by the lazy chunk, because the client module loader cannot answer a synchronous sibling-chunk request and the import made both previews fail to load. No upstream export is removed or renamed."
+    },
+    {
+      "path": "scripts/package-dependency-policy.ts",
+      "class": "delorun-feature",
+      "feature": "release-tooling",
+      "reason": "The host-dependency policy classifies peerAdmission as a safe export: it is a pure factory over the caller own accessor and holds no module state, so a duplicate copy decides exactly as the installed one does. Reviewed by the owner (A704), which is what the policy human-review rule requires for every addition."
     }
   ],
   "retired": []

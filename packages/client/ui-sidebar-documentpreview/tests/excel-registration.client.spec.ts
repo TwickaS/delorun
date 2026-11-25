@@ -34,7 +34,9 @@ it('registers complete binary reads and removes the slot and locale on disposal'
     const options = register.mock.calls[0]![0] as { inject: () => unknown }
     expect(options).toMatchObject({ locale: 'sidebarExcel' })
     expect(options.inject).toBeTypeOf('function')
-    expect(options.inject()).toEqual({ limits })
+    // The main bundle supplies the Worker-URL helper through the inject face, so the lazy chunk
+    // carries no sibling-chunk import, which the client module loader cannot answer.
+    expect(options.inject()).toEqual({ limits, workerScriptUrl: expect.any(Function) as never })
   } finally { await fiber.dispose() }
   expect(registry.getSnapshot()).toEqual([])
   expect(removeLocale).toHaveBeenCalledOnce()

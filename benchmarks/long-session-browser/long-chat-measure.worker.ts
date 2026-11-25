@@ -4,7 +4,7 @@ import { mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promise
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
-import SessionStore, { SessionId, SessionLogOffset, SessionPreparation } from '@deepseek-ai/dsh-session'
+import SessionStore, { SessionId, SessionLogOffset, SessionPreparation, type SessionEvent } from '@deepseek-ai/dsh-session'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
 import { agentPresetProjectionDefinition } from '@deepseek-ai/dsh-agent-preset-registry'
 import * as JsonlSessionPersistence from '@deepseek-ai/dsh-session-persistence-jsonl'
@@ -77,7 +77,7 @@ async function installProjectionSet(ctx: Context, storageRoot: string): Promise<
 
 /** Write the fixture through the production write path into a fresh root. */
 async function seed(root: string): Promise<{ readonly compressedBytes: number; readonly logicalBytes: number; readonly events: number; readonly batches: number }> {
-  const { header, batches, events } = longChatBatches()
+  const { header, batches, events } = longChatBatches() as { readonly header: string, readonly batches: readonly (readonly SessionEvent[])[], readonly events: number }
   const logicalBytes = Buffer.byteLength(header, 'utf8')
     + batches.reduce((total, batch) => total + batch.reduce((sum: number, event) => sum + Buffer.byteLength(JSON.stringify(event), 'utf8') + 1, 0), 0)
   const ctx = new Context()
@@ -117,7 +117,10 @@ async function coldHost(root: string): Promise<{ ctx: Context; history: WebContr
 }
 
 /** Time each production phase in order, cold. */
-async function measurePhases(root: string): Promise<Record<string, number>> {
+/** One measured phase: a number, or the path or error text that explains it. */
+type MeasuredRecord = Record<string, number | string | boolean>
+
+async function measurePhases(root: string): Promise<MeasuredRecord> {
   const { ctx } = await coldHost(root)
   // Attribute the open: raw file read, frame decompression, then JSONL parse.
   const logPath = await findLogPath(root)
@@ -151,7 +154,7 @@ async function measurePhases(root: string): Promise<Record<string, number>> {
   const readMs = performance.now() - started
   started = performance.now()
   const preparation = SessionPreparation.create(ctx.sessions.prepare(SessionId(SESSION_ID), {
-    seed: read.events,
+    seed: [...read.events],
     meta: structuredClone(handle.header),
     inheritedEventCount: handle.inheritedEventCount,
     eventState: read.eventState,
@@ -176,7 +179,7 @@ async function measurePhases(root: string): Promise<Record<string, number>> {
 }
 
 /** Time the cold end-to-end path until the first history snapshot arrives. */
-async function measureFirstHistory(root: string): Promise<Record<string, number>> {
+async function measureFirstHistory(root: string): Promise<MeasuredRecord> {
   const { ctx, history } = await coldHost(root)
   const started = performance.now()
   const abort = new AbortController()
@@ -193,7 +196,7 @@ async function measureFirstHistory(root: string): Promise<Record<string, number>
 }
 
 /** Open the chat live and dispose it, so the projection cache writes its row. */
-async function primeCache(root: string): Promise<Record<string, number>> {
+async function primeCache(root: string): Promise<MeasuredRecord> {
   const { ctx } = await coldHost(root)
   const started = performance.now()
   // Enter the prepared Session so it is live, then detach it: detach is the
@@ -224,7 +227,7 @@ async function primeCache(root: string): Promise<Record<string, number>> {
 }
 
 /** Time the first-history path twice: cold, then with the projection cache warm. */
-async function measureReopen(root: string): Promise<Record<string, number>> {
+async function measureReopen(root: string): Promise<MeasuredRecord> {
   const { ctx, history } = await coldHost(root)
   const page = async (): Promise<number> => {
     const started = performance.now()

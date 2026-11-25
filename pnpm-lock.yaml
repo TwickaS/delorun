@@ -10459,6 +10459,9 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: link:../../../vendor/schemastery
         version: link:../../../vendor/schemastery
+      '@delorun/brand':
+        specifier: workspace:*
+        version: link:../../../delorun/packages/brand
     devDependencies:
       '@deepseek-ai/cordis':
         specifier: workspace:~

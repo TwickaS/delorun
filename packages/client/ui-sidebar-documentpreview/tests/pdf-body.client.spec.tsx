@@ -96,7 +96,7 @@ function harness() {
       useStore, actions: instance.actions, retainTab: vi.fn(), t: makeTranslate(en),
     } as unknown as PdfBodyProps
     return <PdfBody {...props} loading={<LoadingIndicator label={en.loading} />} scrollportRef={scrollportRef}
-      ZoomViewport={ZoomViewport} zoomSurfaceClass={zoomSurfaceClass} />
+      ZoomViewport={ZoomViewport} zoomSurfaceClass={zoomSurfaceClass} workerScriptUrl={(url: string) => url} />
   }
   return { instance, controller, tabId, scrollportRef, View }
 }

@@ -1,6 +1,6 @@
 /** PDF page presentation; binary content and tab information come from the document owner. */
 import { useCallback, useEffect, useRef, useState, type ComponentType, type CSSProperties, type ReactNode } from 'react'
-import { Button } from '@deepseek-ai/dsh-client-ui-primitives'
+import { Button } from '@delorun/brand'
 import type { PropsLocale, PropsStore } from '@deepseek-ai/dsh-client-ui-slots'
 import type { TabId } from '@deepseek-ai/dsh-client-ui-dockkit'
 import type { DocumentPreviewProps } from '../document/contract.ts'
@@ -26,6 +26,12 @@ export interface PdfBodyInjected {
   readonly ZoomViewport: ComponentType<ZoomViewportProps>
   /** Main-bundle class implementing fit-width and fixed-size surfaces. */
   readonly zoomSurfaceClass: string
+  /**
+   * Main-bundle Worker-URL helper, so the lazy PDF chunk imports no sibling chunk.
+   * @param url - the `blob:` URL this page created for its Worker source.
+   * @returns the URL the `Worker` constructor accepts.
+   */
+  readonly workerScriptUrl: (url: string) => string
 }
 
 /** Standard document props plus the PDF entry's locale, viewing store, and lifetime callback. */
@@ -50,7 +56,7 @@ export function PdfBody(props: PdfBodyProps & { readonly loading: ReactNode }): 
   const [attempt, setAttempt] = useState(0)
   const [pageWidth, setPageWidth] = useState<number>()
   const [renderZoom, setRenderZoom] = useState(1)
-  const { retainTab, actions, t, ZoomViewport, zoomSurfaceClass } = props
+  const { retainTab, actions, t, ZoomViewport, zoomSurfaceClass, workerScriptUrl } = props
   const preference = view.zoom ?? FIT_WIDTH
   const labels: ZoomLabels = {
     controls: t('zoomControls'), menu: t('zoomMenu'), out: t('zoomOut'), into: t('zoomIn'),
@@ -71,7 +77,7 @@ export function PdfBody(props: PdfBodyProps & { readonly loading: ReactNode }): 
     setLoad(undefined)
     const session = openPdf(data, signal, (error) => {
       if (!signal.aborted) setLoad({ kind: 'failed', data, error })
-    })
+    }, workerScriptUrl)
     void session.document.then(
       (document) => { if (!signal.aborted) setLoad({ kind: 'loaded', data, document }) },
       (error: unknown) => { if (!signal.aborted) setLoad({ kind: 'failed', data, error }) },

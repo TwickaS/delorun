@@ -11,6 +11,16 @@ export interface ExcelLimits {
   timeoutMs: number
 }
 
+/** Main-bundle values the lazy spreadsheet chunk receives, so it imports no sibling chunk. */
+export interface ExcelBodyInjected {
+  /**
+   * Mint the Worker URL through the page's Trusted Types policy.
+   * @param url - the `blob:` URL this page created for its Worker source.
+   * @returns the URL the `Worker` constructor accepts.
+   */
+  readonly workerScriptUrl: (url: string) => string
+}
+
 /** Content categories reported in stable order when XLSX preview omits them. */
 export const EXCEL_UNSUPPORTED_FEATURES = ['charts', 'images', 'shapes', 'conditionalFormatting'] as const
 
