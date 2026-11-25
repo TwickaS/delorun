@@ -29,7 +29,7 @@ const answers = (extra: object = {}) => JSON.stringify({ schemaVersion: 2, reach
 /** The configuration as plain values: each volatile field read. */
 function plain(value: object | undefined): OnboardingSettings {
   const config = Config(value)
-  return { done: config.done.get(), step: config.step.get(), plugins: [...config.plugins.get()], optionalRows: [...config.optionalRows.get()], pausedStart: config.pausedStart.get(), addWaitSeconds: config.addWaitSeconds.get(), browser: config.browser.get(), browserPack: config.browserPack.get() }
+  return { done: config.done.get(), step: config.step.get(), plugins: [...config.plugins.get()], optionalRows: [...config.optionalRows.get()], pausedStart: config.pausedStart.get(), addWaitSeconds: config.addWaitSeconds.get(), browser: config.browser.get(), browserPack: config.browserPack.get(), dismissedSteps: [...config.dismissedSteps.get()] }
 }
 
 describe('the configuration', () => {
@@ -41,9 +41,17 @@ describe('the configuration', () => {
     expect(() => plain({ browser: 'maybe' })).toThrow()
   })
 
+  // A dismissal names the steps it covered, so it can be lifted when a step the person has not dismissed arrives.
+  it('keeps the dismissed steps empty until the person dismisses the entry, and accepts only step ids', () => {
+    expect(plain({}).dismissedSteps).toEqual([])
+    expect(plain({ dismissedSteps: ['pin', 'reach'] }).dismissedSteps).toEqual(['pin', 'reach'])
+    expect(() => plain({ dismissedSteps: ['Not A Step'] })).toThrow()
+    expect(() => plain({ dismissedSteps: ['pin', 'pin', 'reach', 'approve'] })).toThrow()
+  })
+
   it('names the row, defaults to a profile that has not started and offers no packages', () => {
     expect(ONBOARDING_ROW_ID).toBe('delorun-onboarding')
-    expect(DEFAULT_SETTINGS).toEqual({ done: false, step: '', plugins: [], optionalRows: [], pausedStart: '', addWaitSeconds: 60, browser: '', browserPack: '' })
+    expect(DEFAULT_SETTINGS).toEqual({ done: false, step: '', plugins: [], optionalRows: [], pausedStart: '', addWaitSeconds: 60, browser: '', browserPack: '', dismissedSteps: [] })
     expect(plain(undefined)).toEqual(DEFAULT_SETTINGS)
   })
 
@@ -73,7 +81,7 @@ describe('the configuration', () => {
 
   it('accepts scoped and plain package names', () => {
     expect(plain({ plugins: ['@scope/plugin-name', 'plain.name'], step: 'thinking.reader', done: true, addWaitSeconds: 60 }))
-      .toEqual({ plugins: ['@scope/plugin-name', 'plain.name'], optionalRows: [], pausedStart: '', step: 'thinking.reader', done: true, addWaitSeconds: 60, browser: '', browserPack: '' })
+      .toEqual({ plugins: ['@scope/plugin-name', 'plain.name'], optionalRows: [], pausedStart: '', step: 'thinking.reader', done: true, addWaitSeconds: 60, browser: '', browserPack: '', dismissedSteps: [] })
   })
 })
 
