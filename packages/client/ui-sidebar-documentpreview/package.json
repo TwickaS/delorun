@@ -102,6 +102,7 @@
     "src"
   ],
   "dependencies": {
-    "@deepseek-ai/schemastery": "workspace:~"
+    "@deepseek-ai/schemastery": "workspace:~",
+    "@delorun/brand": "workspace:*"
   }
 }
