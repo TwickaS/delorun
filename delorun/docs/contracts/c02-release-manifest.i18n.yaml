@@ -28,7 +28,7 @@
   zh: 3e62ee4122748c66
 /c2-release-manifest-and-signature/root-metadata:
   en: 1b0d5e728c7f0ba3
-  zh: 1db9ebfd6b4b1676
+  zh: f27af0de7ce979f2
 /c2-release-manifest-and-signature/timestamp-metadata:
   en: fcc74d28d68ce6e3
   zh: fea8e84698a80e6a
@@ -49,10 +49,10 @@
   zh: c4e366c00a7a9112
 /c2-release-manifest-and-signature/key-rotation:
   en: 8024d115c5a94383
-  zh: c1be981de7179247
+  zh: 575ea69a500e7e1f
 /c2-release-manifest-and-signature/rebuild-before-signing:
   en: e757d6f978aa99aa
-  zh: ad4558673315ea6c
+  zh: da7eb2bfb2ee21a9
 /c2-release-manifest-and-signature/dependency-advisory-check:
   en: 77a34af58b6f0eff
   zh: a608438665d86d2b
@@ -79,7 +79,7 @@
   zh: 8579be6852ef8bcf
 /c2-release-manifest-and-signature/security/denial-tests:
   en: c5e99b6acb9a629d
-  zh: 503ccc58137fa222
+  zh: c8a0a12438d6ac18
 /c2-release-manifest-and-signature/security/what-this-does-not-prove:
   en: 6e87204f048d03d1
   zh: ad527b41af729604
