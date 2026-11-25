@@ -434,11 +434,19 @@
 }
 
 .folderName {
+  /* One line, cut with an ellipsis: a long name must not wrap to one letter per line and stretch every row in its
+     grid line. The full path is the row's title. */
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .folderPath {
+  /* The path yields to the name: capped at a share of the row, it is cut with an ellipsis before the name is squeezed
+     to a letter or two on a phone. */
+  flex: 0 1 auto;
+  max-width: 45%;
   margin-inline-start: auto;
   min-width: 0;
   overflow: hidden;

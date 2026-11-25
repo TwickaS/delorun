@@ -1,5 +1,6 @@
-/* Placement only (the attribute selector outranks the alert's own width): the banner sits above the message box, inset like the box itself. The look is the shared alert's. */
+/* Placement only (the attribute selector outranks the alert's own width): the banner sits above the message box, inset like the box itself. The look is the shared alert's, and the corner is the composer card's own radius, so the pair reads as one surface (A630, #89). */
 .banner[data-variant] {
   width: auto;
   margin: 0 var(--delorun-space-6);
+  border-radius: var(--dsw-radius-panel);
 }
