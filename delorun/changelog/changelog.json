@@ -333,6 +333,11 @@
     },
     {
       "area": "Install and update",
+      "section": "Fixed",
+      "text": "Building a release on a machine whose Docker engine is rootless now compiles the native addon as the container's own root user, which owns the mounted source, instead of as the caller's user id, which the rootless engine cannot write with. A rootful engine builds exactly as before."
+    },
+    {
+      "area": "Install and update",
       "section": "Security",
       "text": "Starting an installed runtime does not trust a release root merely because a file under `~/.delorun/trust/` names a newer version: the launcher keeps the root chain the install walked, checks that it leads from a root the launcher carries, and otherwise stops and offers a reinstall. It starts a runtime only when the release root the home stored is one the launcher ships."
     },
@@ -608,6 +613,21 @@
     },
     {
       "area": "Setup",
+      "section": "Added",
+      "text": "`delorun setup` can make Delorun start by itself when you log in, through a systemd user unit, so the studio is there without a terminal. It sits beside the question about keeping Delorun running after the terminal closes, and it starts on No. The choice text says whether Delorun also starts when the machine boots with nobody logged in, which needs linger and which this computer may refuse. `delorun setup autostart` changes the answer later, and answering No removes the unit."
+    },
+    {
+      "area": "Setup",
+      "section": "Added",
+      "text": "`delorun stop` keeps Delorun stopped: the unit does not restart a home process you stopped, so it comes back when you start it again or the machine restarts."
+    },
+    {
+      "area": "Setup",
+      "section": "Added",
+      "text": "`delorun status` shows whether Delorun starts at login, and whether it also starts at boot."
+    },
+    {
+      "area": "Setup",
       "section": "Changed",
       "text": "Delorun's package scope, home folder and environment variables are named Delorun: `@delorun/…`, `~/.delorun` and `DELORUN_*`."
     },
@@ -785,6 +805,21 @@
       "area": "Setup",
       "section": "Fixed",
       "text": "Setup's privacy note and release-check question name releases.delorun.com and GitHub for the release check when you ran Delorun from npm, instead of describing it as a launcher built for another release channel."
+    },
+    {
+      "area": "Setup",
+      "section": "Fixed",
+      "text": "The first-run guide's Welcome step says what it does: it asks for the language, and the next step connects a model. It used to promise both on one screen, where the model had no field."
+    },
+    {
+      "area": "Setup",
+      "section": "Fixed",
+      "text": "`delorun setup`'s closing steps name the first-run guide's Models step as the place to add a model key, instead of a \"welcome screen\" that has no key field."
+    },
+    {
+      "area": "Setup",
+      "section": "Fixed",
+      "text": "A start on a computer with no browser prints one line, `delorun open --print` and its link, instead of naming `delorun open` and then refusing it on the next line."
     },
     {
       "area": "Setup",
@@ -1249,6 +1284,11 @@
     {
       "area": "Studio",
       "section": "Added",
+      "text": "A plugin can put its own list beside your chats instead of replacing them. The sidebar has a section seat above the chat list, so a plugin that offers its own tree — a project list, a saved-search list — appears next to your chats, search and shelves rather than in place of them. A plugin that tries to take over the whole browsing region is refused, and the refusal names the section seat to use instead."
+    },
+    {
+      "area": "Studio",
+      "section": "Added",
       "text": "The Plugins screen's Delorun studio card now lists the studio plugins a person turns on — the cost meter and the Thinking tab — with their own switches, instead of leaving them only under Components on the bundle's own page. A switch writes through the plugin manager, so the profile records the choice and it survives a restart."
     },
     {
@@ -1544,7 +1584,17 @@
     {
       "area": "Studio",
       "section": "Changed",
+      "text": "The agents list is denser and easier to scan. Each agent sits on one line, the pin is a muted button that fills when pinned, and a control bar at the top carries the pane limit, Unpin all and the pane's own settings. The layout picker and the pinned-count line left the pane body for those settings. Past eight agents the finished ones fold behind one control that states how many are behind it, so a long list stays readable while every agent stays reachable."
+    },
+    {
+      "area": "Studio",
+      "section": "Changed",
       "text": "The consent and safety dialogs draw Delorun's own buttons and dialogs: the full-access consent, the MCP server review, the pairing notice, the device list, the trust panel and the permissions section. Every button gains the pressed shrink and the focus ring, and every dialog gains the action row and the warning tone."
+    },
+    {
+      "area": "Studio",
+      "section": "Changed",
+      "text": "Settings, General, \"How Delorun runs\" shows a copy button beside each row's control instead of a bare monospace line under it. The button copies the terminal command that makes the same change, and its tooltip names that command and what pressing it does, such as \"Copy the terminal command: delorun setup prompts\". A keyboard reaches it, and the row's layout does not move."
     },
     {
       "area": "Studio",
@@ -1674,6 +1724,26 @@
     {
       "area": "Studio",
       "section": "Fixed",
+      "text": "The spreadsheet and PDF previews open again. A change that gave both a shared helper made each pane load it as a separate file, and the studio cannot fetch one file from inside another, so neither pane opened. The shared helper now arrives with the pane instead, so each opens on its own."
+    },
+    {
+      "area": "Studio",
+      "section": "Fixed",
+      "text": "The \"Finish setup\" line at the sidebar's foot pads its text by the sidebar's own inset, so the label no longer touches the bar's edges, and it carries a × that dismisses it. The dismissal is kept with the guide's progress, so it survives a reload, and it lasts only until a step the person has not dismissed arrives."
+    },
+    {
+      "area": "Studio",
+      "section": "Fixed",
+      "text": "In a pinned PWA on iOS the studio's surface now reaches the physical top and bottom edges. The shell was sized to `visualViewport.height`, which on iOS stops at the status bar and the home indicator; it now takes the screen, and follows the visual viewport only while the on-screen keyboard shortens it, so the composer still stays above the keyboard."
+    },
+    {
+      "area": "Studio",
+      "section": "Fixed",
+      "text": "The \"Add a model key to start chatting\" line above the message box now has the message box's own corner radius, so the two read as one surface rather than two different components."
+    },
+    {
+      "area": "Studio",
+      "section": "Fixed",
       "text": "Closing Multiview with its button now keeps it closed. A chat that hands work to a new agent no longer reopens Multiview after you have closed it; the new agent is still pinned, and the icon shows its count and its amber dot. Opening Multiview again, from the icon, the agents list or the keyboard command, lets the next hand-off open it as before. The setting that opens Multiview on every hand-off still turns that off entirely, and turning it on no longer overrides a close you made."
     },
     {
@@ -1699,12 +1769,27 @@
     {
       "area": "Studio",
       "section": "Fixed",
+      "text": "A plugin switched off in Plugins switches back on. A third-party plugin whose bundle only adds a setting to a row Delorun protects, as `dsh-unlag` adds `base` to the reload row, switched off without complaint and was then refused as `management-required` each time it was switched on, although Plugins showed it as not protected. Both directions now judge the same thing: a change may add a setting to a protected row and may not disable the row, replace it, drop it, give its id to another row, or change or remove a setting the profile ships for it."
+    },
+    {
+      "area": "Studio",
+      "section": "Fixed",
       "text": "A filled button's label is readable on every accent: the label follows the accent's own ink, so Cobalt, Moss and Mono in light no longer draw dark text on a dark fill. Peach keeps the dark label it had."
     },
     {
       "area": "Studio",
       "section": "Fixed",
+      "text": "A chat with several panes open stays smooth while answers stream in. Following the newest message used to measure the transcript's scrollport three times for every streamed piece of text, and each measurement made the browser recalculate the page's layout before it could answer, so six streaming panes cost about three times the recalculation of a closed layout. It measures once and passes that down, so the work is a third of what it was."
+    },
+    {
+      "area": "Studio",
+      "section": "Fixed",
       "text": "The sidebar's left edge is one line from top to bottom: the search field, the chat titles, the shelf labels, the folder names and the \"More\" button all start at the same inset, and the header's buttons, the panel toggle and the foot's buttons share one right edge and one control size. The working indicator is a small ring that turns while a chat works, instead of a frozen arc."
+    },
+    {
+      "area": "Studio",
+      "section": "Fixed",
+      "text": "A long folder name in New workspace's folder search stays on one line and is cut with an ellipsis, and every row keeps the same compact height whatever the names are. The full path is the row's tooltip."
     },
     {
       "area": "Studio",
@@ -1948,16 +2033,6 @@
     },
     {
       "area": "Safety and privacy",
-      "section": "Added",
-      "text": "The shield at the foot of the sidebar opens a Security panel: five rows say what the agent can do, whether you can undo a change, who can reach the studio, what you added and whether this copy of Delorun is genuine, each green, amber or red with the reason, whether it is your choice, and one button that fixes it. When everything is green it shows one line, \"Protected as Delorun intends\"; Advanced breaks every row down and is remembered."
-    },
-    {
-      "area": "Safety and privacy",
-      "section": "Added",
-      "text": "Shortly after Delorun starts, once no chat has been busy for a moment, it hashes every installed file through the launcher at low priority and stops if a chat starts working, so this copy reads \"Verified\" without pressing Check now. It reads plugins and your changes again after a plugin is added, updated, switched or removed, and each check shows how long ago it ran."
-    },
-    {
-      "area": "Safety and privacy",
       "section": "Changed",
       "text": "Commands the model runs can read, and run scripts in, the approved copies of your profile's plugins, so a plugin that hands the agent the path of its own tool works. They still cannot write those copies, and they cannot read a plugin change that is waiting for your review, another profile's copies or the rest of Delorun's home."
     },
@@ -2044,7 +2119,17 @@
     {
       "area": "Safety and privacy",
       "section": "Changed",
+      "text": "The consent before a delegated Claude Code or Codex run now says the agent reads the workspace's own project settings, including any MCP servers the project declares, under its own rules rather than Delorun's MCP consent. What the agent can read does not change; the consent states it."
+    },
+    {
+      "area": "Safety and privacy",
+      "section": "Changed",
       "text": "Your phone stops asking for a PIN or Face ID for ordinary work. When a request comes from a device on your own Tailscale network, Delorun asks Tailscale who that device is and treats it as your own computer, so changing settings, managing plugins, opening a folder picker and the rest of the everyday actions happen without a prompt. A terminal still asks, because a shell is what could reach the things that decide who can get in, and so does allowing full access for a chat. Approving a device, adding a passkey, the PIN, turning remote access on or off and the other actions that decide who can reach your studio stay at your computer. If Tailscale cannot say who the device is — it is not running, it does not know the address, or the device has left your network — Delorun asks for the PIN or Face ID as it does today rather than assuming."
+    },
+    {
+      "area": "Safety and privacy",
+      "section": "Changed",
+      "text": "The Security panel answers at a glance: the basic view shows the headline and the five rows, each with its status and one sentence, and the button that fixes a row stays beside it, so the whole answer fits without scrolling on a phone or a desktop. What a row means, why it has its colour, whether it is your choice, when each check last ran, Check now and the lists behind each row are in Advanced, which may scroll."
     },
     {
       "area": "Safety and privacy",
@@ -3063,6 +3148,16 @@
     },
     {
       "area": "Commands",
+      "section": "Added",
+      "text": "The machine-wide queue now holds new grants only while the machine has been saturated for a minute, read from the kernel's pressure stall information: cpu, memory or disk over 90% of the last 60 s. The machine is meant to be used, so a busy merge tier never trips it; a spike of a few seconds never trips it either, and holders are never interrupted. A machine whose kernel reports no pressure is never held. `run-checks --queue` shows the alarm and its figures."
+    },
+    {
+      "area": "Commands",
+      "section": "Added",
+      "text": "The queue also reports a slot count set far above the machine's CPUs, such as a figure left over from a larger machine, rather than silently overfilling the machine with it."
+    },
+    {
+      "area": "Commands",
       "section": "Changed",
       "text": "The messages `delorun setup` prints, the studio's starter prompts and the chat refusals use British English, such as \"catalogue\", \"summarise\" and \"organise\", and a check keeps American spellings out of Delorun's own text."
     },
@@ -3204,6 +3299,26 @@
     {
       "area": "Commands",
       "section": "Fixed",
+      "text": "A check run now asks the machine-wide queue for the slots its own memory ceiling can keep busy, rather than the sum of every check's CPUs. A merge-tier push of 96 checks used to reserve all 64 slots while using about 21 CPUs of them, so every other lane waited behind a reservation the run could not spend; it now asks for 21 and the lanes start beside it."
+    },
+    {
+      "area": "Commands",
+      "section": "Fixed",
+      "text": "A release cut after a signing-key rotation no longer stops part-way. The cut now accepts the whole chain of trust roots, oldest first, so it passes both the root a signer's state already trusts and the new one; only the newest is used to probe the release log."
+    },
+    {
+      "area": "Commands",
+      "section": "Fixed",
+      "text": "A publish no longer fails when the storage service drops a connection under load. Each store call is tried up to three times with a growing pause, and an answer the bucket actually gives is never retried."
+    },
+    {
+      "area": "Commands",
+      "section": "Fixed",
+      "text": "**Fixed:** The documentation and catalogue gates pass again. The persistence catalogue, the event producer and consumer lists, the capability seams and the Cordis API catalogue are regenerated from the code they describe, and the home-patch service is classified for the package-dependency gate."
+    },
+    {
+      "area": "Commands",
+      "section": "Fixed",
       "text": "The check that builds the product website reports a checkout without the site's source pictures as a limit of that machine rather than a failure of the change. The pictures are real screenshots of the studio and are not in the repository, so the check now declines with a message naming `SITE_PICTURES_DIR` and the folder to point it at, instead of failing the build with the same message as an error."
     },
     {
@@ -3273,11 +3388,49 @@
       "date": "2026-11-25",
       "preview": true,
       "headlines": [
-        "Your phone stops asking for a PIN for ordinary work, because a device on your own Tailscale network is treated as your computer.",
-        "The studio's own plugins, cost tracking and the thinking sidebar, are on the Plugins screen with a switch each.",
-        "The machine queue reserves what a check declares, so a build no longer blocks the runs beside it."
+        "A device on your own Tailscale network is treated as your computer, so your phone stops asking for a PIN for ordinary work.",
+        "Delorun now starts by itself when you log in, if you ask it to during setup.",
+        "The spreadsheet and PDF previews open again, and a plugin switched off switches back on."
       ],
       "areas": [
+        {
+          "area": "Install and update",
+          "items": [
+            {
+              "section": "Fixed",
+              "text": "Building a release on a machine whose Docker engine is rootless now compiles the native addon as the container's own root user, which owns the mounted source, instead of as the caller's user id, which the rootless engine cannot write with. A rootful engine builds exactly as before."
+            }
+          ]
+        },
+        {
+          "area": "Setup",
+          "items": [
+            {
+              "section": "Added",
+              "text": "`delorun setup` can make Delorun start by itself when you log in, through a systemd user unit, so the studio is there without a terminal. It sits beside the question about keeping Delorun running after the terminal closes, and it starts on No. The choice text says whether Delorun also starts when the machine boots with nobody logged in, which needs linger and which this computer may refuse. `delorun setup autostart` changes the answer later, and answering No removes the unit."
+            },
+            {
+              "section": "Added",
+              "text": "`delorun stop` keeps Delorun stopped: the unit does not restart a home process you stopped, so it comes back when you start it again or the machine restarts."
+            },
+            {
+              "section": "Added",
+              "text": "`delorun status` shows whether Delorun starts at login, and whether it also starts at boot."
+            },
+            {
+              "section": "Fixed",
+              "text": "The first-run guide's Welcome step says what it does: it asks for the language, and the next step connects a model. It used to promise both on one screen, where the model had no field."
+            },
+            {
+              "section": "Fixed",
+              "text": "`delorun setup`'s closing steps name the first-run guide's Models step as the place to add a model key, instead of a \"welcome screen\" that has no key field."
+            },
+            {
+              "section": "Fixed",
+              "text": "A start on a computer with no browser prints one line, `delorun open --print` and its link, instead of naming `delorun open` and then refusing it on the next line."
+            }
+          ]
+        },
         {
           "area": "Studio",
           "items": [
@@ -3291,11 +3444,23 @@
             },
             {
               "section": "Added",
+              "text": "A plugin can put its own list beside your chats instead of replacing them. The sidebar has a section seat above the chat list, so a plugin that offers its own tree — a project list, a saved-search list — appears next to your chats, search and shelves rather than in place of them. A plugin that tries to take over the whole browsing region is refused, and the refusal names the section seat to use instead."
+            },
+            {
+              "section": "Added",
               "text": "The Plugins screen's Delorun studio card now lists the studio plugins a person turns on — the cost meter and the Thinking tab — with their own switches, instead of leaving them only under Components on the bundle's own page. A switch writes through the plugin manager, so the profile records the choice and it survives a restart."
             },
             {
               "section": "Changed",
+              "text": "The agents list is denser and easier to scan. Each agent sits on one line, the pin is a muted button that fills when pinned, and a control bar at the top carries the pane limit, Unpin all and the pane's own settings. The layout picker and the pinned-count line left the pane body for those settings. Past eight agents the finished ones fold behind one control that states how many are behind it, so a long list stays readable while every agent stays reachable."
+            },
+            {
+              "section": "Changed",
               "text": "The consent and safety dialogs draw Delorun's own buttons and dialogs: the full-access consent, the MCP server review, the pairing notice, the device list, the trust panel and the permissions section. Every button gains the pressed shrink and the focus ring, and every dialog gains the action row and the warning tone."
+            },
+            {
+              "section": "Changed",
+              "text": "Settings, General, \"How Delorun runs\" shows a copy button beside each row's control instead of a bare monospace line under it. The button copies the terminal command that makes the same change, and its tooltip names that command and what pressing it does, such as \"Copy the terminal command: delorun setup prompts\". A keyboard reaches it, and the row's layout does not move."
             },
             {
               "section": "Changed",
@@ -3308,6 +3473,22 @@
             {
               "section": "Fixed",
               "text": "Attaching a file or image, and previewing a spreadsheet, a PDF or an Office document, work over a reach listener again. Each of them runs its work in a Worker built from a Blob, and the reach listener's Trusted Types policy admitted only plugin bundle paths, so the Worker constructor threw. The page now creates a `delorun-blob-worker` policy that admits a `blob:` URL whose origin is the page's own, and the four features mint their Worker URL through it. The policy still refuses another origin's blob URL, a `data:` URL and a plain string."
+            },
+            {
+              "section": "Fixed",
+              "text": "The spreadsheet and PDF previews open again. A change that gave both a shared helper made each pane load it as a separate file, and the studio cannot fetch one file from inside another, so neither pane opened. The shared helper now arrives with the pane instead, so each opens on its own."
+            },
+            {
+              "section": "Fixed",
+              "text": "The \"Finish setup\" line at the sidebar's foot pads its text by the sidebar's own inset, so the label no longer touches the bar's edges, and it carries a × that dismisses it. The dismissal is kept with the guide's progress, so it survives a reload, and it lasts only until a step the person has not dismissed arrives."
+            },
+            {
+              "section": "Fixed",
+              "text": "In a pinned PWA on iOS the studio's surface now reaches the physical top and bottom edges. The shell was sized to `visualViewport.height`, which on iOS stops at the status bar and the home indicator; it now takes the screen, and follows the visual viewport only while the on-screen keyboard shortens it, so the composer still stays above the keyboard."
+            },
+            {
+              "section": "Fixed",
+              "text": "The \"Add a model key to start chatting\" line above the message box now has the message box's own corner radius, so the two read as one surface rather than two different components."
             },
             {
               "section": "Fixed",
@@ -3331,11 +3512,23 @@
             },
             {
               "section": "Fixed",
+              "text": "A plugin switched off in Plugins switches back on. A third-party plugin whose bundle only adds a setting to a row Delorun protects, as `dsh-unlag` adds `base` to the reload row, switched off without complaint and was then refused as `management-required` each time it was switched on, although Plugins showed it as not protected. Both directions now judge the same thing: a change may add a setting to a protected row and may not disable the row, replace it, drop it, give its id to another row, or change or remove a setting the profile ships for it."
+            },
+            {
+              "section": "Fixed",
               "text": "A filled button's label is readable on every accent: the label follows the accent's own ink, so Cobalt, Moss and Mono in light no longer draw dark text on a dark fill. Peach keeps the dark label it had."
             },
             {
               "section": "Fixed",
+              "text": "A chat with several panes open stays smooth while answers stream in. Following the newest message used to measure the transcript's scrollport three times for every streamed piece of text, and each measurement made the browser recalculate the page's layout before it could answer, so six streaming panes cost about three times the recalculation of a closed layout. It measures once and passes that down, so the work is a third of what it was."
+            },
+            {
+              "section": "Fixed",
               "text": "The sidebar's left edge is one line from top to bottom: the search field, the chat titles, the shelf labels, the folder names and the \"More\" button all start at the same inset, and the header's buttons, the panel toggle and the foot's buttons share one right edge and one control size. The working indicator is a small ring that turns while a chat works, instead of a frozen arc."
+            },
+            {
+              "section": "Fixed",
+              "text": "A long folder name in New workspace's folder search stays on one line and is cut with an ellipsis, and every row keeps the same compact height whatever the names are. The full path is the row's tooltip."
             }
           ]
         },
@@ -3344,7 +3537,15 @@
           "items": [
             {
               "section": "Changed",
+              "text": "The consent before a delegated Claude Code or Codex run now says the agent reads the workspace's own project settings, including any MCP servers the project declares, under its own rules rather than Delorun's MCP consent. What the agent can read does not change; the consent states it."
+            },
+            {
+              "section": "Changed",
               "text": "Your phone stops asking for a PIN or Face ID for ordinary work. When a request comes from a device on your own Tailscale network, Delorun asks Tailscale who that device is and treats it as your own computer, so changing settings, managing plugins, opening a folder picker and the rest of the everyday actions happen without a prompt. A terminal still asks, because a shell is what could reach the things that decide who can get in, and so does allowing full access for a chat. Approving a device, adding a passkey, the PIN, turning remote access on or off and the other actions that decide who can reach your studio stay at your computer. If Tailscale cannot say who the device is — it is not running, it does not know the address, or the device has left your network — Delorun asks for the PIN or Face ID as it does today rather than assuming."
+            },
+            {
+              "section": "Changed",
+              "text": "The Security panel answers at a glance: the basic view shows the headline and the five rows, each with its status and one sentence, and the button that fixes a row stays beside it, so the whole answer fits without scrolling on a phone or a desktop. What a row means, why it has its colour, whether it is your choice, when each check last ran, Check now and the lists behind each row are in Advanced, which may scroll."
             },
             {
               "section": "Fixed",
@@ -3377,6 +3578,14 @@
           "area": "Commands",
           "items": [
             {
+              "section": "Added",
+              "text": "The machine-wide queue now holds new grants only while the machine has been saturated for a minute, read from the kernel's pressure stall information: cpu, memory or disk over 90% of the last 60 s. The machine is meant to be used, so a busy merge tier never trips it; a spike of a few seconds never trips it either, and holders are never interrupted. A machine whose kernel reports no pressure is never held. `run-checks --queue` shows the alarm and its figures."
+            },
+            {
+              "section": "Added",
+              "text": "The queue also reports a slot count set far above the machine's CPUs, such as a figure left over from a larger machine, rather than silently overfilling the machine with it."
+            },
+            {
               "section": "Changed",
               "text": "The machine queue reserves what a check declares, not the share of the budget its slots would buy. A check that declares 4 GiB is reserved 4 GiB, where it was reserved 4.6 times that on a 9-slot budget, so the runs waiting behind a build start beside it instead of waiting for memory the build never used. A check that declares its memory per worker keeps scaling with its workers."
             },
@@ -3387,6 +3596,22 @@
             {
               "section": "Changed",
               "text": "A push from a worktree is refused while the shared checkout holds uncommitted changes to tracked files, and no script, hook or workflow may skip a git hook with `--no-verify` or disable Lefthook. Both refusals name what to fix, so a stray write in the shared checkout or a skipped hook stops the push instead of reaching the trunk."
+            },
+            {
+              "section": "Fixed",
+              "text": "A check run now asks the machine-wide queue for the slots its own memory ceiling can keep busy, rather than the sum of every check's CPUs. A merge-tier push of 96 checks used to reserve all 64 slots while using about 21 CPUs of them, so every other lane waited behind a reservation the run could not spend; it now asks for 21 and the lanes start beside it."
+            },
+            {
+              "section": "Fixed",
+              "text": "A release cut after a signing-key rotation no longer stops part-way. The cut now accepts the whole chain of trust roots, oldest first, so it passes both the root a signer's state already trusts and the new one; only the newest is used to probe the release log."
+            },
+            {
+              "section": "Fixed",
+              "text": "A publish no longer fails when the storage service drops a connection under load. Each store call is tried up to three times with a growing pause, and an answer the bucket actually gives is never retried."
+            },
+            {
+              "section": "Fixed",
+              "text": "**Fixed:** The documentation and catalogue gates pass again. The persistence catalogue, the event producer and consumer lists, the capability seams and the Cordis API catalogue are regenerated from the code they describe, and the home-patch service is classified for the package-dependency gate."
             },
             {
               "section": "Fixed",
