@@ -102,9 +102,11 @@ export interface Config {
   detailNpmFileSources?: NpmFileSource[]
   /**
    * Plugin module names the manager protects as it protects `PROTECTED_PLUGINS`, refusing with `management-required`
-   * any change that would disable, reconfigure, replace or drop a row of one of them, or add one, in the composed
-   * profile: a plugin toggle, a bundle selection or installation, an undo or a restore. A bundle with a row of one, or
-   * a package that provides one, can be neither deselected nor removed, and no package that provides one is installed
+   * any change that would take protection away from a row of one of them in the composed profile: disable, replace or
+   * drop the row, change or drop a setting the profile ships for it, or add a row of one. A setting a change adds is
+   * left to it, so a bundle that only configures a protected row can be selected and deselected as usual. The rule
+   * covers a plugin toggle, a bundle selection or installation, an undo and a restore. A bundle with a row of one, or a
+   * package that provides one, can be neither deselected nor removed, and no package that provides one is installed
    * or changed. These names add to `PROTECTED_PLUGINS` and cannot take any away; a refusal that names one of them
    * carries a `diagnostic` listing those names.
    */
@@ -302,6 +304,21 @@ const PACK_ONLY = 'This plugin is a signed plugin pack of this release; add it f
 function packageOf(moduleName: string): string {
   const parts = moduleName.split('/')
   return parts.slice(0, moduleName.startsWith('@') ? 2 : 1).join('/')
+}
+
+/**
+ * Whether a change leaves every setting the profile ships for a row as it was; the change may add settings of its own.
+ * @param shipped - the settings the current composition gives the row.
+ * @param given - the settings the change would give it.
+ * @returns true when each shipped setting survives with the same value.
+ */
+function keepsSettings(shipped: unknown, given: unknown): boolean {
+  // A group's settings are its rows, which only an unchanged list keeps as they were.
+  if (Array.isArray(shipped) || Array.isArray(given)) return isDeepStrictEqual(shipped, given)
+  if (typeof shipped !== 'object' || shipped === null) return shipped === undefined || isDeepStrictEqual(shipped, given)
+  if (typeof given !== 'object' || given === null) return false
+  const kept = new Map(Object.entries(given))
+  return Object.entries(shipped).every(([key, value]) => kept.has(key) && isDeepStrictEqual(kept.get(key), value))
 }
 
 /** Only registry package names are retained before installation resolves its target. */
@@ -1874,9 +1891,10 @@ export class PluginManager extends TypertRemoteService {
   }
 
   /**
-   * Refuse a change whose composed rows differ from the current ones under the id of a protected row: a protected row
-   * dropped, replaced, reconfigured, disabled or enabled, a row of a protected module added, or another row given the
-   * id of one, which the Loader would mount beside or instead of it.
+   * Refuse a change that takes protection away under the id of a protected row: a protected row dropped, replaced,
+   * disabled or given a setting the profile ships changed or dropped, a row of a protected module added, or another row
+   * given the id of one, which the Loader would mount beside or instead of it. A setting the change adds is not such a
+   * change, so a bundle whose patch only configures a protected row is selected, and selected again once deselected.
    * @param before - the composed rows before the change.
    * @param after - the composed rows the change would give.
    * @throws ManagementFailure `management-required` naming the modules of the rows it changes.
@@ -1885,9 +1903,28 @@ export class PluginManager extends TypertRemoteService {
     const ids = new Set([...before, ...after].filter(row => this.protectsRow(row)).map(row => row.id))
     const changed = [...ids].flatMap((id) => {
       const [was, now] = [before.filter(row => row.id === id), after.filter(row => row.id === id)]
-      return isDeepStrictEqual(was, now) ? [] : [...was, ...now].map(row => row.name)
+      return this.keepsProtection(was, now) ? [] : [...was, ...now].map(row => row.name)
     })
     if (changed.length > 0) throw this.protectionFailure(changed)
+  }
+
+  /**
+   * Whether a protected row keeps the protection the current composition gives it: the same module under the same id,
+   * running, with every setting the profile ships for it unchanged. A change may add settings of its own.
+   * @param was - the rows the current composition gives the id; empty for an id a change introduces.
+   * @param now - the rows the change would give the id; empty for one it drops.
+   * @returns true when nothing the profile ships is taken away, duplicated or stopped.
+   */
+  private keepsProtection(was: readonly EntryOptions[], now: readonly EntryOptions[]): boolean {
+    if (was.length !== now.length) return false
+    return was.every((row, index) => {
+      const next = now[index]
+      /* v8 ignore next -- both lists hold the same length, so the index reaches a row */
+      if (next === undefined) return false
+      // An enabled row keeps running whatever the profile's own switch said; any other value must be the one it had.
+      const running = next.disabled === false || isDeepStrictEqual(next.disabled, row.disabled)
+      return running && row.name === next.name && keepsSettings(row.config, next.config)
+    })
   }
 
   /**
