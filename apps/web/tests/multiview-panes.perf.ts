@@ -401,7 +401,9 @@ describe('manual web performance: Multiview panes', () => {
       await page.getByRole('button', { name: `${String(AGENT_COUNT)} subagents` }).click()
       for (const label of AGENT_LABELS) await page.getByRole('button', { name: `Pin ${label} to Multiview` }).click()
       await page.keyboard.press('Escape')
-      await page.getByRole('button', { name: new RegExp(`^Multiview, ${String(AGENT_COUNT)} pinned`) }).waitFor({ timeout: 15_000 })
+      // The toggle's accessible name is "Multiview"; the pinned count is its description, so wait on that.
+      await expect.poll(() => page.getByRole('button', { name: /^Multiview(,|$)/ }).getAttribute('aria-description'), { timeout: 15_000 })
+        .toBe(`${String(AGENT_COUNT)} pinned`)
 
       const region = page.getByRole('region', { name: 'Multiview' })
       const paneIds = [MAIN_ID, ...AGENT_IDS]
