@@ -165,7 +165,8 @@ async function probe(kind: 'own' | 'plain' | 'foreign' | 'data' | 'same-origin-p
     const refusals: string[] = []
     page.on('console', (message) => { if (message.type() === 'error') refusals.push(message.text()) })
     await page.goto(`${origin}${path}`)
-    const result = await page.evaluate(k => (globalThis as { __probe: (kind: string) => Promise<ProbeResult> }).__probe(k), kind)
+    const result = await page.evaluate(k => (globalThis as Partial<{ __probe: (kind: string) => Promise<ProbeResult> }>).__probe?.(k), kind)
+    if (result === undefined) throw new Error('the served page did not install its probe')
     return { ...result, refusals }
   } finally {
     await context.close()
