@@ -8582,7 +8582,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'ProfileReconciliation',
-    declaration: 'export interface ProfileReconciliation {\n    warnings: string[];\n    pending: PendingModule[];\n    restartReason?: \'module-comparison\' | \'package-moved\';\n}',
+    declaration: 'export interface ProfileReconciliation {\n    warnings: string[];\n    pending: PendingModule[];\n    restartReason?: \'module-comparison\' | \'package-moved\' | \'service-replaced\';\n}',
   },
   {
     name: 'ProfileVersion',
@@ -8954,7 +8954,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'RestartReason',
-    declaration: 'export type RestartReason = \'no-hmr\' | \'package-moved\' | \'host-module\' | \'unmanaged-plugin\' | \'module-comparison\';',
+    declaration: 'export type RestartReason = \'no-hmr\' | \'package-moved\' | \'host-module\' | \'unmanaged-plugin\' | \'module-comparison\' | \'service-replaced\';',
   },
   {
     name: 'RestoredSessionOptions',

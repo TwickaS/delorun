@@ -204,6 +204,14 @@ const SERVICE_ROLES: ServiceRole[] = [
     note: 'A distribution provides it; without one nothing is audited. The manager refuses the change until the user accepts the findings, or for good on a refusal.',
   },
   {
+    key: 'profileHomePatch',
+    pkg: 'plugin-manager',
+    title: 'Optional home patch in a profile version',
+    mode: 'seam',
+    consumers: ['plugin-manager'],
+    note: 'A distribution provides it; without one a version covers the profile files alone. The manager mirrors the home patch into the profile before it saves a version and writes it back on a restore.',
+  },
+  {
     key: 'pluginMarket',
     pkg: 'plugin-market',
     title: 'Plugin market index reader',
