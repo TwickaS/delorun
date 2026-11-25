@@ -44,6 +44,9 @@ import { panelGlyphsCss } from './panel-glyphs.ts'
 import { experimentalMoreCss } from './experimental-more.ts'
 import { followOnDemandLabel } from './on-demand-label.ts'
 import { onDemandRowsCss } from './on-demand-rows.ts'
+import { studioRowsCss } from './studio-rows-css.ts'
+import { createStudioRows } from './studio-rows-store.ts'
+import { StudioRows, type StudioRowsInjected } from './StudioRows.tsx'
 import { en as pluginListEn, zh as pluginListZh, type PluginListLocaleKey } from './plugin-list-locales.ts'
 import { markMainLandmark } from './landmark.ts'
 import { COPY, COPY_ZH } from './copy.ts'
@@ -264,7 +267,7 @@ function registerStockEntry(ctx: Context, form: ConfigForm<ThemeSettings>): Regi
  * @returns the registration set, which leaves upstream's look in place again once disposed.
  */
 function registerStudio(ctx: Context, form: ConfigForm<ThemeSettings>, initial: ThemeSettings): Registration {
-  const controller = new ThemeController(ctx.theme, `${fonts}\n${effortBarsCss()}\n${composerFocusCss()}\n${panelGlyphsCss()}\n${experimentalMoreCss()}\n${onDemandRowsCss()}\n${alerts}\n${edgesCss}`, document)
+  const controller = new ThemeController(ctx.theme, `${fonts}\n${effortBarsCss()}\n${composerFocusCss()}\n${panelGlyphsCss()}\n${experimentalMoreCss()}\n${onDemandRowsCss()}\n${studioRowsCss()}\n${alerts}\n${edgesCss}`, document)
   const t = ctx.locale.bind(NS)
   const conversationT = ctx.locale.bind(CONVERSATION.ns)
   const useStockLook = (): Promise<boolean> => form.set('studioAdditions', false)
@@ -281,6 +284,8 @@ function registerStudio(ctx: Context, form: ConfigForm<ThemeSettings>, initial: 
   const rowFace: AppearanceRowInjected = { settings: form, useStockLook }
   const chat: ConversationInjected = { settings: ctx.configForms.get<ChatDisplaySettings>(CHAT_NAMESPACE) }
   const studio: DelorunStudio = { useStockLook }
+  const studioRows = createStudioRows(ctx, text => ctx.locale.resolveText(text))
+  const studioRowsFace = (): StudioRowsInjected => ({ hooks: studioRows.hooks, setEnabled: studioRows.setEnabled })
   const rows: ReadonlyArray<readonly [{ readonly id: string; readonly order: number }, typeof StudioLookRow]> = [
     [STUDIO_ROWS.look, StudioLookRow],
     [STUDIO_ROWS.typeface, TypefaceRow],
@@ -310,6 +315,10 @@ function registerStudio(ctx: Context, form: ConfigForm<ThemeSettings>, initial: 
     ctx.locale.register(PLUGIN_LIST_NS, { en: pluginListEn, zh: pluginListZh }),
     // The on-demand rows state what they are, in the studio's language.
     followOnDemandLabel(document, () => ctx.locale.bind(PLUGIN_LIST_NS)('onDemand'), listener => ctx.on('locale/change', () => { listener() })),
+    // The studio plugins' switches on the bundle's card, read from the Host and written through the plugin manager.
+    ctx.slots.inject('plugins.row.state', () => ctx.slots.register({
+      name: 'plugins.row.state', id: 'delorun-studio-rows', order: 20, locale: PLUGIN_LIST_NS, inject: studioRowsFace,
+    }, StudioRows)),
     // Priority -2 shadows the Delorun bundle's own brand occupants, which register at -1.
     ctx.slots.inject('sidebar.brand.mark', () => ctx.slots.register({ name: 'sidebar.brand.mark', priority: -2 }, SidebarBrandMark)),
     ctx.slots.inject('sidebar.brand.name', () => ctx.slots.register({ name: 'sidebar.brand.name', priority: -2 }, SidebarBrandName)),
