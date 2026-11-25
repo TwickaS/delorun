@@ -4,19 +4,19 @@
 #   pnpm run verify-translation-pairing --write delorun/packages/setup-apply/README.md
 /:
   en: 402ead10f8b65603
-  zh: 402ead10f8b65603
+  zh: cb5d207b05d4601c
 /delorun-setup-apply:
   en: c9cd5a4a52a55b5f
-  zh: 77aca8157803d2dc
+  zh: fe1fa4f459cff560
 /delorun-setup-apply/summary:
   en: 3b9de96b259a10c4
-  zh: 3b9de96b259a10c4
+  zh: 1af1b61db51dfa53
 /delorun-setup-apply/exports:
   en: f0e2dde87befda90
-  zh: f0e2dde87befda90
+  zh: a934a6b010c4c847
 /delorun-setup-apply/limits:
   en: 9d24f0e89e7f8fa5
-  zh: 9d24f0e89e7f8fa5
+  zh: 335b881539dbbca8
 /delorun-setup-apply/development:
   en: 588d58e45059efff
-  zh: 588d58e45059efff
+  zh: c9d632011e8507d9

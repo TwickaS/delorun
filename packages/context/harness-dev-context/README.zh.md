@@ -31,7 +31,7 @@ kind: "package-reference"
 
 两个系统提示词段落说明 checkout 与工作目录不同、「this page」指此 GUI，并给出 GUI 的更新约定。两行运行时上下文给出当前值：本包上方四层目录处的安装根，以及 `webApp.getAdvertisedUrl()` 给出的 Web GUI 公告 URL，与 `DSH_WEB_URL` 和启动 URL 相同。运行时上下文遵循共享的快照规则：值不变不追加内容，值变化时在本步输入之前追加一份快照，而不是改写更早的消息。
 
-The wording shown under Model Experience is Delorun's: it applies while the `systemPrompt` service's `delorunWording` is on (Delorun's C16 switch `model_prompt`). With it off, the paragraphs and runtime-context lines are upstream's — the DeepSeek Harness names and DSH wording — and are sent whether or not the directory is a real checkout.
+Model Experience 下显示的措辞是 Delorun 的：它在 `systemPrompt` 服务的 `delorunWording` 开启时适用（Delorun 的 C16 开关 `model_prompt`）。关闭时，各段落与运行时上下文行都是上游的（DeepSeek Harness 的名称与 DSH 措辞），并且无论该目录是否为真实检出都会发送。
 
 ### 早期版本的会话
 

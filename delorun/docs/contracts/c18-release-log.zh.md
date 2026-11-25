@@ -51,19 +51,19 @@ bundle 格式、其验证与在线检查已构建，并在安装时、启动器�
 
 ## 日志条目
 
-One entry per signed manifest file, submitted by the release's signing command after the targets key signs and before the release is published. The entry is signed by an `active` key the trusted root lists in `logEntryKeys` ([C2](c02-release-manifest.zh.md#root-metadata)): ECDSA P-256 first, with Ed25519ph by the targets key as the listed alternative. A root without the list, such as `1.root.json`, verifies no release.
+每个已签名的 manifest 文件一条条目，由该发布的签名命令在 targets 密钥签署之后、发布发布之前提交。条目由受信任根在 `logEntryKeys` 中列出的 `active` 密钥签署（[C2](c02-release-manifest.zh.md#root-metadata)）：首先是 ECDSA P-256，由 targets 密钥所作的 Ed25519ph 作为所列的替代。没有该列表的根（例如 `1.root.json`）不验证任何发布。
 
 | 条目字段 | 值 |
 | --- | --- |
 | 类型 | `hashedrekord`，API 版本 `0.0.2`（Rekor v2） |
-| Key details | The entry key type: `PKIX_ED25519_PH` or `PKIX_ECDSA_P256_SHA_256` |
-| Digest | The key type's digest of the manifest file's bytes (the whole envelope): SHA-512, algorithm `SHA2_512`, for `PKIX_ED25519_PH`; SHA-256, algorithm `SHA2_256`, for `PKIX_ECDSA_P256_SHA_256` |
-| Signature | Over the manifest file's bytes: Ed25519ph (RFC 8032, empty context) for `PKIX_ED25519_PH`; ECDSA P-256 with SHA-256, DER-encoded, for `PKIX_ECDSA_P256_SHA_256` |
-| Public key | The signing key's DER-encoded PKIX public key |
+| Key details | 条目密钥类型：`PKIX_ED25519_PH` 或 `PKIX_ECDSA_P256_SHA_256` |
+| Digest | 该密钥类型对 manifest 文件字节（整个信封）的摘要：`PKIX_ED25519_PH` 用 SHA-512、算法 `SHA2_512`；`PKIX_ECDSA_P256_SHA_256` 用 SHA-256、算法 `SHA2_256` |
+| Signature | 对 manifest 文件字节：`PKIX_ED25519_PH` 用 Ed25519ph（RFC 8032，空上下文）；`PKIX_ECDSA_P256_SHA_256` 用带 SHA-256 的 ECDSA P-256，DER 编码 |
+| Public key | 签名密钥的 DER 编码 PKIX 公钥 |
 
-The signing command submits these fields as a `hashedRekordRequestV002` to the log's `/api/v2/log/entries`; the log builds the entry body from them, and the log's leaf is the RFC 8785 serialisation of that body. Rekor v2 accepts an Ed25519 key only with Ed25519ph, so the log refuses a pure Ed25519 (`PKIX_ED25519`) entry, and clients refuse one too.
+签名命令把这些字段作为 `hashedRekordRequestV002` 提交到日志的 `/api/v2/log/entries`；日志据此构建条目主体，而日志的叶子是该主体的 RFC 8785 序列化。Rekor v2 只接受带 Ed25519ph 的 Ed25519 密钥，因此日志拒绝纯 Ed25519（`PKIX_ED25519`）条目，客户端也拒绝它。
 
-The signing command tries the root's listed `active` keys it holds in the root's order. Before each submission it verifies its own request as step 2 below does, under the root it signs for, and submits nothing that does not verify. It moves to the next key only when the log answers HTTP 400 with a JSON body whose `message` is exactly `invalid hashedrekord request` (Rekor v2) or `entry algorithms are not allowed` (Rekor v1), which is how a log refuses an entry key type; any other answer stops the release. On the 1.0 path, `sign-release` writes these requests ahead, one per key it may sign with, as `delorun-<version>.manifest.entry.json` and then `delorun-<version>.manifest.entry.<n>.json` in the root's order (the packs file's as `delorun-<version>.packs.entry[.<n>].json`), and `log-release`, which holds no key, submits them in that order by the same rule, verifying each under the root first, so a request whose digest is not the signed file's is never submitted; when it logs a later request, it rewrites the first file with it. The log accepting an entry proves nothing by itself: the bundle the command writes must verify as this page states. Before a cut, `apps/release/scripts/probe-log.ts` submits one entry over random bytes per listed `active` type, each signed by a throwaway key, and reports which types the log accepts.
+签名命令按根的顺序尝试它持有的、根所列的 `active` 密钥。在每次提交之前，它按下面第 2 步的方式、在它为签署而针对的根之下验证自己的请求，不提交任何无法验证的内容。只有当日志以 HTTP 400 应答、且其 JSON 主体的 `message` 恰好是 `invalid hashedrekord request`（Rekor v2）或 `entry algorithms are not allowed`（Rekor v1）时，它才转向下一个密钥，这正是日志拒绝某个条目密钥类型的方式；其他任何应答都会停止该发布。在 1.0 路径上，`sign-release` 会预先写出这些请求，每个它可以用来签署的密钥一个，按根的顺序写成 `delorun-<version>.manifest.entry.json`，然后是 `delorun-<version>.manifest.entry.<n>.json`（packs 文件的写成 `delorun-<version>.packs.entry[.<n>].json`），而 `log-release` 不持有任何密钥，它按同一规则以该顺序提交它们，先逐个在根之下验证，因此摘要不是已签名文件的请求永远不会被提交；当它记录较晚的请求时，会用该请求重写第一个文件。日志接受条目本身什么也证明不了：命令所写的 bundle 必须按本页所述通过验证。切版之前，`apps/release/scripts/probe-log.ts` 会为每个所列的 `active` 类型提交一条基于随机字节的条目，每条都由一次性密钥签名，并报告日志接受哪些类型。
 
 targets 密钥撤销之后重新签名的 manifest（[C2](c02-release-manifest.zh.md#key-rotation)）有自己的条目。当发布版本的 manifest 文件条目按本页所述通过验证时，该发布版本即为「已记录」（logged）。
 
@@ -89,10 +89,10 @@ bundle 发布到 GitHub Releases，与 manifest 放在一起。`log-release` 命
 使用客户端当前受信任根中的密钥，以下各项全部成立时，bundle 通过验证：
 
 1. `manifest.sha256` 等于客户端按 [C2](c02-release-manifest.zh.md) 验证过的 manifest 文件的 SHA-256。
-2. The entry body is a Rekor v2 `hashedrekord` (`0.0.2`), the root lists `logEntryKeys` (`entry-key-untrusted` otherwise), the entry's key details are a listed type this client implements (`entry-type-refused` otherwise), its public key is byte for byte a listed key of that type that is `active`, or `retired` with a `lastRelease` at or above the version of the signed manifest, never a version the bundle names (`entry-key-untrusted` otherwise, and always for a `revoked` key), its digest algorithm and digest are the type's over the manifest file, and its signature over the manifest file verifies with that listed key.
+2. 条目主体是 Rekor v2 的 `hashedrekord`（`0.0.2`），根列出 `logEntryKeys`（否则为 `entry-key-untrusted`），条目的密钥详情是本客户端所实现的所列类型（否则为 `entry-type-refused`），其公钥逐字节等于该类型中某个 `active` 的所列密钥，或某个 `retired` 且其 `lastRelease` 不低于已签名 manifest 版本的所列密钥，绝不是 bundle 所指名的版本（否则为 `entry-key-untrusted`，对 `revoked` 密钥则始终如此），其摘要算法与摘要是该类型对 manifest 文件的，而其对该 manifest 文件的签名用该所列密钥通过验证。
 3. 条目主体的叶子哈希、包含证明与 `treeSize` 能复算出 `rootHash`。
-4. The checkpoint names the origin of a log the root lists in `logs` (`log-origin-untrusted` otherwise, and always under a root without `logs`), its `treeSize` and `rootHash` match the proof, and its log signature verifies with that log's Ed25519 verifier key.
-5. Cosignatures from at least `witnesses.threshold` distinct listed witness keys verify over that checkpoint, whichever listed log signed it.
+4. 检查点指名根在 `logs` 中列出的某个日志的来源（否则为 `log-origin-untrusted`，在没有 `logs` 的根之下则始终如此），其 `treeSize` 与 `rootHash` 与证明相符，而其日志签名用该日志的 Ed25519 验证密钥通过验证。
+5. 来自至少 `witnesses.threshold` 个不同所列见证者密钥的共同签名在该检查点上通过验证，无论签署它的是哪个所列日志。
 
 没有有效见证者共同签名的 bundle 在第 5 步失败，条目被拒绝，无论日志签名如何。
 
@@ -111,7 +111,7 @@ bundle 发布到 GitHub Releases，与 manifest 放在一起。`log-release` 命
 
 发现 `unchecked` 的安装或更新只凭发布版本的签名继续，并告知本人。启动器打印步骤 "Checking the release log: not checked" 及其原因，然后打印警告 "Release <version> has not been checked against the release log; Delorun checks it at the next connection."。运行时仓库安装该发布版本之后，它在检查状态文件中将该发布版本记录为 `unchecked`，并以原因作为 `detail`；被仓库拒绝的发布版本不留下记录。能够阻断某人到日志及其见证者连接的人，会让此人只剩下签名可依；发布版本自身 bundle 中的包含证明仍会在安装任何内容之前离线验证。发现 `failed` 的安装或更新不安装任何内容，也不记录检查状态。它验证过的根与时间戳，以及通过的检查所验证的检查点，仍记录在 `trust/` 下，因为之后的安装要让根链、时间戳与日志遵守它们已证明的内容。
 
-The online check reads only the current log, the root's `log`. A release whose bundle's checkpoint is in an earlier log the root lists is verified offline at install and at each start and stays `unchecked` online, with a `detail` that names both logs.
+在线检查只读取当前日志，即根的 `log`。bundle 的检查点位于根所列较早日志中的发布，在安装时和每次启动时离线验证，在线则保持 `unchecked`，其 `detail` 会指名两个日志。
 
 早先的安装写下的只有树大小与根哈希、没有 signed note 的 `trust/checkpoint.json`，是客户端自身无法检查的下限。只有当从它到日志已签名最新检查点的一致性证明通过验证时，在线检查才保留它，随后由已验证的检查点替换该文件。证明无法通过验证时，它不设定下限，由已验证的检查点替换它，本次尝试记录一条给出其树大小的通知；日志无法访问时，该文件保持原样。完全无法读取的 `trust/checkpoint.json` 同样不设定下限：下限从发布版本自身的检查点重新开始，本次尝试记录一条说明这一点的通知，并列出 home 记录为 `verified` 的发布版本，因此重置从不会悄无声息。
 
@@ -204,23 +204,23 @@ bundle 的 `schema` 指明其主版本。日志的 origin 与密钥以及见证�
 | `c18-wrong-inclusion-proof-refused` | `install` | 证明无法复算出 `rootHash` 的 bundle 在安装之前被拒绝。 |
 | `c18-entry-for-other-manifest-refused` | `install` | 针对另一个 manifest 摘要的有效条目被拒绝。 |
 | `c18-pure-ed25519-entry-refused` | `release`, `install` | 带纯 Ed25519 签名或 `PKIX_ED25519` 密钥详情的条目被拒绝；同一 manifest 的 Ed25519ph 条目通过验证。 |
-| `c18-root-without-log-trust-refused` | `release-verify`, `install` | Under a root without `logEntryKeys`, even an Ed25519ph entry by its targets key is refused; under a root without `logs`, every checkpoint is. |
-| `c18-listed-entries-only` | `release-verify` | A root that lists only an ECDSA P-256 key refuses an Ed25519ph entry by its targets key. |
-| `c18-revoked-entry-key-refused` | `release-verify` | A revoked log-entry key verifies no release, an older one too, whatever `lastRelease` it carries. |
-| `c18-retired-entry-key-by-signed-version` | `release-verify`, `install` | A retired log-entry key verifies a release up to its `lastRelease` by the signed manifest's version; a bundle that names the old release for a newer manifest is refused. |
-| `c18-listed-log-needs-witness` | `release-verify` | A checkpoint of an earlier log the root lists, with no cosignature from a listed witness, is refused. |
-| `c18-unlisted-entry-type-refused` | `release-verify` | An entry whose key type the root does not list is refused whatever its signature, in each direction between the two types. |
-| `c18-listed-type-other-key-refused` | `release-verify`, `install` | An entry of a listed type whose key is not a listed key of that type is refused, and one naming the listed key with another key's signature is refused. |
-| `c18-unlisted-log-origin-refused` | `release-verify` | A bundle whose checkpoint is in a log the root does not list is refused; one in an earlier log the root lists verifies only with that log's key. |
-| `c18-ecdsa-strict-encodings` | `release-verify` | An ECDSA P-256 entry by the listed key is refused when its signature is a raw 64-byte `r` and `s` concatenated, when it signs SHA-256 of the manifest instead of the manifest's bytes, and when it names the listed key by its compressed-point SPKI. |
-| `c18-entry-verifier-parity` | `release-verify`, `release` | One denial table gives the same outcome in the client's entry check and the signing tool's: revoked, retired before the release, unlisted type, unimplemented type, root without `logEntryKeys`, another key, and the three ECDSA encodings. |
-| `c18-earlier-log-closed-after-last-release` | `release-verify`, `release` | A bundle in an earlier listed log for a release newer than that log's `lastRelease` is refused by both verifiers; the current log takes it. |
-| `log-fallback-only-on-type-refusal` | `release` | A log answering the first entry with a 400 whose body is not one of the two refusal messages, a 5xx or a 409 stops the release with no other key tried and the channel unchanged. |
-| `log-fallback-verifies-success` | `release` | A log that refuses the first type and accepts the second with an entry that is not the release's leaves the release unwritten. |
-| `sign-release-entry-per-listed-key` | `release` | The signing command writes one entry request per `active` log-entry key the root lists and it holds, ECDSA P-256 first and Ed25519ph second in the root's order, and each verifies under the root. |
-| `log-release-fallback-on-type-refusal` | `release` | The logging command submits the next pre-signed request only after the log refuses the first one's key type with a refusal answer, and the bundle of the accepted one verifies under the root. |
-| `log-release-only-on-type-refusal` | `release` | The logging command stops at a 400 with another body or a 500 and submits no later request. |
-| `log-release-refuses-other-digest` | `release` | The logging command submits no request that does not verify under the root, such as one whose digest is another file's or whose key the root does not list. |
+| `c18-root-without-log-trust-refused` | `release-verify`、`install` | 在没有 `logEntryKeys` 的根之下，即使是由其 targets 密钥所作的 Ed25519ph 条目也会被拒绝；在没有 `logs` 的根之下，每个检查点都会被拒绝。 |
+| `c18-listed-entries-only` | `release-verify` | 只列出 ECDSA P-256 密钥的根会拒绝由其 targets 密钥所作的 Ed25519ph 条目。 |
+| `c18-revoked-entry-key-refused` | `release-verify` | 被撤销的日志条目密钥不验证任何发布，较早的发布也不验证，无论它带有怎样的 `lastRelease`。 |
+| `c18-retired-entry-key-by-signed-version` | `release-verify`、`install` | 已退役的日志条目密钥按已签名 manifest 的版本验证到其 `lastRelease` 为止的发布；为新 manifest 指名旧发布的 bundle 会被拒绝。 |
+| `c18-listed-log-needs-witness` | `release-verify` | 根所列较早日志的检查点，若没有来自所列见证者的共同签名，会被拒绝。 |
+| `c18-unlisted-entry-type-refused` | `release-verify` | 根未列出其密钥类型的条目，无论其签名如何都会被拒绝，两种类型之间的每个方向都是如此。 |
+| `c18-listed-type-other-key-refused` | `release-verify`、`install` | 所列类型的条目，若其密钥不是该类型的所列密钥，会被拒绝；指名所列密钥却带有另一个密钥签名的条目也会被拒绝。 |
+| `c18-unlisted-log-origin-refused` | `release-verify` | 检查点位于根未列出的日志中的 bundle 会被拒绝；位于根所列较早日志中的 bundle 只有用该日志的密钥才通过验证。 |
+| `c18-ecdsa-strict-encodings` | `release-verify` | 由所列密钥所作的 ECDSA P-256 条目，在其签名是原始 64 字节 `r` 与 `s` 拼接、在其签署的是 manifest 的 SHA-256 而不是 manifest 的字节、以及在其以压缩点 SPKI 指名所列密钥时，都会被拒绝。 |
+| `c18-entry-verifier-parity` | `release-verify`、`release` | 同一张拒绝表在客户端的条目检查与签名工具中给出相同结果：被撤销、在发布之前退役、未列出的类型、未实现的类型、没有 `logEntryKeys` 的根、另一个密钥，以及三种 ECDSA 编码。 |
+| `c18-earlier-log-closed-after-last-release` | `release-verify`、`release` | 位于较早所列日志中、针对比该日志 `lastRelease` 更新的发布的 bundle，会被两个验证器都拒绝；当前日志接受它。 |
+| `log-fallback-only-on-type-refusal` | `release` | 日志以 400 应答第一条条目、且其主体不是那两条拒绝消息之一，或以 5xx 或 409 应答时，发布停止，不尝试其他密钥，通道保持不变。 |
+| `log-fallback-verifies-success` | `release` | 日志拒绝第一个类型、并以一条不属于该发布的条目接受第二个类型时，发布不会被写入。 |
+| `sign-release-entry-per-listed-key` | `release` | 签名命令为根所列且它持有的每个 `active` 日志条目密钥写出一条条目请求，按根的顺序先是 ECDSA P-256、后是 Ed25519ph，且每一条都在根之下通过验证。 |
+| `log-release-fallback-on-type-refusal` | `release` | 记录命令只有在日志以拒绝应答拒绝第一条条目的密钥类型之后，才提交下一条预先签名的请求，而被接受那条的 bundle 在根之下通过验证。 |
+| `log-release-only-on-type-refusal` | `release` | 记录命令在主体不同的 400 或 500 处停止，不提交任何较晚的请求。 |
+| `log-release-refuses-other-digest` | `release` | 记录命令不提交任何在根之下无法验证的请求，例如摘要属于另一个文件、或其密钥不在根所列之中的请求。 |
 | `c18-offline-start-warns` | CLI 启动器, home 进程 | 在日志替身无法访问时启动，仍会启动，打印带有该发布版本号的警告，并记录 `unchecked`。 |
 | `c18-offline-recheck-on-connect` | home 进程 | 替身变为可访问后，home 进程的下一次重试记录 `verified`。 |
 | `c18-offline-install-continues` | `install`, home 进程, 桌面更新器 | 在日志无法访问或其最新经见证检查点已过时时尝试的安装或更新，会打印原因与警告，进行安装，并记录带原因的 `unchecked`。 |

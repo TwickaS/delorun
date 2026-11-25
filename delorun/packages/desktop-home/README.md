@@ -5,6 +5,8 @@ kind: "package-library"
 
 # @delorun/desktop-home
 
+English | [中文](README.zh.md)
+
 ## Summary
 
 On the web, the studio tells "at your computer" from "on a device" by the page's host name: a loopback host is the computer. The Delorun desktop app serves its own bundled studio under `dsh-app://app`, so the host name is `app` and says nothing about where the person is. The desktop's preload therefore exposes `globalThis.delorunDesktop`, a frozen object with one key, `homeKind`, and this package turns it into the answer the client gates need. The package is a studio library, exported from source: it runs in the browser, has no dependencies and imports no Cordis.

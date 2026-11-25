@@ -4,16 +4,16 @@
 #   pnpm run verify-translation-pairing --write BRAND_GUIDELINES.md
 /delorun-brand-guidelines:
   en: 36f48ce8e18d2192
-  zh: bb60934f69e03178
+  zh: 0dcdb8135bb3d247
 /delorun-brand-guidelines/the-name:
   en: 4381f08244ba91a8
-  zh: 4381f08244ba91a8
+  zh: 94f0740531ffd040
 /delorun-brand-guidelines/the-mark-and-colours:
   en: 685d1dfd15ab0ba4
-  zh: 685d1dfd15ab0ba4
+  zh: d154cff534266ae2
 /delorun-brand-guidelines/forks-and-plugins:
   en: 297ffbc99c8f4c1c
-  zh: 297ffbc99c8f4c1c
+  zh: 1f4813a5d1c0cc7d
 /delorun-brand-guidelines/naming-the-upstream:
   en: c142382b192b23eb
-  zh: c142382b192b23eb
+  zh: d4f8d5e3eb06f0c1

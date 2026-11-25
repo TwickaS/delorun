@@ -199,7 +199,7 @@ home 的 Host 运行一个回环监听器；在远程访问开启期间，还为
 
 | 响应头 | 值 |
 | --- | --- |
-| `Content-Security-Policy` | `default-src 'self'; script-src 'self' 'nonce-<nonce>'; style-src-elem 'self' 'nonce-<nonce>'; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data:; font-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; frame-src 'self' blob:; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; require-trusted-types-for 'script'; trusted-types default delorun-plugin-loader` |
+| `Content-Security-Policy` | `default-src 'self'; script-src 'self' 'nonce-<nonce>'; style-src-elem 'self' 'nonce-<nonce>'; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; manifest-src 'self'; frame-src 'self' blob:; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; require-trusted-types-for 'script'; trusted-types default delorun-plugin-loader delorun-blob-worker` |
 | `Strict-Transport-Security` | `max-age=31536000` |
 | `X-Content-Type-Options` | `nosniff` |
 | `Referrer-Policy` | `no-referrer` |
@@ -216,10 +216,11 @@ home 的 Host 运行一个回环监听器；在远程访问开启期间，还为
 <a id="trusted-types"></a>
 ### Trusted Types
 
-远程访问监听器通过上述 `require-trusted-types-for 'script'` 指令强制执行 Trusted Types，并使用两个策略。
+远程访问监听器通过上述 `require-trusted-types-for 'script'` 指令强制执行 Trusted Types，并使用三个策略。`trusted-types` 指令逐一列出它们，因为该指令未列出的策略根本无法创建。
 
 - **`default`。** 其 `createHTML` 把输入交给 studio 的 HTML 清理器处理，清理器移除 `<script>` 元素、事件处理器属性、`javascript:` URL 与 `<iframe srcdoc>`，然后返回结果，因此赋值 `innerHTML` 的上游组件与社区客户端插件仍可正常工作。其 `createScriptURL` 只在 URL 同源、路径以 `/plugins/` 开头，且去掉查询部分后的路径是客户端模块注册表当前启动 manifest（元数据清单）中列出的 bundle 时，才返回该 URL；否则返回 `null`，赋值失败。其 `createScript` 始终返回 `null`。
 - **`delorun-plugin-loader`。** 上游的客户端模块加载器通过这个具名策略赋值 `script.src`，该策略应用与默认策略的 `createScriptURL` 相同的 URL 规则。
+- **`delorun-blob-worker`。** 其 `createScriptURL` 只在 URL 是 `blob:` URL 且其源与页面自身相同时才返回该 URL；否则返回 `null`。blob URL 继承创建它的页面的源，因此该策略允许页面自己构建的 Worker 源码，而拒绝由另一个源构建的源码。源为不透明源（opaque origin）的页面会被拒绝每一个 URL，因为所有不透明源的字符串形式都相同。在由 Blob 构建的 Worker 中运行自身工作的四项功能（文件与图片上传，以及电子表格、PDF 与 Office 预览）都通过该策略生成其 Worker URL。`worker-src` 指令出于同样的原因允许 `blob:`：仅构造函数接受该 URL 还不够，因为如果该指令不允许其来源，Worker 随后就会被拒绝。
 
 <a id="refusals"></a>
 ### 拒绝

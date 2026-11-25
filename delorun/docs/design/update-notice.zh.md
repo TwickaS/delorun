@@ -72,7 +72,7 @@ description: "更新通知的设计：验证渠道最新发布版本且不发送
 
 ### 以 Delorun 为目标
 
-19. A plugin that declares `engines.delorun` is checked on that range alone on Delorun, and its `engines.dsh` and DSH peers are not checked; a plugin that declares none is checked on its upstream axis, as on stock DSH ([C17](../contracts/c17-plugin-versions.zh.md)). The update notice counts plugins the same way.
+19. 声明了 `engines.delorun` 的插件在 Delorun 上只按该范围检查，其 `engines.dsh` 与 DSH 对等依赖不被检查；什么都没声明的插件按其上游轴检查，与在 stock DSH 上一样（[C17](../contracts/c17-plugin-versions.zh.md)）。更新通知以同样的方式统计插件。
 20. `delorun plugin check <directory>` 在不导入其代码的情况下读取插件的 `package.json`，用上游的 `evaluatePluginCompatibility`（即安装器的求值）针对正在运行的发布版本对两条轴求值，并打印每个声明的范围接纳什么、什么未声明，以及以正在运行的 Delorun 次版本为目标的 `engines.delorun` 范围。For a plugin that declares `engines.delorun` it says the DSH ranges are not checked on Delorun. `--json` prints the decision record ([C22](../contracts/c22-delorun-plugin-interface.zh.md#checking-a-plugin)).
 
 <a id="what-this-does-not-protect-against"></a>

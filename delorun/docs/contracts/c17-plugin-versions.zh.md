@@ -67,9 +67,9 @@ Delorun 有自己的语义化版本，并基于一个上游 DSH 版本构建，�
 
 - `engines.dsh` 原样遵循上游规则：存在时，它单独决定上游轴；不存在时，每个 `@deepseek-ai/dsh` 或 `@deepseek-ai/dsh-*` 对等依赖都必须匹配，其中 `workspace:^`、`workspace:~` 与 `workspace:*` 表示正在运行的版本。
 - `engines.delorun` 是一个语义化版本范围字符串。它单独决定 Delorun 轴；对 `@delorun/*` 包的对等依赖不用于该轴。
-- **On Delorun, `engines.delorun` decides alone when it is declared.** Delorun then reads neither `engines.dsh` nor the `@deepseek-ai/dsh*` peers, so a range there that Delorun's base DSH version does not meet, or a malformed one, changes nothing. Stock DSH ignores `engines.delorun` and checks `engines.dsh` as always.
+- **在 Delorun 上，声明了 `engines.delorun` 时它单独决定。** Delorun 随后既不读取 `engines.dsh`，也不读取 `@deepseek-ai/dsh*` 对等依赖，因此那里一个 Delorun 的基础 DSH 版本不满足的范围，或一个格式错误的范围，都不改变任何东西。stock DSH 忽略 `engines.delorun`，并照旧检查 `engines.dsh`。这只在 Delorun 的版本已知时成立，而每个 Delorun 进程都是如此。
 - 未声明 `engines.delorun` 的插件没有 Delorun 要求。
-- Package-manager peer warnings are not this check. pnpm may print a warning for an unmet `@deepseek-ai/dsh*` peer when it installs the plugin; Delorun leaves it, and it neither admits nor refuses the plugin.
+- 包管理器的对等依赖警告不是这项检查。pnpm 在安装该插件时可能会为未满足的 `@deepseek-ai/dsh*` 对等依赖打印一条警告；Delorun 不管它，它既不接纳也不拒绝该插件。
 - 插件索引的索引文件把两个范围复制到每个版本条目中（[C13](c13-catalogue-revocation.zh.md#catalogue-index)）。
 
 <a id="evaluation"></a>

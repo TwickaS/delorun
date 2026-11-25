@@ -71,7 +71,7 @@ What you can do:
 
 ## 它打印什么
 
-An install prints a checklist to standard error, so the output of the command that runs next stays on standard output unmixed. Each step is a line: a spinner while it runs, then a tick and how long it took, with the durations right-aligned in one column. The download and the extraction also show a bar under their line. On a terminal the block redraws in place:
+安装会把一份检查清单打印到标准错误，因此接下来运行的命令的输出仍留在标准输出上，不会被混在一起。每一步是一行：运行时是一个转圈指示，然后是勾号和它花了多久，各步耗时在一列中右对齐。下载和解压还会在其行下方显示一条进度条。在终端上，这一块会原地重绘：
 
 ```text
 ✔ Found release 0.1.0-preview.2.7 on the stable channel                    0.4s
@@ -81,9 +81,9 @@ An install prints a checklist to standard error, so the output of the command th
   ██████████████░░░░░░░░░░   58%  126.4 / 218.0 MB  6.7 MB/s  ~14s left
 ```
 
-The bar shortens, and then drops the time left, the speed and the amounts, on a narrow terminal. The speed and the time left are worked out over the last five seconds, and the time left reads `estimating…` until a second of data gives a speed. A download that delivers no byte for three seconds reads `waiting for data… 12s`, and the spinner keeps turning, so the screen is never silent. Setting `NO_COLOR` removes the colour.
+在窄终端上，进度条会缩短，然后依次去掉剩余时间、速度和数量。速度和剩余时间按最近五秒计算，在有一秒的数据能给出速度之前，剩余时间显示 `estimating…`。三秒内没有收到任何字节的下载会显示 `waiting for data… 12s`，转圈指示继续转动，所以屏幕从不沉默。设置 `NO_COLOR` 会去掉颜色。
 
-The steps follow the order the checks run: the signature is checked before the archive is downloaded, because the signed manifest is what names the archive and its size. When the install ends and the command says what happens next, it prints one `Next:` line: `a few setup questions` for a bare `delorun` on a home without the CLI profile and for `delorun setup`, `opening the studio` for a bare `delorun` on a home that has it and for `delorun start`, and no line for any other command. When standard error is not a terminal, or `TERM` is `dumb`, the same steps print as plain lines, and the download prints one line for each tenth:
+各步骤遵循检查运行的顺序：签名在下载归档之前检查，因为已签名的 manifest 才是指名该归档及其大小的东西。当安装结束、命令要说明接下来会发生什么时，它会打印一行 `Next:`：在没有 CLI profile 的 home 上运行裸 `delorun` 以及运行 `delorun setup` 时是 `a few setup questions`，在已有 CLI profile 的 home 上运行裸 `delorun` 以及运行 `delorun start` 时是 `opening the studio`，其他命令则不打印该行。当标准错误不是终端，或 `TERM` 为 `dumb` 时，同样的步骤以纯文本行打印，下载则每十分之一打印一行：
 
 ```text
 ✔ Found release 0.1.0-preview.2.7 on the stable channel  0.4s
@@ -104,14 +104,14 @@ Unpacking the runtime…
 Next: a few setup questions
 ```
 
-When the release log or its witness cannot be reached, or its newest witnessed checkpoint is older than 24 hours, the step is marked `!` with the reason, and one warning follows in the words of contract C18:
+当无法访问发布日志或其见证者，或它最新的已见证检查点早于 24 小时时，该步骤会带原因标记为 `!`，随后按约定 C18 的措辞给出一条警告：
 
 ```text
 ! Release log not checked (the release log did not answer: …)  0.6s
   Warning: Release 0.1.0-preview.2.7 has not been checked against the release log; Delorun checks it at the next connection.
 ```
 
-The install then goes on with the release's signature, and the home records the release as `unchecked` in `trust/release-log.json` (see [`@delorun/install`](../install/README.zh.md#the-release-log)). A log that answers and contradicts the release refuses instead, as [Refusals](#refusals) describes: the running step is marked `✖`, and the refusal's own text follows. A question the launcher asks, such as the one `delorun repair` asks, clears the checklist while it is asked. A start prints none of these lines. The checklist is `@delorun/install`'s `InstallRenderer`, which `src/progress.ts` re-exports, so `delorun update`, `delorun repair` and a plugin pack download draw the same lines from the same events. The renderer only displays: verification, its order, its refusals and their messages do not depend on it.
+随后安装会带着该发布的签名继续，home 会在 `trust/release-log.json` 中把该发布记录为 `unchecked`（见 [`@delorun/install`](../install/README.zh.md#the-release-log)）。如果日志有应答却与该发布矛盾，则改为拒绝，如[拒绝](#refusals)所述：正在运行的步骤标记为 `✖`，随后是拒绝自身的文本。启动器提出的问题（例如 `delorun repair` 提出的那个）在被询问期间会清空检查清单。启动不会打印这些行中的任何一行。该检查清单是 `@delorun/install` 的 `InstallRenderer`，由 `src/progress.ts` 重新导出，因此 `delorun update`、`delorun repair` 和插件包下载都从同一批事件绘制同样的行。渲染器只负责显示：验证、其次序、其拒绝及其消息都不依赖它。
 
 比该包 `engines` 范围（`>=24.9.0`）更旧的 Node 会在其他任何内容运行之前得到一行信息，说明它发现的版本以及在哪里获取更新的版本，并以状态 1 退出：发布的 `bin`（`src/entry.ts`）只在版本检查通过后才载入启动器的主模块，因此无法解析主模块语法的 Node 仍能读到这条拒绝信息。
 
@@ -153,7 +153,7 @@ node_modules/.bin/tsx delorun/apps/npm-launcher/src/build.ts --root <root.json>.
 - 每个 `--root` 在用其自身的根签名校验通过后，复制为 `roots/<n>.root.json`，以该根自身的版本命名。这些根合起来必须是连续的版本；没有 `--root` 的构建会被拒绝，因为由此生成的启动器会以 `NO_TRUSTED_ROOT` 拒绝每次安装。
 - `--channel-origin` 与 `--log-origin` 成为打包器写入代码的构建常量；此后没有任何设置、参数或环境变量能改变它们。不提供它们时，构建出的是生产启动器：频道为 `releases.delorun.com`，并以 GitHub Releases 和 `releases.delo.run` 作为约定 C1 主机列表下的镜像，日志是受信任根所指的日志：根的 `log.origin` 是日志的主机，启动器读取 `https://<host>/api/v2/checkpoint` 以及 `https://<host>/api/v2/` 之下的 tile，即 Rekor v2 的布局。origin 为不带路径的 `https:`，或本机回环地址上的 `http:`，因此本地频道与日志可以为一个构建提供服务。频道 origin 提供 `timestamp.json`、`root/<n>.root.json` 与 `releases/download/v<version>/<file>`，即 `apps/release/src/local-release.ts` 写出的布局；下载器随后只允许该 origin 的主机。
 - 该包先暂存在 `<out>/package`，再由 `npm pack` 打包为 `<out>/delorun-<version>.tgz`。`--package-version` 设置版本，默认使用本包自身的版本。
-- Before it packs, the build scans the whole output folder, the staged package and anything else in `<out>`, for the building user's home directory, the user name as a folder (`/<name>/` or `\<name>\`) and a unique build root `delorun-release-build-*`, and refuses with every offending file named, so no tarball is written. Nothing skips the scan (`@delorun/release-formats/gate/home-paths`, the gate the release build runs over its closures).
+- 在打包之前，构建会扫描整个输出文件夹、暂存的包以及 `<out>` 中的其他任何内容，查找构建者用户的 home 目录、作为文件夹的用户名（`/<name>/` 或 `\<name>\`）以及唯一构建根 `delorun-release-build-*`，并在指出每个违规文件后拒绝，因此不会写出任何 tarball。没有任何东西跳过该扫描（`@delorun/release-formats/gate/home-paths`，即发布构建对其各发行包运行的门禁）。
 
 <a id="exit-codes"></a>
 

@@ -127,31 +127,33 @@ Delorun 在 Windows 中通过 WSL2 运行，WSL2 是 Windows 的一项功能，�
 <summary>边界情况</summary>
 
 - 如果日志与发布版本相矛盾，那么安装会停止。不要绕过它；请见[安装与发布检查](../help/troubleshooting.zh.md#installs-and-release-checks)。
-- If a copy on 0.1.0-preview.2.7 or earlier cannot update, then run `npx delorun@latest repair` once: your home, chats and settings stay. Releases from 0.1.0-preview.3 are verified under release root 2, which such a copy cannot read.
+- 如果 0.1.0-preview.2.7 或更早的副本无法更新，那么运行一次 `npx delorun@latest repair`：你的 home 会保留其 chat、设置和插件，而这次修复会替换运行时。
 - 如果你想在每次启动时进行更严格的完整文件检查，请把 `DELORUN_RUNTIME_FULL_CHECK_DAYS` 设为 `0`。默认至少每 7 天对每个文件计算一次哈希；最大值是 30。
 
 </details>
 
-## Setup: a few questions
+<a id="setup-a-few-questions"></a>
 
-The first `delorun` on a new home runs setup in the terminal. It asks few questions, and the studio takes the rest. A run without a terminal, or with `--yes`, asks nothing.
+## 设置：几个问题
 
-It opens with one line about privacy, which is a note and not a question:
+在新的 home 上第一次运行 `delorun` 会在终端里进行设置。它只问几个问题，其余由 studio 负责。没有终端或带 `--yes` 的运行什么也不问。
+
+它以一行关于隐私的说明开头，那是说明而不是问题：
 
 ```text
 Delorun sends nothing about you. Details: https://delorun.com/privacy
 ```
 
-The details are on the [privacy page](https://delorun.com/privacy); what Delorun asks of the network is in [What you trust](../safety-and-updates/trust.zh.md#what-leaves-your-machine), and the release check has its own switch in Settings → General → Updates. Setup asks these questions in this order:
+详情见[隐私页面](https://delorun.com/privacy)；Delorun 向网络请求什么，见[你信任什么](../safety-and-updates/trust.zh.md#what-leaves-your-machine)，而发布检查在“设置”→“通用”→“更新”中有自己的开关。设置按以下顺序提出这些问题：
 
-1. **Phone.** `Use Delorun from your phone too?` offers **No, just this computer** (the default) and **Yes, over Tailscale**. Yes first checks Tailscale on this computer: that it is installed, signed in, and that your user may run `tailscale serve`. A check that fails leaves phone access off and says what to fix; the rest of setup goes on ([Reach the studio from your phone](../everyday-use/reach.zh.md)). A phone you approve reads and replies to chats, and each sensitive action asks for its PIN.
-2. **DeepSeek Harness chats.** Only if you used DeepSeek Harness before and this Delorun home has no chats: `Copy your N DeepSeek Harness chats?`, over a summary of what will be copied and what stays behind. Your DeepSeek Harness folder is only read. The choices are **Yes**, **Later (delorun import-home)** and **Show what stays behind** ([Switching from DeepSeek Harness](switching.zh.md)).
-3. **The studio port.** Delorun takes port 3080 and, when another program uses it, the next free port, and says so. In a terminal it asks first: `Port 3080 is in use. Use 3081?` with **Yes** and **Enter another port**.
-4. **The PIN and the command.** (Two questions, asked after the start.) Setup then starts Delorun in this terminal and opens the studio in your browser. If you chose phone access, it asks `Set a PIN for your phone now?` once Delorun runs, because the PIN is stored by the running home. It ends with `Keep the delorun command?`, which runs `npm install -g delorun@<version>` for you on **Yes**, or leaves you with `npx delorun` on **No, keep using npx**.
+1. **其他设备。** `Use Delorun from your other devices too? (phone, tablet, another computer, over Tailscale)` 提供 **No, just this computer**（默认）和 **Yes, over Tailscale**。选 Yes 会先检查这台电脑上的 Tailscale：它是否已安装、已登录，以及你的用户是否可以运行 `tailscale serve`。检查失败会让设备访问保持关闭并说明要修什么；设置的其余部分继续进行（见[从手机访问 studio](../everyday-use/reach.zh.md)）。你批准的设备可以读取和回复 chat，而每个敏感操作都会要求它的 PIN。
+2. **DeepSeek Harness 的 chat。** 只有在你以前用过 DeepSeek Harness 且这个 Delorun home 没有 chat 时才会问：`Copy your chats from DeepSeek Harness?` 会导入它们，并保留其工作区文件夹（见[从 DeepSeek Harness 切换](switching.zh.md)）。
+3. **studio 端口。** Delorun 使用 3080 端口，当另一个程序占用它时使用下一个空闲端口，并说明它选了哪一个。
+4. **PIN 与命令。**（两个问题，在启动之后提出。）设置随后在这个终端里启动 Delorun，并在你的浏览器中打开 studio。如果你选择了设备访问，它会在 Delorun 运行之后问一次 `Set a PIN for your other devices now?`，因为 PIN 由运行中的 home 保存。它以 `Keep the delorun command?` 结束：选 **Yes** 会替你运行 `npm install -g delorun@<version>`，选 **No, keep using npx** 则让你继续使用 `npx delorun`。
 
-Setup does not ask for your model key. The studio's welcome screen does ([The studio and your first chat](#the-studio-and-your-first-chat)). Setup also does not ask how much Delorun asks, whether to run in the background, or what to call the profile: it takes safe defaults. **Ask me first** is the default for [prompts](../../reference/glossary.zh.md#prompts-answer), so Delorun asks before a chat gets full access to a folder, adds a tool server, edits its own instructions or schedules work ([What Delorun protects](../safety-and-updates/safety.zh.md#consents)). Change any of them in the studio's Settings → General → How Delorun runs, which shows the command for each, or with `delorun setup <section>`.
+设置不会要求你的模型密钥，studio 的欢迎屏幕会（见[studio 与你的第一个 chat](#the-studio-and-your-first-chat)）。设置也不会问 Delorun 询问多少、是否在后台运行，或该把 profile 叫什么：它采用安全的默认值。对于[提示](../../reference/glossary.zh.md#prompts-answer)，默认是 **Ask me first**，因此 Delorun 会在 chat 获得某个文件夹的完全访问、添加工具服务器、编辑自己的指令或安排工作之前询问（见[Delorun 保护什么](../safety-and-updates/safety.zh.md#consents)）。你可以在 studio 的“设置”→“通用”→“How Delorun runs”中更改其中任何一项（它会显示每一项的命令），或用 `delorun setup <section>` 更改。
 
-Delorun then runs in this terminal. The last lines say so:
+随后 Delorun 在这个终端里运行。最后几行会说明这一点。开启设备访问时，它们如下所示：studio 的 Tailscale 地址（你可以从任何登录到你的 Tailscale 的设备完成设置），以及新设备如何配对。没有设备访问时，它们会说明 studio 只在这台电脑上打开，以及之后在哪里开启它（“设置”→“通用”→“How Delorun runs”，或 `delorun setup reach`）。`my-pc.example.ts.net` 代表你自己电脑的 Tailscale 名称：
 
 ```text
 Finish setup here, or on any device signed in to your Tailscale:
@@ -166,9 +168,9 @@ Change an answer later: delorun setup <section> (delorun setup --list)
 If something looks wrong: delorun doctor
 ```
 
-Press Ctrl+C to stop Delorun. The next `delorun` starts it again, in the background unless you turned that off in Settings → General → How Delorun runs.
+按 Ctrl+C 停止 Delorun。下一次运行 `delorun` 会再次启动它，除非你在“设置”→“通用”→“How Delorun runs”中关闭了后台运行，否则它在后台启动。
 
-**Setup without questions.** With no terminal, or with `--yes`, setup asks nothing. It takes the safe defaults: no phone access, no import, **Ask me first**, port 3080 or the next free port. It writes the profile, starts nothing and prints where the studio will be and how to start it:
+**不带问题的设置。** 没有终端或带 `--yes` 时，设置什么也不问。它采用安全的默认值：没有设备访问、不导入、**Ask me first**、3080 端口或下一个空闲端口。它写入 profile，不启动任何东西，并打印 studio 将在哪里以及如何启动它：
 
 ```text
 Delorun is set up. Nothing is running yet.
@@ -185,38 +187,38 @@ Change an answer later: delorun setup <section> (delorun setup --list shows the 
 If something looks wrong: delorun doctor.
 ```
 
-The install step appears only when the launcher started setup. The key step names the variable instead while you chose a key variable that is not set in your terminal. These flags answer the questions without asking them:
+只有在启动器启动了设置时，才会出现安装这一步。当你选择了密钥变量时，密钥这一步改为指名该变量。
 
-| Flag | What it answers |
+| 标志 | 它回答什么 |
 | --- | --- |
-| `--yes` | Takes every default and asks nothing. |
-| `--phone` | Turns on phone access over Tailscale, and fails with the reason when Tailscale is not ready. In a terminal it pre-selects Yes. |
-| `--import-dsh` | Copies your DeepSeek Harness chats after it prints what is copied and what stays behind. |
-| `--port <n>` | Uses this studio port, from 1024 to 65535, instead of 3080 or the next free port. |
+| `--yes` | 采用每个默认值，什么也不问。 |
+| `--phone`（或 `--devices`） | 开启通过 Tailscale 从你的其他设备访问，并在 Tailscale 未就绪时带着原因失败。在终端里，它还会提出 PIN 问题。 |
+| `--import-dsh` | 在打印复制了什么、留下了什么之后，复制你的 DeepSeek Harness chat。 |
+| `--port <n>` | 使用这个 studio 端口（1024 到 65535），而不是 3080 或下一个空闲端口。 |
 
 <details>
-<summary>Edge cases</summary>
+<summary>边界情况</summary>
 
-- If you answer **No** to the phone question, then nothing about phone access changes; turn it on later with `delorun reach on tailscale` or `delorun setup reach`.
-- If you choose **Later** for the DeepSeek Harness chats, then nothing is copied; run `delorun import-home` any time.
-- If port 3080 is busy and you run with `--yes`, then setup takes the next free port, prints `! Port 3080 is in use, so the studio will use 3081. Change it later with: delorun setup profile`, and goes on. A `--port` that is busy fails with the port named.
-- If `npm install -g` is refused for lack of permission, then setup prints the same command with `--prefix ~/.local` and says to add `~/.local/bin` to your `PATH`.
-- If the launcher is built for another release channel, such as a local channel, then it is not on the npm registry, so the command installs the package file it came from, `npm install -g ./delorun-<version>.tgz`, and the update-check statement names that channel's host, not releases.delorun.com and GitHub.
-- If you press Ctrl-C at a question, then setup prints `Setup cancelled. Nothing was saved. Run delorun to start again.` and exits with code 130. Closing the terminal before the questions end also writes nothing.
-- If `~/.dsh` does not exist, or your Delorun home already has chats, then the DeepSeek Harness question is skipped.
-- If you run setup as the root user, then **Never ask (dangerous)** is refused, by `delorun setup prompts`, by `--prompts dangerous` and by an answers document.
-- If you run setup with `--yes` and no `--provider`, then it sets up no model provider and says how to add one. A script that runs `delorun headless` needs the key variable set in its own environment, because setup never stores a key it did not ask for.
+- 如果你对手机问题回答 **No**，那么手机访问不会有任何变化；之后用 `delorun reach on tailscale` 或 `delorun setup reach` 开启它。
+- 如果你为 DeepSeek Harness 的 chat 选择 **Later**，那么什么也不会复制；随时可以运行 `delorun import-home`。
+- 如果 3080 端口被占用而你带 `--yes` 运行，那么设置会取下一个空闲端口，打印 `! Port 3080 is in use, so the studio will use 3081. Change it later with: delorun setup profile`，然后继续。被占用的 `--port` 会失败并指名该端口。
+- 如果 `npm install -g` 因权限不足被拒绝，那么设置会打印带 `--prefix ~/.local` 的同一条命令，并说明要把 `~/.local/bin` 加入你的 `PATH`。
+- 如果启动器是为另一个发布通道（例如本地通道）构建的，那么它不在 npm 注册表上，因此该命令安装它来自的那个包文件 `npm install -g ./delorun-<version>.tgz`，而更新检查的说明会指名该通道的主机，而不是 releases.delorun.com 和 GitHub。
+- 如果你在某个问题上按 Ctrl-C，那么设置会打印 `Setup cancelled. Nothing was saved. Run delorun to start again.` 并以状态码 130 退出。在问题结束之前关闭终端同样什么也不写入。
+- 如果 `~/.dsh` 不存在，或你的 Delorun home 已经有 chat，那么 DeepSeek Harness 的问题会被跳过。
+- 如果你以 root 用户运行设置，那么 **Never ask (dangerous)** 会被拒绝，`delorun setup prompts`、`--prompts dangerous` 和答案文档都会拒绝它。
+- 如果你带 `--yes` 且不带 `--provider` 运行设置，那么它不设置任何模型提供方，并说明如何添加一个。运行 `delorun headless` 的脚本需要在自己的环境中设置密钥变量，因为设置从不保存它没有询问过的密钥。
 
 </details>
 
 <details>
-<summary>Go further</summary>
+<summary>更多</summary>
 
-- To change your mind, run `delorun setup` again. On a finished setup in a terminal it says what the run does, then asks its questions again with your current choices selected. With `--yes` or `--config`, a finished setup is left unchanged.
-- Change one answer with `delorun setup <section>`. `delorun setup --list` lists the sections: `privacy`, `import`, `key`, `prompts`, `background`, `reach`, `changes-protection` and `profile`. `delorun setup key` sets the model provider and key from the terminal ([Model providers](providers.zh.md)), `delorun setup privacy` the release check, and `delorun setup changes-protection` whether changes to your plugins and to Delorun wait for your review.
-- Run setup with another profile name for several setups side by side ([Your Delorun home](../customising/home.zh.md#profiles)).
-- For scripts, `delorun setup --yes --provider deepseek-official` reads the key from `DEEPSEEK_API_KEY`. `delorun setup --config <file>` reads every answer from a JSON file that holds a complete answers document. A file with only `useCase` is refused. Neither form turns on remote access or imports `~/.dsh` by itself, and neither starts Delorun: run `delorun` afterwards. `--check-key` checks a key that comes from the environment ([Model providers](providers.zh.md#set-up-without-questions)).
-- A complete answers document that reads the key from `DEEPSEEK_API_KEY` looks like this. [Answer schema](../../contracts/c11-setup-answers.zh.md#answer-schema) explains each field.
+- 要改变主意，请再次运行 `delorun setup`。在终端里对已完成的设置运行时，它会说明这次运行做什么，然后带着你当前的选择重新提问。带 `--yes` 或 `--config` 时，已完成的设置保持不变。
+- 用 `delorun setup <section>` 更改某一项答案。`delorun setup --list` 列出各节：`privacy`、`import`、`key`、`prompts`、`background`、`reach`、`changes-protection` 与 `profile`。`delorun setup key` 从终端设置模型提供方和密钥（见[模型提供方](providers.zh.md)），`delorun setup privacy` 设置发布检查，`delorun setup changes-protection` 设置对你的插件和 Delorun 的更改是否等待你的审查。
+- 用另一个 profile 名称运行设置，以便并排进行多次设置（见[你的 Delorun home](../customising/home.zh.md#profiles)）。
+- 对于脚本，`delorun setup --yes --provider deepseek-official` 从 `DEEPSEEK_API_KEY` 读取密钥。`delorun setup --config <file>` 从一个持有完整答案文档的 JSON 文件读取每一项答案。只有 `useCase` 的文件会被拒绝。这两种形式都不会自行开启远程访问或导入 `~/.dsh`，也都不会启动 Delorun：之后请运行 `delorun`。`--check-key` 检查来自环境的密钥（见[模型提供方](providers.zh.md#set-up-without-questions)）。
+- 一份从 `DEEPSEEK_API_KEY` 读取密钥的完整答案文档如下所示。[答案 schema](../../contracts/c11-setup-answers.zh.md#answer-schema) 定义了每个字段。
 
   ```json setup-answers-example
   {
@@ -236,9 +238,11 @@ The install step appears only when the launcher started setup. The key step name
 
 </details>
 
-## The studio and your first chat
+<a id="the-studio-and-your-first-chat"></a>
 
-Setup starts Delorun and opens the studio in your browser. The [studio](../../reference/glossary.zh.md#studio) is Delorun's web page for chatting with the model. It listens on `127.0.0.1`, which only your own computer can reach, unless you turn on [remote access](../everyday-use/reach.zh.md). The browser signs in with a link that works once and expires after one minute. `delorun open` opens the studio again with a fresh link, and a run of `delorun` on a home that is already set up starts Delorun and opens the studio the same way:
+## studio 与你的第一个 chat
+
+设置会启动 Delorun 并在你的浏览器中打开 studio。[studio](../../reference/glossary.zh.md#studio) 是 Delorun 用来与模型聊天的网页。它监听 `127.0.0.1`，只有你自己的电脑能访问，除非你开启[远程访问](../everyday-use/reach.zh.md)。浏览器用一个只能使用一次、一分钟后就过期的链接登录。`delorun open` 会用新链接再次打开 studio，而在已经设置好的 home 上运行 `delorun` 也会以同样的方式启动 Delorun 并打开 studio：
 
 ```text
 Delorun is running in the background for the profile default at http://127.0.0.1:3080/; it keeps running after this terminal closes.
@@ -247,37 +251,37 @@ Run delorun open to open the studio in your browser.
 Opened the studio in your browser.
 ```
 
-The first time, the studio shows a short first-run guide of three steps, ending in a chat:
+第一次时，studio 会显示一个三步的简短首次运行引导，最后进入一个 chat：
 
-![The studio's first-run guide on a new home: the Welcome step, with the language choices and the pre-release notice, over an empty chat list.](../pictures/first-run-guide.webp)
+![新 home 上 studio 的首次运行引导：Welcome 步骤，带有语言选项和预览版提示，覆盖在空的 chat 列表之上。](../pictures/first-run-guide.webp)
 
-1. **Welcome.** Choose the language. A pre-release notice says that Delorun is a community fork of DeepSeek Harness that is still in preview; choose Continue to acknowledge it.
-2. **Models.** This is where you give Delorun its model key. A key that Delorun already has shows as "Key found", with where it came from (for example "From DEEPSEEK_API_KEY in the environment Delorun started with") and a "How does Delorun know?" note. Otherwise paste your DeepSeek key; Delorun tests it with a free request for the provider's model list, and shows `Key works` when the provider accepts it. Other providers are under **Add another provider**, and later in Settings, Agent, Models ([Model providers](providers.zh.md)). You can skip the step and add a key later.
-3. **Ready.** Delorun lists the model and the workspace it will use, and says that the look, agents, plugins and phone access are in Settings. It offers three ideas to try, each with a **Copy** button. **Start a chat** opens a new chat; Delorun never sends a first message for you.
+1. **Welcome。** 选择语言。开启设备访问时，它还会显示你的 studio 的 Tailscale 地址，你可以从任何登录到你的 Tailscale 的设备在那里完成设置。一条预览版提示说明 Delorun 是 DeepSeek Harness 的社区分支，仍处于预览阶段；选择 Continue 表示知悉。
+2. **Models。** 这里是你给 Delorun 模型密钥的地方。Delorun 已有的密钥会显示为 “Key found”，并说明它来自哪里（例如 “From DEEPSEEK_API_KEY in the environment Delorun started with”）以及一条 “How does Delorun know?” 说明。否则请粘贴你的 DeepSeek 密钥；Delorun 会用一次免费的提供方模型列表请求来测试它，并在提供方接受时显示 `Key works`。其他提供方在 **Add another provider** 之下，之后也可在“设置”→“智能体”→“模型”中找到（见[模型提供方](providers.zh.md)）。你可以跳过这一步，之后再添加密钥。
+3. **Ready。** Delorun 列出它将使用的模型和工作区，并说明外观、智能体、插件和手机访问都在“设置”中。它提供三个可以尝试的想法，每个都带一个 **Copy** 按钮。**Start a chat** 会打开一个新的 chat；Delorun 从不替你发送第一条消息。
 
-Two steps join the guide only when they are needed. A Workspace step appears only when no default workspace exists yet. A PIN step appears at your computer when phone access is on and no PIN is set: choose a PIN or passcode, typed twice, and **Set PIN**, or **Skip**. **Finish later**, beside the step name, closes the guide and keeps your place, and the guide shows again next time.
+有两个步骤只在需要时才加入引导。只有当还没有默认工作区时，才会出现 Workspace 步骤。当手机访问开启且没有设置 PIN 时，会在你的电脑上出现 PIN 步骤：选择一个 PIN 或密码，输入两次，然后 **Set PIN**，或 **Skip**。步骤名称旁的 **Finish later** 会关闭引导并保留你的进度，下次会再次显示该引导。
 
-The rest of what the guide used to ask is in Settings. Settings → General → Getting started, **Run setup again**, opens the full guide: Welcome, Models, Look (colours and theme), Agents (Claude Code or Codex as helpers a chat can hand work to), Recommended [plugins](../../reference/glossary.zh.md#plugin), Browser, Phone access, PIN, Workspace and Ready. Settings → General → How Delorun runs shows how much Delorun asks, whether it runs in the background, the profile name and studio port, and phone access, each with the `delorun setup` command that changes it.
+引导过去所询问的其余内容都在“设置”中。“设置”→“通用”→“入门”中的 **Run setup again** 会打开完整引导：Welcome、Models、Look（颜色与主题）、Agents（作为 chat 可以交办工作的助手的 Claude Code 或 Codex）、Recommended [plugins](../../reference/glossary.zh.md#plugin)、Browser、Phone access、PIN、Workspace 与 Ready。“设置”→“通用”→“How Delorun runs”显示 Delorun 询问多少、是否在后台运行、profile 名称与 studio 端口，以及手机访问，每一项都附有更改它的 `delorun setup` 命令。
 
-A new chat starts in one of the agent [presets](../../reference/glossary.zh.md#preset), which the studio calls modes: Standard, PTC, Minimal and Creator. PTC does everything Standard does and suits tasks that call tools in batches and then filter, deduplicate or summarise the results. In Creator mode, the agent writes plugins and presets with you. Type a message to chat. If you set up no provider or key, the model cannot answer; add one in the Models step or in Settings, Agent, Models.
+新的 chat 会在某个智能体 [preset](../../reference/glossary.zh.md#preset) 中启动，studio 称之为模式：Standard、PTC、Minimal 与 Creator。PTC 做 Standard 所做的一切，适合那些批量调用工具、然后对结果进行筛选、去重或汇总的任务。在 Creator 模式下，智能体与你一起编写插件和 preset。输入一条消息即可聊天。如果你没有设置任何提供方或密钥，模型无法回答；请在 Models 步骤或“设置”→“智能体”→“模型”中添加一个。
 
 <details>
-<summary>Edge cases</summary>
+<summary>边界情况</summary>
 
-- If the browser does not open, then run `delorun open`, or `delorun open --print` and open the printed link yourself.
-- If the link says it has expired, then run `delorun open` again. Each link works once, within one minute.
-- If the browser shows "unauthorized" (HTTP 401) at the studio address, then you opened the address without a sign-in link. Run `delorun open`. <!-- us-spelling: quoted output -->
-- If `delorun status` says `state: not running`, then start it with `delorun start`; if the start fails, read `delorun logs` and [Starting and stopping](../help/troubleshooting.zh.md#starting-and-stopping).
-- If your key is not set, then `delorun doctor` shows a `!` line for `key`, and a chat reports that the model cannot answer. Add it in the studio's Models step or Settings → Agent → Models, or run `delorun setup key`.
+- 如果浏览器没有打开，那么运行 `delorun open`，或运行 `delorun open --print` 并自己打开打印出的链接。
+- 如果链接提示已过期，那么再次运行 `delorun open`。每个链接只能使用一次，且在一分钟内有效。
+- 如果浏览器在 studio 地址显示 “unauthorized”（HTTP 401），那么你是在没有登录链接的情况下打开了该地址。请运行 `delorun open`。
+- 如果 `delorun status` 显示 `state: not running`，那么用 `delorun start` 启动它；如果启动失败，请阅读 `delorun logs` 和[启动与停止](../help/troubleshooting.zh.md#starting-and-stopping)。
+- 如果你的密钥没有设置，那么 `delorun doctor` 会为 `key` 显示一行 `!`，而 chat 会报告模型无法回答。请在 studio 的 Models 步骤或“设置”→“智能体”→“模型”中添加它，或运行 `delorun setup key`。
 
 </details>
 
 <details>
-<summary>Go further</summary>
+<summary>更多</summary>
 
-- Open the studio from your phone: [Reach the studio from your phone](../everyday-use/reach.zh.md).
-- See what a chat costs: [See what a chat costs](../everyday-use/cost-meter.zh.md).
-- Reshape Delorun with plugins, presets and skills: [Where to customise what](../customising/customise.zh.md).
+- 从手机打开 studio：[从手机访问 studio](../everyday-use/reach.zh.md)。
+- 查看一次 chat 的开销：[查看一次 chat 的开销](../everyday-use/cost-meter.zh.md)。
+- 用插件、preset 和 skill 重塑 Delorun：[在哪里定制什么](../customising/customise.zh.md)。
 
 </details>
 

@@ -71,7 +71,7 @@ Delorun 是预览版。它的发布版本使用预览密钥签名，尚未经过
 | | 值 |
 | --- | --- |
 | 发布根 2，`2.root.json` 的 SHA-256 | `9a8bc63834317c6c99901ec501325de9b2bf524b116b919b4b8443766d79ed03` |
-| Log-entry key (ECDSA P-256), SHA-256 of its DER public key | `27932e520626819cb536992fa705d9f7a53749a5b6cbae437f6fcbae77ad6eba` |
+| 日志条目密钥（ECDSA P-256），其 DER 公钥的 SHA-256 | `27932e520626819cb536992fa705d9f7a53749a5b6cbae437f6fcbae77ad6eba` |
 | 根密钥 id | `d8cb882168a05fe18b7139ad904de8634bcac2e8b3bebad3776b7efb008be734` |
 | 目标密钥 id | `cd269895db6714d341b1fe23e6d290e42e141da44789d754f3729543fdc9d769` |
 | 时间戳密钥 id | `df07a99c3eab87eb0428a3f17ac561cafc7f3bf13444a10a66885d342662a971` |
@@ -138,7 +138,7 @@ Delorun 尚未经过外部安全评审。维护者自己的评审、移除保护
 <a id="checking-it-yourself"></a>
 ## 自行核查
 
-- **The Security panel.** The shield at the foot of the sidebar opens it. Five rows answer what the agent can do, whether you can undo a change, who can reach the studio, what you added and whether this copy of Delorun is genuine. Green means the protection is on and checked; amber marks something you chose or something that needs a look; red means a protection is off or failing, and the row says what to do. Undo covers changes to Delorun and its plugins, not your project files: it stays green whether or not you review changes before they load, because Delorun records each one and you can undo it in Changes, and turns red only when Changes cannot read its records or saved no version to undo. Advanced shows what each row checks and when. Shortly after Delorun starts, once no chat has been busy for a moment, it hashes every installed file through the launcher at low priority, and it stops if a chat starts working; until then this copy reads "Signature verified · checking files". It reads plugins and your changes again after you add, update, switch or remove a plugin.
+- **安全面板。** 侧栏底部的盾牌会打开它。五行分别回答智能体能做什么、你能否撤销一项更改、谁能访问 studio、你添加了什么，以及这份 Delorun 副本是否真实。绿色表示保护已开启并已检查；琥珀色标记你做出的选择或需要看一眼的东西；红色表示某项保护已关闭或失败，该行会说明该怎么做。撤销涵盖对 Delorun 及其插件的更改，而不涵盖你的项目文件：无论你是否在更改加载之前审查它们，它都保持绿色，因为 Delorun 记录每一项，你可以在 Changes 中撤销它；只有当 Changes 无法读取其记录或没有保存可撤销的版本时，它才变红。Advanced 显示每一行检查什么以及何时检查。Delorun 启动后不久，一旦没有任何 chat 忙碌片刻，它就会以低优先级通过启动器对每个已安装文件计算哈希，而如果有 chat 开始工作，它就会停止；在那之前，这份副本显示 “Signature verified · checking files”。在你添加、更新、开启或移除插件之后，它会再次读取插件和你的更改。
 - **`delorun verify`** 检查已安装的版本是否已签名、是否在公开发布日志中，以及其文件是否就是已签名的文件。它不检查隔离、暴露、登录、插件或数据共享：报告将其逐项列为 `not run`，并以 `this is not a full verification of this Delorun` 结尾。这些检查以你的身份运行，因此以你身份运行的程序可以篡改它们。
 - **`delorun logs`** 显示每个日志、其位置与记录的内容（[Delorun 把日志放在哪里](../help/logs.zh.md)）。
 

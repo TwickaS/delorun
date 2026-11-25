@@ -22,16 +22,16 @@
   zh: 48dbb04e51385707
 /c18-release-log-and-witness/log-entry:
   en: 54f7508dedfe4721
-  zh: 5a9b0eb6a1760162
+  zh: ee4e5378cb680a15
 /c18-release-log-and-witness/release-log-bundle:
   en: b17ace2903268a9f
   zh: 56a544ace2e53d70
 /c18-release-log-and-witness/verifying-a-bundle:
   en: 424ef2a8ff8932f2
-  zh: 2878ceb770b6cfca
+  zh: 2478c6f368c7c4a0
 /c18-release-log-and-witness/consistency-with-the-current-log:
   en: 019c2917075b1675
-  zh: 2266521afc8c9742
+  zh: a4881493d2cc26b2
 /c18-release-log-and-witness/check-states:
   en: 6b69ed4301247b68
   zh: 8352c08e63fe718a
@@ -55,7 +55,7 @@
   zh: d7201bb2c63b1094
 /c18-release-log-and-witness/security/denial-tests:
   en: 99817f935158bfb5
-  zh: 89c7f9c1d7413412
+  zh: c9caec8c4619c435
 /c18-release-log-and-witness/security/what-this-does-not-prove:
   en: 7dea7b8a180eb506
   zh: 8062ac85f26eb3ca
