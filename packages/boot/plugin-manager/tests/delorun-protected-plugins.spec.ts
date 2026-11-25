@@ -13,7 +13,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import type { Context } from '@deepseek-ai/cordis'
 import Timer from '@deepseek-ai/cordis-plugin-timer'
 import {
-  boot, initProfile, loadOverlayPatches, loadProfileDirectory, readProfilePatches, type ProfileContext,
+  boot, initProfile, loadOverlayPatches, loadProfileDirectory, readProfileManifest, readProfilePatches, type ProfileContext,
 } from '@deepseek-ai/dsh-app-boot'
 import ConfigEditor from '@deepseek-ai/dsh-config-editor'
 import Hmr from '@deepseek-ai/dsh-hmr'
@@ -368,6 +368,79 @@ describe('plugin_manager in danger-full-access with @delorun/bundle-local\'s pro
     })
     expect(changeResult(await call({ action: 'remove_bundle', target: 'provider-bundle' }))).toMatchObject({ application: 'failed', error: { code: 'not-removable' } })
     expect(files()).toEqual(before)
+  })
+
+  it('switches a third-party bundle off and on again when its patch only adds a setting to a protected row', async () => {
+    // The shape of a real plugin: dsh-unlag@1.17.11 adds `base` to the hmr row's settings, which is how it reloads.
+    const patch: Patch = [
+      { insert: [{ id: 'setting-row', name: './plugin.mjs' }] },
+      { id: GUARD_ROW, disabled: false, config: { ...shippedConfig(GUARD), base: 'file:///plugin/' } },
+    ]
+    const { dir, call, files, guard } = await fixture()
+    writeBundle(dir, 'setting-bundle', patch)
+    const manifest = readProfileManifest('dsh', dir)
+    manifest.dependencies = { ...manifest.dependencies, 'setting-bundle': '1.0.0' }
+    writeFileSync(join(dir, 'package.json'), JSON.stringify(manifest))
+    expect(changeResult(await call({ action: 'set_bundle', target: 'setting-bundle', enabled: true }))).toMatchObject({
+      changed: true, application: 'applied', enabled: true,
+    })
+    expect(changeResult(await call({ action: 'set_bundle', target: 'setting-bundle', enabled: false }))).toMatchObject({
+      changed: true, application: 'applied', enabled: false,
+    })
+    // Switching it back on: the guard row keeps every setting the profile ships, so nothing is taken away.
+    expect(changeResult(await call({ action: 'set_bundle', target: 'setting-bundle', enabled: true }))).toMatchObject({
+      changed: true, application: 'applied', enabled: true,
+    })
+    expect(guard()).toMatchObject({ disabled: false, options: { name: GUARD, config: { ...shippedConfig(GUARD), base: 'file:///plugin/' } } })
+    expect(files()['package.json']).toContain('setting-bundle')
+  })
+
+  it.each([
+    ['drops', { base: 'file:///plugin/' }],
+    ['changes', { ...shippedConfig(GUARD), ...Object.fromEntries(Object.keys(shippedConfig(GUARD)).map(key => [key, 'changed'])) }],
+  ] as const)('refuses to switch on a bundle whose patch %s a setting the profile ships for a protected row', async (_way, config) => {
+    const patch: Patch = [{ insert: [{ id: 'shrinking-row', name: './plugin.mjs' }] }, { id: GUARD_ROW, config }]
+    const { dir, call, files, guard } = await fixture()
+    writeBundle(dir, 'shrinking-bundle', patch)
+    const manifest = readProfileManifest('dsh', dir)
+    manifest.dependencies = { ...manifest.dependencies, 'shrinking-bundle': '1.0.0' }
+    writeFileSync(join(dir, 'package.json'), JSON.stringify(manifest))
+    const before = files()
+    expect(changeResult(await call({ action: 'set_bundle', target: 'shrinking-bundle', enabled: true }))).toMatchObject({
+      ...GUARD_REFUSAL, error: { code: 'management-required', diagnostic: `protected by this profile: ${GUARD}` },
+    })
+    expect(files()).toEqual(before)
+    expect(guard()).toMatchObject({ disabled: false, options: { config: shippedConfig(GUARD) } })
+  })
+
+  it('refuses a bundle that carries a protected module in both directions, before and after a deselection', async () => {
+    const { dir, call } = await fixture()
+    const carrier = 'carrier-bundle'
+    writeBundle(dir, carrier, [{ insert: [{ id: 'carrier-guard', name: GUARD }] }])
+    const manifest = readProfileManifest('dsh', dir)
+    manifest.dependencies = { ...manifest.dependencies, [carrier]: '1.0.0' }
+    writeFileSync(join(dir, 'package.json'), JSON.stringify(manifest))
+    type Listed = { name: string; enabled: boolean; removable: boolean; readOnlyReason?: string }
+    const listed = async (): Promise<Listed> => {
+      const bundles = changeResult(await call({ action: 'list_bundles', limit: 100 })) as { entries: Listed[] }
+      const found = bundles.entries.find(bundle => bundle.name === carrier)
+      if (found === undefined) throw new Error(`${carrier} is not listed`)
+      return found
+    }
+    // Deselected, and listed so: a bundle carrying a guard row cannot be switched on.
+    expect(await listed()).toMatchObject({ enabled: false, removable: false, readOnlyReason: 'management-required' })
+    expect(changeResult(await call({ action: 'set_bundle', target: carrier, enabled: true }))).toMatchObject({
+      changed: false, application: 'failed', error: { code: 'management-required', diagnostic: `protected by this profile: ${GUARD}` },
+    })
+    expect(await listed()).toMatchObject({ enabled: false, readOnlyReason: 'management-required' })
+    expect(readProfileManifest('dsh', dir).dsh?.profile?.bundles).not.toContain(carrier)
+    // On, once the profile selects it: switching it off is refused with the same code.
+    const selected = readProfileManifest('dsh', dir)
+    selected.dsh = { ...selected.dsh, profile: { ...selected.dsh?.profile, bundles: [...(selected.dsh?.profile?.bundles ?? []), carrier] } }
+    writeFileSync(join(dir, 'package.json'), JSON.stringify(selected))
+    expect(await listed()).toMatchObject({ enabled: true, readOnlyReason: 'management-required' })
+    expect(changeResult(await call({ action: 'set_bundle', target: carrier, enabled: false }))).toMatchObject(GUARD_REFUSAL)
+    expect(await listed()).toMatchObject({ enabled: true, readOnlyReason: 'management-required' })
   })
 
   it('lets the same calls disable a row of the bundle and remove the bundle without the protection', async () => {

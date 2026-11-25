@@ -2944,9 +2944,11 @@ export interface Config {
   detailNpmFileSources?: NpmFileSource[]
   /**
    * Plugin module names the manager protects as it protects `PROTECTED_PLUGINS`, refusing with `management-required`
-   * any change that would disable, reconfigure, replace or drop a row of one of them, or add one, in the composed
-   * profile: a plugin toggle, a bundle selection or installation, an undo or a restore. A bundle with a row of one, or
-   * a package that provides one, can be neither deselected nor removed, and no package that provides one is installed
+   * any change that would take protection away from a row of one of them in the composed profile: disable, replace or
+   * drop the row, change or drop a setting the profile ships for it, or add a row of one. A setting a change adds is
+   * left to it, so a bundle that only configures a protected row can be selected and deselected as usual. The rule
+   * covers a plugin toggle, a bundle selection or installation, an undo and a restore. A bundle with a row of one, or a
+   * package that provides one, can be neither deselected nor removed, and no package that provides one is installed
    * or changed. These names add to `PROTECTED_PLUGINS` and cannot take any away; a refusal that names one of them
    * carries a `diagnostic` listing those names.
    */
