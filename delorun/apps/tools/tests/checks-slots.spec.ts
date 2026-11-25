@@ -126,6 +126,17 @@ describe('a grant', () => {
     expect(beside.sleeps).toBe(0)
   })
 
+  it('keeps a per-worker check scaling with its workers, whose declared figure is per worker', () => {
+    // `plan.ts` multiplies a perWorker budget by the check's CPUs, so the request already declares the total: the ceiling
+    // is that total, and a run fitted to fewer workers declares fewer.
+    const request = (pid: number, min: number, memoryBytes: number) => ({ file: String(pid), pid, want: min, min, memoryBytes, disk: false, priority: 1 as const, label: '', since: pid })
+    const fork = (workers: number) => request(1, workers, Math.round(0.5 * GIB * workers))
+    expect(decide({ holders: [], waiting: [fork(8)], oldWaiting: [] }, 1, budget)).toEqual({ slots: 8, memoryBytes: 4 * GIB })
+    expect(decide({ holders: [], waiting: [fork(4)], oldWaiting: [] }, 1, budget)).toEqual({ slots: 4, memoryBytes: 2 * GIB })
+    // The six per-worker checks of budgets.json keep their figures, so the scaling is theirs and not the queue's.
+    expect(['tests:fork', 'tests:fork:integration', 'tests:moved-clock', 'tests:upstream-changed', 'tests:snapshots', 'parity-replay']).toHaveLength(6)
+  })
+
   it('keeps the elastic share for a request that declares no memory, as the wrapper without --memory-gib asks', async () => {
     const machine = new Machine()
     // A request that declares nothing has no ceiling to state, so its slots' share of the budget stands.
