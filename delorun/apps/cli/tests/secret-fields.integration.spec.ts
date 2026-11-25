@@ -6,10 +6,11 @@
  * and the start moves a value a patch already holds into the credentials store, or names it when it cannot. The history
  * is upstream's git-backed one, so the specs run git.
  */
-import { execFileSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { execFileSync, spawn } from 'node:child_process'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { withFileLock } from '@deepseek-ai/dsh-atomic-write'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
 import { boot, initProfile, readProfilePatches, type ProfileContext } from '@deepseek-ai/dsh-app-boot'
@@ -21,6 +22,7 @@ import Settings from '@deepseek-ai/dsh-settings'
 import z from '@deepseek-ai/schemastery'
 import { parse } from 'yaml'
 import { configSchemasOf, credentialNameFor, guardSecretFields, MAX_NAME_ATTEMPTS, settleSecretValues, type SecretSettlement } from '../src/secret-fields.ts'
+import { PROFILE_LOCK_WAIT_MS } from '@delorun/changes'
 
 /** The secret value the specs type; no file the history holds and no message may hold it. */
 const SECRET = 'sk-typed-into-settings'
@@ -232,5 +234,47 @@ describe('settling a start\'s patch files', () => {
       expect.stringContaining(`${profile.patchPath} holds a value for the secret field apiKey of web-deepseek-api (name a stored credential in apiKeyEnv instead), which Delorun left in place because it is a \`!!js\` expression that does more than read an environment variable.`),
     ])
     expect(readFileSync(profile.patchPath, 'utf8')).toBe(text)
+  })
+})
+
+describe('the profile\'s writer lock', () => {
+  /** The profile's writer lock, upstream's lock file beside the profile's `package.json`. */
+  const lock = (): string => `${join(profile.dir, 'package.json')}.lock`
+
+  it('settles under a profile lock this process holds already, instead of waiting for itself', async () => {
+    writeFileSync(profile.patchPath, `- id: web-deepseek-api\n  config:\n    apiKey: ${SECRET}\n`)
+    let held: SecretSettlement | undefined
+    let lockStillHeld = false
+    await withFileLock(join(profile.dir, 'package.json'), async () => {
+      const started = Date.now()
+      held = await settleSecretValues(ctx, home, 'default', configSchemasOf(ctx), { lockWaitMs: 60_000 })
+      // A re-take would have waited out its whole bound; the settle of this process must not.
+      expect(Date.now() - started).toBeLessThan(5_000)
+      lockStillHeld = existsSync(lock())
+    }, { waitMs: PROFILE_LOCK_WAIT_MS })
+    expect(held?.notices).toEqual([])
+    expect(held?.moved).toEqual([`${profile.patchPath}: moved the value of the secret field apiKey of web-deepseek-api (name a stored credential in apiKeyEnv instead) into the credentials file as WEB_DEEPSEEK_API_APIKEY, and set apiKeyEnv to WEB_DEEPSEEK_API_APIKEY.`])
+    expect(readFileSync(profile.patchPath, 'utf8')).not.toContain(SECRET)
+    // The caller's own hold ends with the caller: settling never removes a lock file it did not create.
+    expect(lockStillHeld).toBe(true)
+    expect(existsSync(lock())).toBe(false)
+  })
+
+  it('refuses to settle while another process holds the profile lock, and writes nothing', async () => {
+    const text = `- id: web-deepseek-api\n  config:\n    apiKey: ${SECRET}\n`
+    writeFileSync(profile.patchPath, text)
+    // A live process that is not this one, as another Delorun writing the profile would be, holds the lock.
+    const holder = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60_000)'], { stdio: 'ignore' })
+    try {
+      writeFileSync(lock(), `${String(holder.pid)}\n`, { mode: 0o600 })
+      await expect(settleSecretValues(ctx, home, 'default', configSchemasOf(ctx), { lockWaitMs: 300 }))
+        // The lock's record is JSON-encoded, so its trailing newline reads as an escape.
+        .rejects.toThrow(`atomic-write: timed out waiting for the writer lock at ${lock()} (record "${String(holder.pid)}\\n")`)
+      expect(readFileSync(profile.patchPath, 'utf8')).toBe(text)
+      expect(existsSync(credentials)).toBe(false)
+    } finally {
+      holder.kill('SIGKILL')
+      rmSync(lock(), { force: true })
+    }
   })
 })

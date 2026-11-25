@@ -4,11 +4,9 @@
  *
  * @module @delorun/changes/action-support
  */
-import { join } from 'node:path'
-import { withFileLock } from '@deepseek-ai/dsh-atomic-write'
 import { openHistory } from '@delorun/profile-safety'
 import type { ChangesContext } from './actions.ts'
-import { PROFILE_LOCK_WAIT_MS } from './enforce.ts'
+import { PROFILE_LOCK_WAIT_MS, withProfileWriteLock } from './profile-lock.ts'
 
 /**
  * @param ctx - the profile.
@@ -19,13 +17,13 @@ export function timeOf(ctx: ChangesContext): string {
 }
 
 /**
- * Run under upstream's profile write lock.
+ * Run under upstream's profile write lock, unless the caller holds it already.
  * @param ctx - the profile and the lock wait.
  * @param run - the work.
  * @returns what it returned.
  */
 export function locked<T>(ctx: ChangesContext, run: () => Promise<T>): Promise<T> {
-  return withFileLock(join(ctx.profileDir, 'package.json'), run, { waitMs: ctx.lockWaitMs ?? PROFILE_LOCK_WAIT_MS })
+  return withProfileWriteLock(ctx.profileDir, run, { waitMs: ctx.lockWaitMs ?? PROFILE_LOCK_WAIT_MS })
 }
 
 /**

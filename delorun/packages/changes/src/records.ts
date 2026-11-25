@@ -16,6 +16,7 @@ import { dirname, join } from 'node:path'
 import { withFileLock, writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
 import { PRIVATE_DIR_MODE, PROTECTED_FILE_MODE } from '@delorun/contract-home-layout'
 import { checkPrivateDirectory, readProtectedFile, writeProtectedFile } from '@delorun/home'
+import { withProfileWriteLock } from './profile-lock.ts'
 import { ChangesError } from './errors.ts'
 import { CHANGE_ID_PATTERN } from './ids.ts'
 import { CHANGES_ENTRIES, changesDirectory, harnessDirectory, harnessLogPath, harnessRecordPath, migrationPath, PACKAGE_NAME_PATTERN, profileChangesDirectory, protectionPath } from './paths.ts'
@@ -865,7 +866,7 @@ export interface ShownTarget {
  */
 export async function markShownAtUpgrade(target: ShownTarget, plugins: readonly string[], at: string): Promise<boolean> {
   const { home, profile } = target
-  return withFileLock(join(target.profileDir, 'package.json'), async () => {
+  return withProfileWriteLock(target.profileDir, async () => {
     const log = await readChangeLog(home, profile)
     let changed = false
     const entries = log.entries.map((entry): ChangeEntry => {

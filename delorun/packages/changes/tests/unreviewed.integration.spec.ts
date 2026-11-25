@@ -1,7 +1,7 @@
+import { spawn } from 'node:child_process'
 import { chmodSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { withFileLock } from '@deepseek-ai/dsh-atomic-write'
 import { listChanges, showChange, undoChange, type ChangesContext, type ReloadHost, type ReloadOutcome } from '../src/actions.ts'
 import { openWorkSession, readActiveRecord, readChangeLog, setProtection, writeChangeLog } from '../src/records.ts'
 import { activeDirectory, versionsDirectory } from '../src/paths.ts'
@@ -111,14 +111,22 @@ describe('a live reload with protection off', () => {
   async function loadWhileLocked(fx: Fixture, reload: ReloadHost, meanwhile: () => Promise<void>): Promise<UnreviewedSync> {
     const versions = versionsDirectory(fx.home)
     const stored = readdirSync(versions).length
-    // The load is returned wrapped: it waits for this lock, so the operation must not wait for it.
-    const { sync } = await withFileLock(join(fx.profileDir, 'package.json'), async () => {
+    const lock = join(fx.profileDir, 'package.json')
+    // Another writer, in another process, as an install or `delorun changes` holds it: the load waits for that hold,
+    // because a live foreign process's lock is never taken over and a load started from the watcher is no part of it.
+    const holder = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60_000)'], { stdio: 'ignore' })
+    try {
+      writeFileSync(`${lock}.lock`, `${String(holder.pid)}\n`, { mode: 0o600 })
       const started = loadUnreviewed(contextOf(fx), 'plug', reload)
       await vi.waitFor(() => { expect(readdirSync(versions)).toHaveLength(stored + 1) }, { timeout: 4_000 })
       await meanwhile()
-      return { sync: started }
-    })
-    return sync
+      // The other writer releases: the load takes the freed lock and commits.
+      rmSync(`${lock}.lock`, { force: true })
+      return await started
+    } finally {
+      holder.kill('SIGKILL')
+      rmSync(`${lock}.lock`, { force: true })
+    }
   }
 
   it('reads the folder without the profile write lock and commits once the lock is free', async () => {

@@ -41,6 +41,7 @@ import { checkLoadedContent } from './invariants.ts'
 import { leftOutContent, leftOutFact, leftOutWords, leftOutOf, type LeftOutFact } from './left-out.ts'
 import { pointLinkAt, readLinks } from './link.ts'
 import { activeDirectory, CHANGES_ENTRIES, profileChangesDirectory } from './paths.ts'
+import { PROFILE_LOCK_WAIT_MS, withProfileWriteLock } from './profile-lock.ts'
 import { approvedOf, findEntry, migratesAtUpgrade, readActiveRecord, readApproved, readChangeLog, readProtection, readWorkSession, withEntry, writeActiveRecord, writeApproved, writeChangeLog } from './records.ts'
 import { holdsVersion, materialize, readVersion, storeEmptyVersion, storeFolder } from './store.ts'
 import { referenceRelease, versionOf, type ScanMemo } from './tree.ts'
@@ -49,8 +50,7 @@ import { inPackStore, supersededByUpdate, type UpdateBaseline } from './update-b
 import { approvedWith, declinedByPerson, unreviewedEntry, unreviewedWords, type UnreviewedLoad } from './unreviewed.ts'
 import { endWorkWithoutPerson, workFinishedLine, workSessionExpired, type WorkFinished } from './work.ts'
 
-/** How long a start waits for the profile write lock: upstream plugin management's default, which a `pnpm` run can hold. */
-export const PROFILE_LOCK_WAIT_MS = 120_000
+export { PROFILE_LOCK_WAIT_MS, withProfileWriteLock, type ProfileWriteLockOptions } from './profile-lock.ts'
 
 /** The profile a start is about to boot. */
 export interface EnforceRequest {
@@ -181,7 +181,7 @@ interface ManagedPlugin {
 export async function enforceApprovedContent(request: EnforceRequest): Promise<StartChanges> {
   const { home, profileDir } = request
   const at = (request.now ?? (() => new Date()))().toISOString()
-  return withFileLock(join(profileDir, 'package.json'), async () => {
+  return withProfileWriteLock(profileDir, async () => {
     const changes = await bringUnderChanges(request, at, 'start')
     await refuseUnkept(request)
     try {
@@ -268,7 +268,7 @@ export async function repointActiveCopies(request: EnforceRequest): Promise<read
   }
   // A normal restart finds every copy holding its version and takes no lock, so it never waits for a profile writer.
   if ((await stale()).length === 0) return []
-  return withFileLock(join(profileDir, 'package.json'), async () => {
+  return withProfileWriteLock(profileDir, async () => {
     const rewritten: string[] = []
     for (const [plugin, content] of await stale()) {
       await holdContent(home, activeDirectory(home, profile, plugin), content.version, release, request.scanMemo)
@@ -301,7 +301,7 @@ export async function followApprovedContent(request: EnforceRequest): Promise<re
   }
   // A boot after a failed switch whose records agree takes no lock, as a restart of the same release does.
   if ((await stale()).length === 0) return []
-  return withFileLock(join(profileDir, 'package.json'), async () => {
+  return withProfileWriteLock(profileDir, async () => {
     const behind = await stale()
     const plugins: Record<string, ActiveContent> = { ...(await readActiveRecord(home, profile)).plugins }
     for (const [plugin, version] of behind) {
@@ -350,7 +350,7 @@ export async function revertDecisions(request: Pick<EnforceRequest, 'home' | 'pr
   /** The names whose entry differs between `before` and `after`. */
   const changed = <T>(from: Readonly<Record<string, T>>, to: Readonly<Record<string, T>>): string[] => [...new Set([...Object.keys(from), ...Object.keys(to)])].filter(name => !same(from[name], to[name]))
   if (changed(before.approved.plugins, after.approved.plugins).length === 0 && changed(before.active, after.active).length === 0) return []
-  return withFileLock(join(profileDir, 'package.json'), async () => {
+  return withProfileWriteLock(profileDir, async () => {
     const now = await recordsOf(request)
     const touched = new Set<string>()
     /** `now` with each changed entry that still equals `after`'s put back to `before`'s. */

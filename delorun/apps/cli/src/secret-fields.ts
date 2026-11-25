@@ -24,6 +24,7 @@ import { open, rm } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import { withFileLock, writeFileAtomic } from '@deepseek-ai/dsh-atomic-write'
+import { PROFILE_LOCK_WAIT_MS, withProfileWriteLock } from '@delorun/changes'
 import type {} from '@deepseek-ai/dsh-config-editor'
 import { credentialRef, isCredentialRefName, type CredentialProvider } from '@deepseek-ai/dsh-credentials'
 import type {} from '@deepseek-ai/dsh-plugin-manager'
@@ -249,21 +250,27 @@ async function settleFile(path: string, schemas: ConfigSchemasOf, credentials: C
  * and a notice names it with the way to move it. The credentials file and its directory are flushed to disk before a
  * patch is rewritten. Both files are rewritten under the profile's writer lock and the home patch's, and the
  * profile's copy of the home patch, which an earlier snapshot may have written with a value in it, is replaced with a
- * copy of the home patch as it is now.
+ * copy of the home patch as it is now. The profile's lock is taken only when this process does not hold it already: a
+ * caller that does, such as a start's own pre-start step or upstream's plugin management in the middle of a change,
+ * would otherwise wait for itself until the wait expired, and the version that settles would be lost with it.
  * @param ctx - the booted profile's root context.
  * @param home - the Delorun home.
  * @param profile - the profile.
  * @param schemas - its Config schemas ({@link configSchemasOf}).
+ * @param options - how long to wait for another process's hold of the profile lock, {@link PROFILE_LOCK_WAIT_MS} by default.
  * @returns what was moved and what stays; no line holds a value.
  */
-export async function settleSecretValues(ctx: Context, home: string, profile: string, schemas: ConfigSchemasOf): Promise<SecretSettlement> {
+export async function settleSecretValues(ctx: Context, home: string, profile: string, schemas: ConfigSchemasOf, options?: { readonly lockWaitMs?: number }): Promise<SecretSettlement> {
   const profileDir = profileDirectory(home, profile)
   const credentials = ctx.get('credentials')
   const homePatch = join(home, PATCH_FILENAME)
   const credentialsFile = join(home, CREDENTIALS_FILENAME)
   // The profile's writer lock, then the home patch's: every start that settles takes the second, so two profiles, or a
-  // start and `delorun headless`, never choose a credential name or rewrite the home patch at the same time.
-  return await withFileLock(join(profileDir, 'package.json'), () => withFileLock(homePatch, async () => {
+  // start and `delorun headless`, never choose a credential name or rewrite the home patch at the same time. The profile
+  // lock is not taken again when this process holds it already, such as a start's own pre-start step or upstream's
+  // plugin management in the middle of a change; waiting for it then expires against this very process and costs the
+  // profile its history version for a change that did write the patch.
+  return await withProfileWriteLock(profileDir, () => withFileLock(homePatch, async () => {
     const moved: string[] = []
     const notices: string[] = []
     for (const path of [join(profileDir, PATCH_FILENAME), homePatch]) {
@@ -285,7 +292,7 @@ export async function settleSecretValues(ctx: Context, home: string, profile: st
       }
     }
     return { moved, notices }
-  }))
+  }), { waitMs: options?.lockWaitMs ?? PROFILE_LOCK_WAIT_MS })
 }
 
 /**
