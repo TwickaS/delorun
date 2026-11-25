@@ -6,7 +6,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "tsx src/check-fork-boundary.ts"
+    "check": "tsx src/check-fork-boundary.ts",
+    "bench": "tsx src/compat-bench/cli.ts"
   },
   "dependencies": {
     "@delorun/bundle-local": "workspace:*",

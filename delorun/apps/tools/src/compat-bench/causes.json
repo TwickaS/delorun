@@ -1,0 +1,16 @@
+[
+  { "id": "approval-answering", "summary": "The plugin answers approval prompts in the host, so it can approve grants that Delorun keeps to the computer.", "fixClass": "delorun-fix" },
+  { "id": "plugin-manager-bypass", "summary": "The plugin installs, switches or updates plugins itself, outside Delorun's install check, Changes and protected rows.", "fixClass": "delorun-fix" },
+  { "id": "own-remote-channel", "summary": "The plugin brings its own remote access, outside Delorun's device approval.", "fixClass": "by-design" },
+  { "id": "files-in-home", "summary": "The plugin reads or writes files in places Delorun treats differently: the Changes copy, the protected home, or a workspace inside the home.", "fixClass": "delorun-shim" },
+  { "id": "studio-overlap", "summary": "The plugin's studio surface overlaps Delorun's: Settings section under Other, theme tokens, sidebar or Settings replacement.", "fixClass": "delorun-shim" },
+  { "id": "stock-default-differs", "summary": "A default differs from stock DSH: no token in the web line, privacy rows off, no mirrors, no search provider.", "fixClass": "delorun-shim" },
+  { "id": "fetch-outside-guard", "summary": "The plugin's outbound requests go through globalThis.fetch or undici and never reach Delorun's fetch guard.", "fixClass": "parked" },
+  { "id": "version-range", "summary": "The install was refused because the plugin's declared engines range does not match the host's version (A567, L150).", "fixClass": "delorun-fix" },
+  { "id": "needs-account", "summary": "The plugin needs an account or sign-in with a service that the bench does not hold.", "fixClass": "parked" },
+  { "id": "needs-real-model", "summary": "The feature needs a real model, and the bench's mock model cannot stand in for it.", "fixClass": "parked" },
+  { "id": "platform", "summary": "The plugin needs a platform the bench container does not offer, for example Windows only.", "fixClass": "parked" },
+  { "id": "harness-broken", "summary": "With the plugin installed, the harness no longer answers a chat message.", "fixClass": "upstream" },
+  { "id": "load-error", "summary": "The studio logged an error while loading the plugin.", "fixClass": "upstream" },
+  { "id": "ui-error", "summary": "The plugin's screens did not draw or the browser console reported errors.", "fixClass": "upstream" }
+]

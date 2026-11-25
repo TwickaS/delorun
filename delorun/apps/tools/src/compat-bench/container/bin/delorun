@@ -1,0 +1,4 @@
+#!/bin/sh
+# The `delorun` command of a bench image: Delorun's source tree, run the way fresh-home-smoke runs it.
+cd /opt/delorun/delorun/apps/cli || exit 127
+exec /opt/delorun/node_modules/.bin/tsx src/bin.ts "$@"
