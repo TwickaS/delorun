@@ -2,11 +2,11 @@
  * The security overview the trust badge opens (A628, L197): five rows that answer what the agent can do, whether a
  * change can be undone, who can reach the studio, what was added and whether this copy is genuine.
  *
- * The basic view opens by default. When every row is green it shows one calm line and the rows folded behind a
- * disclosure; any row that is not green opens itself and says what it means, why it has its colour, whether it is the
- * person's choice or a fault, and offers the one action that fixes it. The advanced view, a toggle the studio remembers,
- * breaks every row down: what is checked, how and when, the colours' meanings, and the lists behind each row. Colour is
- * never the only signal: each status has an icon and words.
+ * The basic view opens by default and answers at a glance: when every row is green it shows one calm line and the rows
+ * folded behind a disclosure; otherwise it lists the five rows, each with its status, its one sentence and, where it has
+ * one, the action that fixes it, so the whole answer fits without scrolling. The advanced view, a toggle the studio
+ * remembers, adds what a row means, why it has its colour, whether it is the person's choice or a fault, when each check
+ * last ran, and the lists behind each row. Colour is never the only signal: each status has an icon and words.
  * @module @delorun/bundle-local/client/SecurityOverview
  */
 import { useEffect, useId, useState, type ReactNode } from 'react'
@@ -114,12 +114,13 @@ export function SecurityOverview({ t, bill, checks, facts, loaded, act, trustDet
     rememberView(next)
   }
   return (
-    <div className={css.overview}>
+    <div className={css.overview} data-view={view}>
       <div className={css.headline} data-status={headline} aria-live="polite">
         <span className={css.headlineIcon} aria-hidden="true">{HEADLINE_ICONS[headline]}</span>
         <div className={css.headlineText}>
           <p className={css.headlineTitle}>{loaded ? t(`overview.headline.${headline}`) : t('overview.loading')}</p>
-          {loaded && !calm && <p className={css.headlineDetail}>{t(`overview.headline.${headline}.detail`)}</p>}
+          {/* The headline is the answer; the sentence under it explains it, so it belongs to the advanced view. */}
+          {loaded && !calm && view === 'advanced' && <p className={css.headlineDetail}>{t(`overview.headline.${headline}.detail`)}</p>}
         </div>
       </div>
       <SegmentedControl
@@ -149,8 +150,14 @@ export function SecurityOverview({ t, bill, checks, facts, loaded, act, trustDet
             </ul>
           )}
         {message !== undefined && <p className={css.error} role="alert">{message}</p>}
-        {view === 'advanced' && <p className={css.note}>{t('overview.states')}</p>}
-        {checkBlock}
+        {/* Check now, the colours' meanings and the checks' limit explain the answer rather than give it, so they are
+            the advanced view's; the basic view holds the headline and the five rows and nothing else. */}
+        {view === 'advanced' && (
+          <>
+            <p className={css.note}>{t('overview.states')}</p>
+            {checkBlock}
+          </>
+        )}
         <p className={css.note}>
           <a className={css.link} href={SECURITY_PAGE_URL} target="_blank" rel="noreferrer">{t('overview.learn')}</a>
         </p>
@@ -170,13 +177,14 @@ interface RowProps {
 }
 
 /**
- * One row: its status (icon, words and colour), its sentence and, when it is not green or the view is advanced, its
- * explanation, its action and its breakdown.
+ * One row. The basic view shows its status (icon, words and colour), its one sentence and, where it has one, the action
+ * that fixes it, so five rows answer at a glance without scrolling. The advanced view adds what the row means, why it has
+ * its colour, when its check last ran and the lists behind it.
  * @param props - the copy, the row, the facts, the view and the actions.
  * @returns the row.
  */
 function OverviewRowItem({ t, row, all, view, act, trustDetails }: RowProps) {
-  const open = row.status !== 'green' || view === 'advanced'
+  const advanced = view === 'advanced'
   const fresh = freshnessOf(row.id, all.checks)
   return (
     <li className={css.row} data-status={row.status}>
@@ -188,10 +196,15 @@ function OverviewRowItem({ t, row, all, view, act, trustDetails }: RowProps) {
             <span className={css.status}>{t(`overview.status.${row.status}`)}</span>
           </p>
           <p className={css.sentence}>{t(`overview.${row.cause}`, wordsOf(t, row))}</p>
-          {fresh !== undefined && <Freshness t={t} freshness={fresh} now={all.now} />}
+          {advanced && fresh !== undefined && <Freshness t={t} freshness={fresh} now={all.now} />}
         </div>
+        {row.action !== undefined && (
+          <button type="button" className={css.action} onClick={() => { if (row.action !== undefined) act(row.action) }}>
+            {t(`overview.${row.cause}.action`)}
+          </button>
+        )}
       </div>
-      {open && row.status !== 'green' && (
+      {advanced && row.status !== 'green' && (
         <div className={css.explain}>
           <dl className={css.fields}>
             <div className={css.field}>
@@ -207,14 +220,9 @@ function OverviewRowItem({ t, row, all, view, act, trustDetails }: RowProps) {
               </dd>
             </div>
           </dl>
-          {row.action !== undefined && (
-            <button type="button" className={css.action} onClick={() => { if (row.action !== undefined) act(row.action) }}>
-              {t(`overview.${row.cause}.action`)}
-            </button>
-          )}
         </div>
       )}
-      {view === 'advanced' && <Breakdown t={t} row={row} all={all} trustDetails={trustDetails} />}
+      {advanced && <Breakdown t={t} row={row} all={all} trustDetails={trustDetails} />}
     </li>
   )
 }

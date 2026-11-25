@@ -275,6 +275,7 @@ function TrustPanel({ t, bill, checks, rows, useChecking, useOverview, useOvervi
       </p>
     </>
   )
+  // Check now and the checks' limit: the advanced view's, because the basic view answers at a glance and must not scroll.
   const checkBlock = (
     <>
       <div className={css.check}>

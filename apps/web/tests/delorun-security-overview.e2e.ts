@@ -115,6 +115,8 @@ it.skipIf(webSnapshotMode() === 'record')('shows the calm line, the release whil
   }
   let acknowledged = false
   const open = async (): Promise<ReturnType<Page['getByRole']>> => {
+    // The badge sits in the sidebar's foot, which folds into the drawer on a phone width; open at the wide width.
+    await page.setViewportSize({ width: 1440, height: 900 })
     await page.goto(scaffold.authenticatedUrl)
     if (!acknowledged) await acknowledgeDelorunNotice(page)
     acknowledged = true
@@ -123,6 +125,28 @@ it.skipIf(webSnapshotMode() === 'record')('shows the calm line, the release whil
     const dialog = page.getByRole('dialog', { name: 'Security' })
     await dialog.waitFor()
     return dialog
+  }
+
+  /**
+   * Measure the panel's scrollable content at one width, in the view it is showing.
+   * @param dialog - the open dialog.
+   * @param width - the viewport width.
+   * @param height - the viewport height.
+   * @returns the heights, in CSS pixels.
+   */
+  const measure = async (dialog: ReturnType<Page['getByRole']>, width: number, height: number) => {
+    await page.setViewportSize({ width, height })
+    await page.waitForTimeout(400)
+    return await dialog.evaluate((card) => {
+      const content = card.querySelector<HTMLElement>('[class*="content"]')
+      if (content === null) throw new Error('the dialog has no content region')
+      return {
+        card: Math.round(card.getBoundingClientRect().height),
+        client: content.clientHeight,
+        scroll: content.scrollHeight,
+        overflows: content.scrollHeight > content.clientHeight + 1,
+      }
+    })
   }
 
   const calm = await open()
@@ -149,4 +173,59 @@ it.skipIf(webSnapshotMode() === 'record')('shows the calm line, the release whil
   await row.waitFor({ timeout: 20_000 })
   await row.getByRole('button', { name: 'Open Changes' }).waitFor()
   await shot('red-undo')
+
+  // Everything visible at first glance, with no scroll, unless on the advanced view: the basic view holds all five rows
+  // here, one of them red with its action.
+  expect(await red.locator('li').count()).toBe(5)
+  for (const [width, height] of [[1440, 900], [390, 844]] as const) {
+    const basic = await measure(red, width, height)
+    console.info(`basic ${String(width)}x${String(height)}: content ${String(basic.client)} px, needs ${String(basic.scroll)} px, card ${String(basic.card)} px`)
+    expect({ width, ...basic }).toMatchObject({ overflows: false })
+    expect(basic.scroll).toBeLessThanOrEqual(basic.client)
+  }
+  // The advanced view carries the explanation and may scroll; it is measured so the two are told apart.
+  await red.getByRole('tab', { name: 'Advanced' }).click()
+  await red.getByText('What it means').first().waitFor()
+  for (const [width, height] of [[1440, 900], [390, 844]] as const) {
+    const advanced = await measure(red, width, height)
+    console.info(`advanced ${String(width)}x${String(height)}: content ${String(advanced.client)} px, needs ${String(advanced.scroll)} px, card ${String(advanced.card)} px`)
+    expect(advanced.scroll).toBeGreaterThan(advanced.client)
+  }
+
+  // The tallest basic view: every one of the five rows not green, each with its action, which is the most a person can
+  // be asked to read at a glance.
+  await page.route('**/api/delorunRun.state', route => route.fulfill({
+    json: { recorded: true, prompts: 'safer', dangerous: 'on', background: false, port: { chosen: 3080, running: 3080 }, reach: { on: true, address: 'http://192.0.2.10:3080' } },
+  }))
+  await page.route('**/api/delorunPermission.everywhere', route => route.fulfill({ json: { on: true, grantedAt: AT } }))
+  await page.route('**/api/delorunPermission.workspaces', route => route.fulfill({
+    json: {
+      workspaces: [{ workspace: '/home/person/a-very-long-workspace-name-for-the-row', title: 'A very long workspace name for the row', preset: 'danger-full-access', grantedAt: Date.now(), reviewId: 'r1' }],
+      everywhere: { on: true, grantedAt: AT },
+    },
+  }))
+  await page.route('**/auth/devices', route => route.fulfill({
+    json: {
+      owner: { claimedAt: Date.now() },
+      devices: [{ id: 'p', label: 'A phone that has not been seen for weeks', platform: 'ios', approvedAt: Date.now() - 90 * 86_400_000, lastSignInAt: Date.now() - 90 * 86_400_000 }],
+    },
+  }))
+  await page.route('**/auth/pin/state', route => route.fulfill({ json: { kind: 'on', secret: 'pin', idleMinutes: 5, paused: false } }))
+  await page.route('**/api/delorunMcpConsent.waiting', route => route.fulfill({ json: { servers: [{ serverName: 'a-server', change: 'new' }] } }))
+  await page.route('**/api/delorunDelegationConsent.levels', route => route.fulfill({ json: { levels: [{ provider: 'claude-code', agent: 'Claude Code', level: 'unrestricted' }] } }))
+  answer = { bill: { ...bill('verify'), release: { ...bill('verify').release, signature: 'fail' } }, checks: checks('done') }
+  const worst = await open()
+  await worst.getByRole('tab', { name: 'Basic' }).click()
+  await worst.locator('li[data-status="red"]').first().waitFor({ timeout: 20_000 })
+  expect(await worst.locator('li').count()).toBe(5)
+  expect(await worst.locator('li[data-status="green"]').count()).toBe(0)
+  // Every row offers its one fixing action, which is the tallest the basic view gets.
+  expect(await worst.locator('li button').count()).toBe(5)
+  await shot('worst-basic')
+  for (const [width, height] of [[1440, 900], [390, 844]] as const) {
+    const basic = await measure(worst, width, height)
+    console.info(`worst basic ${String(width)}x${String(height)}: content ${String(basic.client)} px, needs ${String(basic.scroll)} px, card ${String(basic.card)} px`)
+    expect({ width, ...basic }).toMatchObject({ overflows: false })
+    expect(basic.scroll).toBeLessThanOrEqual(basic.client)
+  }
 }, 300_000)

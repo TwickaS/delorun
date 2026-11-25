@@ -322,11 +322,19 @@ describe('the panel', () => {
     expect(within(dialog).getByRole('button', { name: 'packages/core/agent/src/a.ts' })).toBeTruthy()
   })
 
-  it('says nothing counts as checked when no bill could be read, and still states the checks\' limit', () => {
+  it('says nothing counts as checked when no bill could be read, and states the checks\' limit in the advanced view', () => {
     renderBadge(storeOf(null).store)
-    const dialog = openPanel()
+    const dialog = openAdvanced()
     expect(within(dialog).getByText(en['panel.noBill'])).toBeTruthy()
     expect(within(dialog).getByText(en['panel.notice'])).toBeTruthy()
+  })
+
+  it('keeps Check now and the checks\' limit out of the basic view, which answers at a glance', () => {
+    renderBadge(storeOf(verifiedBill()).store)
+    const dialog = openPanel()
+    expect(within(dialog).queryByRole('button', { name: en['check.run'] })).toBeNull()
+    expect(within(dialog).queryByText(en['panel.notice'])).toBeNull()
+    expect(within(dialog).queryByText(en['overview.states'])).toBeNull()
   })
 })
 
@@ -336,7 +344,7 @@ describe('Check now', () => {
     const start = billWith(bill => ({ ...bill, releaseLog: { state: 'unchecked', lastAttempt: null, uncheckedSince: '2026-11-09T09:00:00Z' } }))
     const { store, calls } = storeOf(start, () => new Promise((resolve) => { finish = resolve }))
     renderBadge(store)
-    const dialog = openPanel()
+    const dialog = openAdvanced()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Check now' }))
     const busy = within(dialog).getByRole('button', { name: 'Checking' })
     expect({ disabled: (busy as HTMLButtonElement).disabled, busy: busy.getAttribute('aria-busy') }).toEqual({ disabled: true, busy: 'true' })
@@ -354,7 +362,7 @@ describe('Check now', () => {
   it('names the launcher in its progress only when the bill says Check now runs through it', async () => {
     const { store } = storeOf(billWith(bill => ({ ...bill, checkNow: { via: 'launcher' } })), () => new Promise(() => {}))
     renderBadge(store)
-    const dialog = openPanel()
+    const dialog = openAdvanced()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Check now' }))
     expect(within(dialog).getByRole('status').textContent).toBe(en['check.progress.launcher'])
   })
@@ -362,7 +370,7 @@ describe('Check now', () => {
   it.each(['no-launcher', 'launcher-unresolvable'] as const)('says a check run inside the studio, because of %s, ran code that was not hashed first', async (reason) => {
     const { store } = storeOf(verifiedBill(), async () => ({ kind: 'checked', bill: { ...verifiedBill(), stage: 'verify', checkedBy: { via: 'host', reason, seconds: 9 } }, checks: null }))
     renderBadge(store)
-    const dialog = openPanel()
+    const dialog = openAdvanced()
     await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: 'Check now' })) })
     expect(within(dialog).getByText(en[`checked.host.${reason}`].replace('{seconds}', '9.0'))).toBeTruthy()
   })
@@ -370,7 +378,7 @@ describe('Check now', () => {
   it('reports a failed check in place and keeps the last bill', async () => {
     const { store } = storeOf(verifiedBill(), async () => ({ kind: 'failed' }))
     renderBadge(store)
-    const dialog = openPanel()
+    const dialog = openAdvanced()
     await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: 'Check now' })) })
     expect(within(dialog).getByRole('alert').textContent).toBe(en['check.failed'])
     expect(within(dialog).getByRole('button', { name: 'Check now' }).getAttribute('aria-describedby')).not.toBeNull()
@@ -380,7 +388,7 @@ describe('Check now', () => {
   it('reports the Host\'s refusal in place', async () => {
     const { store } = storeOf(verifiedBill(), async () => ({ kind: 'refused' }))
     renderBadge(store)
-    const dialog = openPanel()
+    const dialog = openAdvanced()
     await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: 'Check now' })) })
     expect(within(dialog).getByRole('alert').textContent).toBe(en['check.refused'])
   })
@@ -388,7 +396,7 @@ describe('Check now', () => {
   it('is not offered on a remote session, which says where to run it', () => {
     const { store, calls } = storeOf(verifiedBill())
     renderBadge(store, { remote: true })
-    const dialog = openPanel()
+    const dialog = openAdvanced()
     const button = within(dialog).getByRole('button', { name: 'Check now' })
     expect((button as HTMLButtonElement).disabled).toBe(true)
     fireEvent.click(button)
@@ -605,7 +613,7 @@ describe('the overview', () => {
     expect(within(dialog).queryByRole('button', { name: new RegExp(en['overview.list.show']) })).toBeNull()
   })
 
-  it('opens a row that is not green with what it means, why, whether it was chosen, and its fix', async () => {
+  it('shows a row that is not green in the basic view with its status, its sentence and its fix, and no explanation', async () => {
     const act$ = vi.fn(async (_action: OverviewAction) => true)
     renderBadge(storeWith(verifiedBill(), checksWith({ state: 'done' })).store, { facts: { ...PROTECTED, undo: { protection: 'off', unreadable: 1, unversioned: 0 } }, act: act$ })
     const dialog = openPanel()
@@ -613,11 +621,30 @@ describe('the overview', () => {
     const row = within(dialog).getByText(en['overview.row.undo']).closest('li')
     expect(row?.getAttribute('data-status')).toBe('red')
     expect(row?.textContent).toContain(en['overview.status.red'])
-    expect(row?.textContent).toContain(en['overview.undo.broken.meaning'])
-    expect(row?.textContent).toContain(en['overview.kind.fault'])
+    expect(row?.textContent).toContain(en['overview.undo.broken'])
+    // The explanation is the advanced view's: the basic view answers in one sentence and offers the fix.
+    expect(row?.textContent).not.toContain(en['overview.undo.broken.meaning'])
+    expect(row?.textContent).not.toContain(en['overview.kind.fault'])
+    expect(within(dialog).queryByText(en['overview.meaning'])).toBeNull()
+    expect(within(dialog).queryByText(en['overview.reason'])).toBeNull()
     await act(async () => { fireEvent.click(within(dialog).getByRole('button', { name: en['overview.undo.broken.action'] })) })
     expect(act$).toHaveBeenCalledWith(expect.objectContaining({ kind: 'open-section' }))
     expect(within(dialog).getByText(en['overview.row.agent'])).toBeTruthy()
+  })
+
+  it('moves what a row means, why, whether it was chosen and its freshness to the advanced view', () => {
+    renderBadge(storeWith(verifiedBill(), checksWith({ state: 'done' })).store, { facts: { ...PROTECTED, undo: { protection: 'off', unreadable: 1, unversioned: 0 } } })
+    const dialog = openAdvanced()
+    const row = within(dialog).getByText(en['overview.row.undo']).closest('li')
+    expect(row?.textContent).toContain(en['overview.undo.broken.meaning'])
+    expect(row?.textContent).toContain(en['overview.undo.broken.reason'])
+    expect(row?.textContent).toContain(en['overview.kind.fault'])
+    expect(within(dialog).getByText(en['overview.meaning'])).toBeTruthy()
+    expect(within(dialog).getByText(en['overview.reason'])).toBeTruthy()
+    // The freshness line is the advanced view's too, on the rows that have one.
+    const copy = within(dialog).getByText(en['overview.row.copy']).closest('li')
+    expect(copy?.querySelector('time')).not.toBeNull()
+    expect(within(dialog).getByText(en['overview.copy.checked'])).toBeTruthy()
   })
 
   it('closes and opens the settings section for a row whose fix lives there', async () => {

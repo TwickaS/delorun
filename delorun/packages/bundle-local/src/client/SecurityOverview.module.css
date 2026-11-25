@@ -1,4 +1,5 @@
-/* The security overview: a calm headline, the view toggle and five rows; each status has an icon, words and a colour. */
+/* The security overview: a calm headline, the view toggle and five rows; each status has an icon, words and a colour.
+   The basic view answers at a glance and fits without scrolling; the advanced view adds the explanations and may scroll. */
 .overview {
   display: flex;
   flex-direction: column;
@@ -119,10 +120,17 @@
   border-bottom: 0;
 }
 
+/* The glyph, the words and the action: the action takes the row's end, level with the title, so a row stays as short
+   as its sentence and the five rows fit at a glance. */
 .rowHead {
-  display: flex;
-  align-items: flex-start;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: start;
   gap: 12px;
+}
+
+.rowHead .action {
+  margin-top: 0;
 }
 
 .rowTitle {
@@ -187,12 +195,13 @@
   overflow-wrap: anywhere;
 }
 
-/* The fixing action: the alert style's tinted text button (A630), on upstream's tokens so the stock look keeps it. */
+/* The fixing action: the alert style's tinted text button (A630), on upstream's tokens so the stock look keeps it.
+   It sits in the basic view too, at the row's end, so a person who needs to act never opens the advanced view. */
 .action {
   display: inline-flex;
   align-items: center;
   height: 28px;
-  margin-top: 8px;
+  margin: 0;
   padding: 0 12px;
   border: 0;
   border-radius: var(--dsw-radius-sm);
@@ -265,9 +274,39 @@
   color: var(--dsw-alias-brand-primary);
 }
 
+/* On a phone the basic view has to fit a short screen, so the rows and the gaps between the blocks tighten; the
+   advanced view keeps the roomier spacing, because it may scroll. */
 @media (width <= 480px) {
   .explain,
-  .breakdown {
+  .breakdown,
+  .action {
     margin-inline-start: 0;
+  }
+
+  .overview[data-view='basic'] {
+    gap: 8px;
+  }
+
+  .overview[data-view='basic'] .row {
+    padding-block: 4px;
+  }
+
+  /* The action is a compact control on a phone, so the line it takes costs as little as possible. */
+  .overview[data-view='basic'] .action {
+    height: 24px;
+    padding: 0 8px;
+    font-size: 12px;
+  }
+
+  /* A phone row is too narrow to hold the action beside the sentence without squeezing the words into a tall column,
+     so the action takes its own line under the text, where it costs one line rather than three. */
+  .overview[data-view='basic'] .rowHead {
+    grid-template-columns: 24px minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .overview[data-view='basic'] .rowHead .action {
+    grid-column: 2;
+    justify-self: start;
   }
 }
