@@ -227,6 +227,26 @@ describe('writeFileAtomic', () => {
 })
 
 describe('withFileLock', () => {
+  it('takes a lock its own call chain holds directly, and keeps refusing another task', async () => {
+    const target = join(await scratch(), 'document')
+    const nested = vi.fn(async () => 'nested')
+    const outer = withFileLock(target, async () => {
+      // A change nested in the holder's chain is the same writer: it takes the lock at once, and the file stays the caller's.
+      expect(await withFileLock(target, nested, { waitMs: 0 })).toBe('nested')
+      expect(nested).toHaveBeenCalledTimes(1)
+      expect(await readFile(`${target}.lock`, 'utf8')).toBe(record(process.pid))
+      await new Promise((resolve) => { setTimeout(resolve, 150) })
+      return 'outer'
+    })
+    // A task on its own chain, started while the lock is held, still waits for it and still fails on its own deadline.
+    const sibling = vi.fn(async () => 'sibling')
+    await expect(withFileLock(target, sibling, { waitMs: 50 })).rejects.toThrow('atomic-write: timed out waiting for the writer lock')
+    expect(sibling).not.toHaveBeenCalled()
+    await expect(outer).resolves.toBe('outer')
+    // The nested take never released the caller's lock; the outer one did.
+    await expect(stat(`${target}.lock`)).rejects.toMatchObject({ code: 'ENOENT' })
+  })
+
   it('cancels a waiting writer without releasing the current holder', async () => {
     const target = join(await scratch(), 'document')
     const release: PromiseWithResolvers<void> = Promise.withResolvers()

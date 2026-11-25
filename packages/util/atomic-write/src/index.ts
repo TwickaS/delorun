@@ -8,10 +8,12 @@
  * read-modify-write cycle can never resurrect a state another writer just
  * replaced; readers stay lock-free because the rename commit is atomic. A lock
  * whose recorded holder process no longer exists, or whose record stayed incomplete for ten seconds, is taken over;
- * a takeover claim left by a killed claimant is aged out the same way.
+ * a takeover claim left by a killed claimant is aged out the same way. A lock that the calling asynchronous chain
+ * holds is taken again directly, so a change nested inside its own writer never waits for itself.
  * @module @deepseek-ai/dsh-atomic-write
  */
 
+import { AsyncLocalStorage } from 'node:async_hooks'
 import { createHash, randomBytes } from 'node:crypto'
 import { link, lstat, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
@@ -246,6 +248,13 @@ const LOCK_RETRY_INITIAL_MS = 20
 const LOCK_RETRY_MAX_MS = 200
 
 /**
+ * The lock files the current asynchronous call chain holds, so an operation that takes a lock its own caller holds
+ * runs directly: the lock serializes independent writers, and a caller re-taking its own hold would wait for itself
+ * until the deadline expired. The store is per chain, so another task that starts while the lock is held waits.
+ */
+const heldInChain = new AsyncLocalStorage<ReadonlySet<string>>()
+
+/**
  * How long a contender waits when the caller states no limit — sized for the
  * render-and-rename cycle every call site had when this package was written.
  * Expiry fails the contender rather than guessing whether the existing lock
@@ -287,6 +296,11 @@ export interface FileLockOptions {
  * live process reused keeps its lock until an operator removes it. Takeover
  * proves only that the recorded process exited: an operation that starts other
  * writers must stop them with it or leave its successor a way to find them.
+ * The lock is reentrant within the asynchronous call chain that took it: an
+ * operation that takes a lock one of its callers holds runs directly, without
+ * creating or removing a lock file, and its hold still ends where its caller's
+ * does. A task started outside that chain waits like any other writer, so a
+ * held lock still refuses them.
  * PIDs are compared on the contender's host, so writers on other hosts or in
  * other PID namespaces sharing the file are unsupported and could both hold
  * the lock. The parent directory must exist.
@@ -301,6 +315,9 @@ export async function withFileLock<T>(
   options?: FileLockOptions,
 ): Promise<T> {
   const lockPath = `${filename}.lock`
+  const held = heldInChain.getStore()
+  // The caller already holds this lock: it is one writer, and its own nested change runs under the same hold.
+  if (held?.has(lockPath) === true) return await operation()
   const deadline = Date.now() + (options?.waitMs ?? DEFAULT_LOCK_WAIT_MS)
   let delay = LOCK_RETRY_INITIAL_MS
   let retriedUnconfirmedPermissionError = false
@@ -328,7 +345,8 @@ export async function withFileLock<T>(
   }
   try {
     options?.signal?.throwIfAborted()
-    return await operation()
+    const next = new Set([...(held ?? []), lockPath])
+    return await heldInChain.run(next, operation)
   } finally {
     await rm(lockPath, { force: true })
   }
