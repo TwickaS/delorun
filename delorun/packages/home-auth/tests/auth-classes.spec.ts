@@ -81,9 +81,11 @@ describe('AUTH_CLASSES', () => {
     const listed = AUTH_CLASSES.find(row => row.id === 'remote:terminal/list')?.reason
     for (const field of ['id', 'title', 'shell', 'working directory', 'size', 'state', 'exit code', 'launch error', 'who started', 'input', 'sandbox mode']) expect(listed, field).toContain(field)
   })
-  it('names the hold feature of terminal and picker rows', () => {
+  it('names the hold feature of terminal, picker and export rows', () => {
     expect(AUTH_CLASSES.find(row => row.id === 'remote:terminal/attach')?.hold).toBe('terminal')
     expect(AUTH_CLASSES.find(row => row.id === 'remote:directoryPicker/list')?.hold).toBe('picker')
+    // Pins the export hold: `/export` opens the hold its download route is admitted by.
+    expect(AUTH_CLASSES.find(row => row.id === 'remote:commands/execute')?.hold).toBe('export')
     expect(AUTH_CLASSES.find(row => row.id === 'remote:settings/mutate')?.hold).toBeUndefined()
   })
 

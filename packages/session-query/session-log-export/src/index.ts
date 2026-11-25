@@ -1,6 +1,7 @@
 /** Session export command and Host-owned ZIP download and Markdown copy routes. */
 
 import type { Context } from '@deepseek-ai/cordis'
+import { peerAdmission } from '@deepseek-ai/dsh-api-remote-access'
 import type { CommandDefinitionId } from '@deepseek-ai/dsh-commands/brand'
 import Schema from '@deepseek-ai/schemastery'
 import { brandString } from '@deepseek-ai/dsh-brand'
@@ -62,6 +63,8 @@ interface SessionLogConnection {
       readonly path: string
       readonly methods: readonly ('GET' | 'HEAD')[]
       readonly requestBody: 'buffered'
+      /** The route's admission of a Peer other than the owner, which the policy decides. */
+      readonly admitPeer?: ReturnType<typeof peerAdmission>
       readonly fetch: (request: Request) => Promise<Response>
     }): () => Promise<void>
   }
@@ -86,10 +89,19 @@ export function apply(ctx: Context, config: Config = {}): void {
       ? REQUESTED
       : { kind: 'error', text: 'The Web /export command does not accept a path.' }),
   }), 'session-log-download: command')
+  // A device downloads the log of a chat only after it ran `/export` there: the command is elevated, and its grant opens
+  // the chat's export hold, which admits this route. The route asks the policy for the command's own call, so a device
+  // that never held the unlock is refused, and the hold is the chat's, so exporting one chat never admits another's.
+  const admitPeer = peerAdmission({
+    action: 'commands/execute',
+    resource: { kind: 'session', query: 'sessionId' },
+    args: (_request, sessionId) => ({ agentId: sessionId, line: '/export', submittedAttachments: [] }),
+  }, () => ctx.get('remoteAccess'))
   connectionOf(ctx).fetch.register({
     path: SESSION_LOG_EXPORT_PATH,
     methods: ['GET', 'HEAD'],
     requestBody: 'buffered',
+    admitPeer,
     fetch: async (request) => {
       const response = await sessionLogExportResponse(
         ctx,
@@ -105,6 +117,9 @@ export function apply(ctx: Context, config: Config = {}): void {
     path: SESSION_MARKDOWN_EXPORT_PATH,
     methods: ['GET', 'HEAD'],
     requestBody: 'buffered',
+    // The Markdown copy is the chat's own transcript: no descendant log and no attachment, so the history the device may
+    // already read through `session/page` is exactly what this route serves.
+    admitPeer: peerAdmission({ action: 'session/page', resource: { kind: 'session', query: 'sessionId' } }, () => ctx.get('remoteAccess')),
     fetch: async (request) => {
       const response = await sessionMarkdownResponse(ctx, request)
       if (request.method === 'GET') return response

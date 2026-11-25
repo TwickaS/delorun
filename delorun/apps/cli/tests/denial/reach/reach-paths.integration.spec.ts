@@ -22,7 +22,7 @@ import type { ReachListener } from '@deepseek-ai/dsh-client-connection'
 import type { StudioAddress } from '@delorun/contract-admission'
 // The main chat is an experimental plugin no profile mounts; this spec mounts it to request its routes as a device.
 import * as mainChat from '@delorun/plugin-main-chat'
-import { DeviceStore, REACH_DEVICE_PATHS, reachesDevicePath } from '@delorun/home-auth'
+import { DeviceStore, hashArgs, REACH_DEVICE_PATHS, reachesDevicePath } from '@delorun/home-auth'
 import { claimOf, recordOf } from '../fixtures/devices.ts'
 import { tcpEndpoint, type Endpoint, type Reply } from '../admission/fixtures.ts'
 import { bootStudio, targetOf, type Registration, type Studio } from '../admission/studio.ts'
@@ -145,6 +145,10 @@ interface FetchDecision {
   readonly refusal?: string
   /** The status a `read` or `admitted` route answers the probe, which names no argument; 200 when absent. A 400 shows the device was admitted. */
   readonly answers?: number
+  /** The methods a `read` route owns; `GET` alone when absent. */
+  readonly methods?: readonly string[]
+  /** Whether the route names a chat, so the probe carries one the device may read. */
+  readonly chat?: true
 }
 
 const UNLOCKED = (reason: string): FetchDecision => ({ device: 'unlock', reason })
@@ -161,7 +165,8 @@ const FACE_ROUTES: ReadonlySet<string> = new Set([
   '/api/delorunTrash.empty', '/api/delorunTrash.purge', '/api/delorunTrash.removeSetAside', '/api/delorunVersions.save', '/api/delorunVersions.switch',
   '/api/delorunRun.prompts', '/api/delorunRun.background',
 ])
-const UPSTREAM_OWNER_ONLY = 'upstream declares no device admission, so only the owner reaches it'
+/** Why the two open routes stay at the computer: each runs an application on its own screen, which the policy refuses. */
+const DENIED_ACTION = 'it runs an application on the computer\'s own screen, which `REACH_DENIED_ACTIONS` refuses to a device through `session/openWorkspacePath`'
 
 /**
  * Every exact Fetch route of the composition with the device's decision. A paired device does what the computer's studio
@@ -248,20 +253,22 @@ const FETCH_ROUTES: Readonly<Record<string, FetchDecision>> = {
   '/api/delorunExternalAgents.refresh': UNLOCKED('a check starts the person\'s own Claude Code or Codex program on the computer'),
   '/api/delorunMcpConsent.waiting': READ('the names of the servers waiting for the person\'s OK, without their commands'),
   '/api/session/uploadFileBinary': { device: 'per-call', reason: 'upstream asks remote access for fileUploads/upload, which the reach-device policy allows' },
-  '/api/session.export': { device: 'refused', reason: UPSTREAM_OWNER_ONLY },
-  '/api/session.markdown': { device: 'refused', reason: UPSTREAM_OWNER_ONLY },
-  '/api/plugin-manager/detail-file': { device: 'refused', reason: UPSTREAM_OWNER_ONLY },
-  '/api/file': { device: 'refused', reason: UPSTREAM_OWNER_ONLY },
-  '/api/present.host': { device: 'refused', reason: UPSTREAM_OWNER_ONLY },
-  '/api/present.open': { device: 'refused', reason: UPSTREAM_OWNER_ONLY },
-  '/api/changes.summary': { device: 'refused', reason: UPSTREAM_OWNER_ONLY },
-  '/api/changes.open': { device: 'refused', reason: UPSTREAM_OWNER_ONLY },
-  '/api/changes.diff': { device: 'refused', reason: UPSTREAM_OWNER_ONLY },
+  '/api/session.export': { device: 'refused', reason: 'the archive carries every subagent child log and every attachment, which the policy refuses to a device; the route is admitted only by the export hold `/export` opens, and the probe holds none' },
+  '/api/session.markdown': { ...READ('the chat\'s own transcript, which the device already reads through `session/page`, so the copy answers the device the chat itself does'), methods: ['GET', 'HEAD'], chat: true },
+  '/api/plugin-manager/detail-file': OPEN('an image beside a bundle\'s detail document, which `pluginManager/readBundleDetail` reads; the probe names no bundle, so the route answers 400', 400),
+  '/api/file': { device: 'refused', reason: 'the URL names an absolute path and no chat, so the policy cannot confine it to a workspace; admitting it needs the workspace bound, not only an admission' },
+  '/api/present.host': READ('the computer\'s file manager and whether it can open a path, which a chat\'s card reads; it names no chat, so it is decided on the global resource'),
+  '/api/present.open': { device: 'refused', reason: DENIED_ACTION },
+  '/api/changes.summary': { ...READ('the review tab\'s summary of a turn\'s changes, which `workspaceFiles/changes` reads; the probe names a chat the device may read and no event, so the route answers 400', 400), chat: true },
+  '/api/changes.open': { device: 'refused', reason: DENIED_ACTION },
+  '/api/changes.diff': { ...READ('one changed file\'s comparison, which `workspaceFiles/changes` reads; the probe names a chat the device may read and no event, so the route answers 400', 400), chat: true },
 }
 
 let studio: Studio
 let listener: ReachListener
 let phone: Endpoint
+/** A chat the device may read, which the session-scoped routes are probed with. */
+let chat: string
 /** The approved device's id, whose unlock the unlock pass starts and ends. */
 let deviceId: string
 /** The device's session cookie. */
@@ -321,6 +328,8 @@ beforeAll(async () => {
   const root = join(studio.home, 'workspaces')
   await mkdir(root)
   await ctx.plugin(mainChat, { enabled: true, root, preset: 'coder', listLimit: 30, readBytes: 12_000, reportBytes: 2_000, noteChars: 2_000 })
+  // A chat the device may read, so a session-scoped route is probed with a resource the policy binds rather than with none.
+  chat = String(ctx.sessions.create(undefined, { meta: { cwd: root } }).id)
   ctx.homeAuth.serve({ listener: LISTENER, address: ADDRESS, factor: 'tailnet-membership' })
   await ctx.homeAuth.claim(claimOf((await ctx.homeAuth.issueOwnerCode()).code, { address: brandString<StudioAddress>('http://127.0.0.1:3080') }))
   const record = recordOf(2, ADDRESS)
@@ -429,8 +438,10 @@ describe('the routes a signed-in device reaches', () => {
     for (const route of routes) {
       const decision = FETCH_ROUTES[route.path]
       if (decision?.device === 'read') {
-        // Pins the route's `admitPeer`: without it Connection refuses the device's read with `forbidden`.
-        expect.soft({ path: route.path, methods: route.methods, status: (await asPhone(route.path)).status }).toEqual({ path: route.path, methods: ['GET'], status: decision.answers ?? 200 })
+        // Pins the route's `admitPeer`: without it Connection refuses the device's read with `forbidden`. A route that
+        // names a chat is probed with one the device may read, so the policy binds the resource it asks about.
+        const target = decision.chat === true ? `${route.path}?sessionId=${chat}` : route.path
+        expect.soft({ path: route.path, methods: route.methods, status: (await asPhone(target)).status }).toEqual({ path: route.path, methods: decision.methods ?? ['GET'], status: decision.answers ?? 200 })
         continue
       }
       if (decision?.device === 'admitted') {
@@ -513,5 +524,50 @@ describe('the routes a signed-in device reaches', () => {
       if (saved === undefined) delete process.env['DEEPSEEK_API_KEY']
       else process.env['DEEPSEEK_API_KEY'] = saved
     }
+  })
+
+  it('admits a device to the routes whose action the policy allows, and refuses the two that open on the computer', async () => {
+    // Pins the agreement between the policy and the routes: each route below serves an action the reach policy decides, so
+    // the route asks the policy instead of refusing every device. Removing a route's `admitPeer` fails its row here with
+    // upstream's `forbidden`; the route's own answer past the admission is any other status.
+    const allowed = ['/api/session.markdown', '/api/plugin-manager/detail-file', '/api/present.host', '/api/changes.summary', '/api/changes.diff']
+    for (const path of allowed) {
+      // A route that names a chat is asked about one the device may read, so the policy binds the resource it asks about.
+      const target = path.startsWith('/api/session.') || path.startsWith('/api/changes.') ? `${path}?sessionId=${chat}` : path
+      const reply = await asPhone(target)
+      expect.soft({ path, status: reply.status, body: reply.body }, path).not.toEqual({ path, status: 403, body: 'forbidden' })
+    }
+    // Pins the other direction: the two routes that run an application on the computer's own screen serve an action
+    // `REACH_DENIED_ACTIONS` refuses, so they stay refused and no admission may be added to them.
+    for (const path of ['/api/present.open', '/api/changes.open']) {
+      const reply = await asPhone(path, { method: 'POST' })
+      expect.soft({ path, status: reply.status, body: reply.body }).toEqual({ path, status: 403, body: 'forbidden' })
+    }
+  })
+
+  it('admits the export archive only through the hold /export opened for that chat', async () => {
+    // Pins the export hold: the archive carries every subagent child log and every attachment, so `session/page` on the
+    // root is not enough. A device reaches the download only through the hold `/export` opened for that chat.
+    const before = await asPhone(`/api/session.export?sessionId=${chat}&includeDescendants=true`)
+    expect({ status: before.status, body: before.body }).toEqual({ status: 403, body: 'forbidden' })
+    // The elevated command's grant opens the chat's hold, as the person's one confirmation does.
+    const grants = studio.ctx.homeAuth.faceGrants()
+    if (grants === undefined) throw new Error('the home keeps no grant store')
+    const line = '/export'
+    grants.mint({ deviceId, listener: LISTENER }, [{ action: 'commands/execute', hash: hashArgs({ agentId: chat, line, submittedAttachments: [] }) ?? '', hold: { feature: 'export', id: chat } }], 'pin')
+    grants.consume({ deviceId, listener: LISTENER }, 'commands/execute', hashArgs({ agentId: chat, line, submittedAttachments: [] }) ?? '', { feature: 'export', id: chat, scope: `session:${chat}` })
+    // Pins the admission: with the hold open the archive answers the device, so removing the route's admission fails here.
+    const admitted = await asPhone(`/api/session.export?sessionId=${chat}&includeDescendants=true`)
+    expect.soft({ status: admitted.status, body: admitted.body }).not.toEqual({ status: 403, body: 'forbidden' })
+    // Pins the scope: the hold is the chat's, so another chat's archive stays refused.
+    const other = await asPhone('/api/session.export?sessionId=chat-two&includeDescendants=true')
+    expect({ status: other.status, body: other.body }).toEqual({ status: 403, body: 'forbidden' })
+  })
+
+  it('refuses a subagent child transcript to a device, which no hold admits', async () => {
+    // Pins the widening the hold must not create: the hold admits the parent's download, never the child's content. A
+    // child is absent from `bindings()`, so `session/page` on it is refused whatever hold the device holds.
+    const child = await asPhone('/api/session.markdown?sessionId=subagent-child')
+    expect({ status: child.status, body: child.body }).toEqual({ status: 403, body: 'forbidden' })
   })
 })

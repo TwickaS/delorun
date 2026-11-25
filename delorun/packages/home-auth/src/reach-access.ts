@@ -1361,6 +1361,16 @@ export const PICKER_HOLD_ID = 'directoryPicker'
  */
 function holdIdOf(feature: HoldFeature, action: string, args: unknown): string | undefined {
   if (feature === 'picker') return PICKER_HOLD_ID
+  // The export hold is the chat's, and only `/export` opens it: `commands/execute` names the chat it runs in as
+  // `agentId`, and the download it opens is that chat's archive. Any other command names no export hold, so holding one
+  // never admits `/plan`, `/compact` or any other command without its own grant.
+  if (feature === 'export') {
+    if (typeof args !== 'object' || args === null) return undefined
+    const agentId: unknown = Reflect.get(args, 'agentId')
+    const line: unknown = Reflect.get(args, 'line')
+    if (typeof agentId !== 'string' || agentId === '' || typeof line !== 'string') return undefined
+    return parseCommand(line)?.name === 'export' ? agentId : undefined
+  }
   const named = action === 'terminal/create' ? (typeof args === 'object' && args !== null && 'request' in args ? args.request : undefined) : args
   if (typeof named === 'object' && named !== null && 'id' in named && typeof named.id === 'string' && named.id !== '') return named.id
   return undefined

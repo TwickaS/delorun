@@ -53,8 +53,8 @@ export const GRANT_BODY_CAP_BYTES = 1024 * 1024
 /** The most live grants and holds one device keeps; a mint past it ends the oldest. */
 export const GRANTS_PER_DEVICE = 64
 
-/** The features whose holds exist: an open terminal and a folder picker. */
-export const HOLD_FEATURES = ['terminal', 'picker'] as const
+/** The features whose holds exist: an open terminal, a folder picker, and a chat's log download. */
+export const HOLD_FEATURES = ['terminal', 'picker', 'export'] as const
 
 /** One of {@link HOLD_FEATURES}. */
 export type HoldFeature = (typeof HOLD_FEATURES)[number]
@@ -69,12 +69,16 @@ export const HOLD_OPENERS: Readonly<Record<string, HoldFeature>> = {
   'terminal/retain': 'terminal',
   'terminal/attach': 'terminal',
   'directoryPicker/list': 'picker',
+  'commands/execute': 'export',
 }
 
 /** The feature whose hold admits an elevated action without a new grant, or undefined for an action no hold covers. */
 export function holdFeatureOf(action: string): HoldFeature | undefined {
   if (action.startsWith('terminal/')) return 'terminal'
   if (action.startsWith('directoryPicker/')) return 'picker'
+  // The `/export` command opens the hold its download route is admitted by, so one confirmation covers the command and
+  // the archive it produces. Every other command opens nothing.
+  if (action === 'commands/execute') return 'export'
   return undefined
 }
 

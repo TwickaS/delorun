@@ -5474,6 +5474,9 @@ importers:
 
   packages/api/remote-access:
     dependencies:
+      '@deepseek-ai/dsh-brand':
+        specifier: workspace:*
+        version: link:../../util/brand
       '@deepseek-ai/dsh-typert-protocol':
         specifier: workspace:*
         version: link:../../typert/protocol
@@ -6248,6 +6251,9 @@ importers:
 
   packages/boot/plugin-manager:
     dependencies:
+      '@deepseek-ai/dsh-api-remote-access':
+        specifier: workspace:*
+        version: link:../../api/remote-access
       '@deepseek-ai/dsh-app-boot':
         specifier: workspace:*
         version: link:../app-boot
@@ -8509,6 +8515,9 @@ importers:
 
   packages/client/ui-deliverables:
     dependencies:
+      '@deepseek-ai/dsh-api-remote-access':
+        specifier: workspace:*
+        version: link:../../api/remote-access
       '@deepseek-ai/dsh-typert-protocol':
         specifier: workspace:*
         version: link:../../typert/protocol
@@ -18884,6 +18893,9 @@ importers:
 
   packages/session-query/session-log-export:
     dependencies:
+      '@deepseek-ai/dsh-api-remote-access':
+        specifier: workspace:*
+        version: link:../../api/remote-access
       '@deepseek-ai/dsh-brand':
         specifier: workspace:*
         version: link:../../util/brand

@@ -88,12 +88,19 @@ async function expectRefused(endpoint: string, args: Record<string, unknown>): P
   })
 }
 
-/** The exact Fetch routes whose `admitPeer` admits an approved device. */
+/**
+ * The exact Fetch routes whose `admitPeer` admits an approved device. The last two are decided on the global resource,
+ * so they admit the device whatever chat the probe names; every other route here names a chat or a bundle the probe
+ * supplies.
+ */
 const ADMITTED_ROUTES: ReadonlySet<string> = new Set([
   '/api/delorunOnboarding.keyTest', '/api/delorunOnboarding.recommend', '/api/delorunOnboarding.setupRecord', '/api/delorunOnboarding.deferStep',
   '/api/delorunOnboarding.readiness', '/api/delorunOnboarding.start', '/api/delorunOnboarding.localModels', '/api/delorunOnboarding.workspaceNotice',
   '/api/delorunMcpConsent.waiting', '/api/delorunBranding.icon', '/api/delorunChatStates.list', '/api/delorunChatStates.set',
   '/api/delorunPreviewFlags.list', '/api/delorunNewWorkspace.cloneStatus', '/api/delorunNewWorkspace.defaults', '/api/delorunOnboarding.agentModels', '/api/delorunTrust.check',
+  // The desktop metadata a chat's card reads, and an image beside a bundle's detail document: both name no chat, so the
+  // policy decides them on the global resource and admits the device.
+  '/api/present.host', '/api/plugin-manager/detail-file',
 ])
 
 /**
@@ -721,15 +728,17 @@ describe('a reach device and the exact Fetch routes', () => {
     return routes
   }
 
-  it('reaches no exact route but the raw upload route: no file read by path, deliverable action or change', async () => {
+  it('reaches no exact route but the ones whose action the policy allows: no file read by path and no open on the computer', async () => {
     const routes = exactRoutes()
-    // The routes this rule is about: a file read by path, deliverable actions and change reads.
-    expect([...routes.keys()]).toEqual(expect.arrayContaining(['/api/file', '/api/present.open', '/api/changes.summary', '/api/changes.diff', UPLOAD]))
+    // The routes this rule is about: a file read by path, and the two actions that open on the computer's own screen.
+    expect([...routes.keys()]).toEqual(expect.arrayContaining(['/api/file', '/api/present.open', '/api/changes.open', UPLOAD]))
     for (const [path, methods] of routes) {
-      // The upload route, the guide's read routes and key test, the recommended plugins' purposes, the chat states' list and set, the branding icon upload and the preview flags' list admit an approved device.
+      // The upload route, the guide's read routes and key test, the recommended plugins' purposes, the chat states' list and set, the branding icon upload, the preview flags' list, the desktop metadata and the bundle detail image admit an approved device.
       if (path === UPLOAD || ADMITTED_ROUTES.has(path)) continue
       for (const method of methods) {
         // Pins Connection's owner rule for exact routes: a route that declares no `admitPeer` refuses every other Peer.
+        // The two open routes declare none on purpose: they run an application on the computer's own screen, which
+        // `REACH_DENIED_ACTIONS` refuses to a device, so admitting them would contradict the policy.
         const response = await send(`${path}?path=${encodeURIComponent(directory)}&sessionId=any&seq=0&index=0`, { method })
         expect(response.status, `${method} ${path}`).toBe(403)
       }

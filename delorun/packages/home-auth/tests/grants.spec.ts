@@ -244,9 +244,11 @@ describe('feature holds', () => {
     expect(grants.holdCount('phone-1')).toBe(0)
   })
 
-  it('names the feature of a terminal or picker action', () => {
+  it('names the feature of a terminal, picker or export action', () => {
     expect(holdFeatureOf('terminal/attach')).toBe('terminal')
     expect(holdFeatureOf('directoryPicker/list')).toBe('picker')
+    // Pins the export hold: the download route is admitted by the hold `/export` opens, so one confirmation covers both.
+    expect(holdFeatureOf('commands/execute')).toBe('export')
     expect(holdFeatureOf('settings/mutate')).toBeUndefined()
   })
 })

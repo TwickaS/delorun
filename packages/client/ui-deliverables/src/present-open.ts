@@ -4,6 +4,7 @@ import type {} from '@deepseek-ai/dsh-api-session-controller'
 import type {} from '@deepseek-ai/dsh-api-workspace-files'
 import type {} from '@deepseek-ai/dsh-fs'
 import type {} from '@deepseek-ai/dsh-sandbox-policy'
+import { peerAdmission } from '@deepseek-ai/dsh-api-remote-access'
 import { remoteErrorOf } from '@deepseek-ai/dsh-typert-protocol'
 import type {} from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-session-query'
@@ -18,13 +19,22 @@ import { isPresentedData, isPresentedFile, PRESENT_OPEN_PATH, PRESENT_HOST_PATH,
  * @param ctx - Session lookup, change summaries, native opener, and route lifetime.
  */
 export function registerPresentOpen(ctx: Context): void {
+  // Each route serves the action the policy already decides for a device, so the policy decides the Peer: the desktop
+  // metadata a chat's card reads is `session/page`, and the review tab's summary and comparison are
+  // `workspaceFiles/changes`. The two open routes stay owner-only: they run an application on the computer's own
+  // screen, which `REACH_DENIED_ACTIONS` refuses to a device.
+  const changesRead = peerAdmission({ action: 'workspaceFiles/changes', resource: { kind: 'session', query: 'sessionId' } }, () => ctx.get('remoteAccess'))
   ctx.connection.fetch.register({
     path: PRESENT_HOST_PATH, methods: ['GET'], requestBody: 'buffered',
+    // The desktop metadata names the computer's file manager and whether it can open a path, and no Session: it is
+    // decided on the global resource, where the policy binds every allowed action.
+    admitPeer: peerAdmission({ action: 'session/page', resource: 'global' }, () => ctx.get('remoteAccess')),
     fetch: () => Promise.resolve(Response.json(ctx.sessionController.workspaceDesktop() satisfies PresentedHost,
       { headers: { 'cache-control': 'no-store' } })),
   })
   ctx.connection.fetch.register({
     path: CHANGED_FILES_PATH, methods: ['GET'], requestBody: 'buffered',
+    admitPeer: changesRead,
     fetch: request => Promise.resolve(handleChangesSummary(ctx, request)),
   })
   const lifetime = new AbortController()
@@ -41,6 +51,9 @@ export function registerPresentOpen(ctx: Context): void {
       path,
       methods: [...methods],
       requestBody: 'buffered',
+      // The comparison reads the working tree of the chat's workspace, as the summary does; the two open routes name no
+      // admission, so only the owner reaches them.
+      ...path === CHANGES_DIFF_PATH ? { admitPeer: changesRead } : {},
       fetch: (request) => {
         const task = handler(ctx, new Request(request, {
           signal: AbortSignal.any([request.signal, lifetime.signal]),
