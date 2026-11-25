@@ -64,7 +64,7 @@ interface SessionLogConnection {
       readonly methods: readonly ('GET' | 'HEAD')[]
       readonly requestBody: 'buffered'
       /** The route's admission of a Peer other than the owner, which the policy decides. */
-      readonly admitPeer?: (request: Request, peer: { readonly principal: { readonly kind: string } }) => boolean
+      readonly admitPeer?: ReturnType<typeof peerAdmission>
       readonly fetch: (request: Request) => Promise<Response>
     }): () => Promise<void>
   }
