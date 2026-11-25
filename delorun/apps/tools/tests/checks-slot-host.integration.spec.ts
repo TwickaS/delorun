@@ -10,7 +10,7 @@ import type { PassCache } from '../src/checks/cache.ts'
 import { checksToRun, diskHeavy, fitToGrant, MIN_RUN_SLOTS, runDemand, withoutIdleNeeds } from '../src/checks/demand.ts'
 import { ioPressure } from '../src/checks/machine.ts'
 import type { Planned } from '../src/checks/plan.ts'
-import { machineBudget, nodeSlotHost, privateSlotPaths, processAlive, processIsThread, processStart, processStartedAt, slotPaths } from '../src/checks/slot-host.ts'
+import { diskRotational, diskRunsFor, machineBudget, nodeSlotHost, privateSlotPaths, processAlive, processIsThread, processStart, processStartedAt, slotPaths } from '../src/checks/slot-host.ts'
 import { takeSlots } from '../src/checks/slots.ts'
 import type { Unit } from '../src/checks/units.ts'
 import { runInherited, withSlots, type WrapperHost } from '../src/with-slots.ts'
@@ -24,12 +24,46 @@ afterEach(() => {
 const check = (id: string, extra: Partial<Planned> = {}): Planned => ({ id, group: id.split(':')[0] ?? id, title: id, cwd: '', command: ['x'], needs: [], tiers: ['changed'], cpus: 1, memoryBytes: GIB, budget: { memoryGiB: 1 }, reason: 'test', ...extra })
 
 describe('the machine\'s budget', () => {
-  it('takes the CPUs and three disk-heavy places unless the environment names other counts, and refuses a count that is not one', () => {
+  it('takes the CPUs and the disk\'s own count of disk-heavy places unless the environment names other counts, and refuses a count that is not one', () => {
     expect(machineBudget(22, 18 * GIB, {})).toEqual({ slots: 22, memoryBytes: 18 * GIB, diskRuns: 3 })
     expect(machineBudget(22, 18 * GIB, { DELORUN_CHECKS_SLOTS: '8', DELORUN_CHECKS_DISK_RUNS: '1' })).toEqual({ slots: 8, memoryBytes: 18 * GIB, diskRuns: 1 })
     expect(machineBudget(22, GIB, { DELORUN_CHECKS_SLOTS: '' }).slots).toBe(22)
     expect(() => machineBudget(22, GIB, { DELORUN_CHECKS_SLOTS: '0' })).toThrow('DELORUN_CHECKS_SLOTS must be a positive whole number, got 0')
     expect(() => machineBudget(22, GIB, { DELORUN_CHECKS_DISK_RUNS: 'two' })).toThrow('DELORUN_CHECKS_DISK_RUNS must be a positive whole number, got two')
+  })
+
+  it('takes more disk-heavy places on a disk that reports no seek cost, and the measured count where it reports none', () => {
+    // The constant was measured on an NVMe-backed WSL disk; a spinning disk keeps the figure it was measured with.
+    expect(diskRunsFor(false)).toBe(4)
+    expect(diskRunsFor(true)).toBe(3)
+    expect(diskRunsFor(undefined)).toBe(3)
+    expect(machineBudget(22, 18 * GIB, {}, false).diskRuns).toBe(4)
+    expect(machineBudget(22, 18 * GIB, {}, true).diskRuns).toBe(3)
+    // The environment still wins over the measurement.
+    expect(machineBudget(22, 18 * GIB, { DELORUN_CHECKS_DISK_RUNS: '2' }, false).diskRuns).toBe(2)
+  })
+
+  it('reads the disk\'s rotational flag for the file system a directory lies on, and none where the machine reports none', () => {
+    const read = (path: string): string => path === '/sys/block/sda/queue/rotational' ? '0\n' : (() => { throw new Error('ENOENT') })()
+    // A partition's entry links to `.../block/<disk>/<partition>`, and only the disk has a queue.
+    const partition = (): string => '../../devices/pci0000:00/0000:00:1e.0/virtio2/host0/target0:0:0/0:0:0:0/block/sda/sda1'
+    expect(diskRotational(tmpdir(), read, partition)).toBe(false)
+    expect(diskRotational(tmpdir(), () => '1\n', partition)).toBe(true)
+    // A whole disk's entry links to `.../block/<disk>`.
+    expect(diskRotational(tmpdir(), read, () => '../../devices/pci0000:00/0000:00:1e.0/virtio2/host0/target0:0:0/0:0:0:0/block/sda')).toBe(false)
+    // No /sys/dev/block entry for the device, or no such directory: the machine reports no disk.
+    expect(diskRotational(tmpdir(), read, () => { throw new Error('ENOENT') })).toBeUndefined()
+    expect(diskRotational('/no/such/directory', read, partition)).toBeUndefined()
+    // The machine this runs on reports its own disk, and the flag is one of the two.
+    expect([true, false, undefined]).toContain(diskRotational(tmpdir()))
+  })
+
+  it('overrides the measured memory with DELORUN_CHECKS_MEMORY_GIB, and refuses a figure that is not a positive number', () => {
+    expect(machineBudget(22, 18 * GIB, { DELORUN_CHECKS_MEMORY_GIB: '12' }).memoryBytes).toBe(12 * GIB)
+    expect(machineBudget(22, 18 * GIB, { DELORUN_CHECKS_MEMORY_GIB: '12.5' }).memoryBytes).toBe(Math.round(12.5 * GIB))
+    expect(machineBudget(22, 18 * GIB, { DELORUN_CHECKS_MEMORY_GIB: '' }).memoryBytes).toBe(18 * GIB)
+    expect(() => machineBudget(22, 18 * GIB, { DELORUN_CHECKS_MEMORY_GIB: 'lots' })).toThrow('DELORUN_CHECKS_MEMORY_GIB must be a positive number of GiB, got lots')
+    expect(() => machineBudget(22, 18 * GIB, { DELORUN_CHECKS_MEMORY_GIB: '0' })).toThrow('DELORUN_CHECKS_MEMORY_GIB must be a positive number of GiB, got 0')
   })
 
   it('lives in the user\'s own directory under the temporary directory, beside the previous queue and lock', () => {

@@ -22,7 +22,7 @@ import { pathToFileURL } from 'node:url'
 import { parseArgs } from 'node:util'
 import { cgroupBudget, runMemoryBytes } from './checks/machine.ts'
 import { gatePriority, type QueueHost } from './checks/run-queue.ts'
-import { machineBudget, nodeSlotHost, privateSlotPaths } from './checks/slot-host.ts'
+import { diskRotational, machineBudget, nodeSlotHost, privateSlotPaths } from './checks/slot-host.ts'
 import { takeSlots, type SlotBudget, type SlotPaths } from './checks/slots.ts'
 
 const GIB = 1024 ** 3
@@ -88,7 +88,7 @@ if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.a
   process.exitCode = await withSlots(process.argv.slice(2), {
     slots: nodeSlotHost(line => process.stderr.write(line)),
     paths: privateSlotPaths(tmpdir(), process.getuid?.() ?? -1),
-    budget: machineBudget(budget.cpus, runMemoryBytes(budget.memoryBytes), process.env),
+    budget: machineBudget(budget.cpus, runMemoryBytes(budget.memoryBytes), process.env, diskRotational(tmpdir())),
     env: process.env,
     cwd: process.cwd(),
     run: runInherited,

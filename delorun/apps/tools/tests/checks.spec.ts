@@ -789,11 +789,15 @@ describe('ordering', () => {
 })
 
 describe('the machine budget', () => {
-  it('keeps at least 2 GiB and an eighth of the memory outside the run', () => {
-    expect(headroomBytes(15 * GIB)).toBe(2 * GIB)
+  it('keeps an eighth of the memory outside the run, and at least 1 GiB', () => {
+    // The fraction follows the machine: 23 GiB keeps 2.9 GiB, where the old 2 GiB floor was a guess for a 21 GB box.
+    expect(headroomBytes(23 * GIB)).toBe(Math.floor(23 * GIB / 8))
     expect(headroomBytes(64 * GIB)).toBe(8 * GIB)
-    expect(runMemoryBytes(15 * GIB)).toBe(13 * GIB)
-    expect(runMemoryBytes(2 * GIB)).toBe(2 * GIB)
+    expect(runMemoryBytes(23 * GIB)).toBe(23 * GIB - Math.floor(23 * GIB / 8))
+    // A small machine still keeps something for the work beside the runs, and still budgets a run.
+    expect(headroomBytes(4 * GIB)).toBe(GIB)
+    expect(runMemoryBytes(4 * GIB)).toBe(3 * GIB)
+    expect(runMemoryBytes(GIB)).toBe(GIB)
   })
 
   it('sizes the fork suite by the CPUs less two and the memory left beside the compilers, and the changed-upstream lane by its CPUs and memory', () => {
