@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { en } from '../src/client/locales.ts'
@@ -52,6 +54,15 @@ describe('the banner', () => {
     expect(screen.getByRole('status').getAttribute('data-variant')).toBe('banner')
     fireEvent.click(screen.getByRole('button', { name: en['keyBanner.open'] }))
     expect(openModels).toHaveBeenCalledOnce()
+  })
+
+  it('takes the composer card radius, so the pair reads as one surface (#89)', async () => {
+    // Vitest serves stylesheets to specs as empty modules, so the rule is read from disk.
+    const sheet = readFileSync(resolve(import.meta.dirname, '../src/client/KeyBanner.module.css'), 'utf8')
+    const rule = /\.banner\[data-variant\]\s*\{([^{}]*)\}/.exec(sheet)?.[1] ?? ''
+    // The composer card is `--dsw-radius-panel` (packages/client/ui-conversation InputBar.module.css `.card`).
+    expect(rule).toContain('border-radius: var(--dsw-radius-panel)')
+    expect(rule).not.toContain('--delorun-glass-radius')
   })
 
   it('stays away, and never asks again, when a key works', async () => {
