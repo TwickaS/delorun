@@ -86,6 +86,10 @@ function world(options: { readonly open?: () => Promise<Partial<ReachListener>>;
       events.push(`serve ${served.listener} ${served.factor} user=${String(served.computerUser)}${served.elevationMinutes === 20 ? '' : ` minutes=${String(served.elevationMinutes)}`}`)
       return () => { events.push('unserve') }
     },
+    // The service supplies the Tailscale local API check the home corroborates a forwarded address with (A667). It is
+    // not recorded in `events`: that log pins the order of the Tailscale calls and the listener's lifecycle, and this
+    // registration is neither.
+    supplyTailnetCheck: (_check: ((address: string) => Promise<unknown>) | undefined) => () => {},
   } as never)
   ctx.provide('connection', {
     // The studio's cookie stands for the loopback credential and a reach session alike; `foreign` fails the fence.
