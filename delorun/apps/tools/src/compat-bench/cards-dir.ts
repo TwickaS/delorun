@@ -42,7 +42,8 @@ export function findCardFiles(root: string): string[] {
 export function loadLatestCards(root: string, warn: (line: string) => void = () => undefined): LoadedCard[] {
   const latest = new Map<string, LoadedCard>()
   for (const path of findCardFiles(root)) {
-    const result = validateCard(JSON.parse(readFileSync(path, 'utf8')) as unknown)
+    const parsed: unknown = JSON.parse(readFileSync(path, 'utf8'))
+    const result = validateCard(parsed)
     if (!result.ok) {
       warn(`${path}: ${result.problems.join('; ')}`)
       continue

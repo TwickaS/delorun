@@ -107,7 +107,8 @@ export async function main(argv: readonly string[], io: { readonly out: (text: s
     return 0
   }
   if (command === 'card' && (rest[0] === 'validate' || rest[0] === 'render') && rest[1] !== undefined) {
-    const result = validateCard(JSON.parse(readFileSync(rest[1], 'utf8')) as unknown)
+    const parsed: unknown = JSON.parse(readFileSync(rest[1], 'utf8'))
+    const result = validateCard(parsed)
     if (!result.ok) { io.err(`${result.problems.join('\n')}\n`); return 1 }
     if (rest[0] === 'validate') { io.out('valid\n'); return 0 }
     io.out(renderCard(result.card, { public: values.public === true }))
