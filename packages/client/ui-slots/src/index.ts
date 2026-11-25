@@ -100,6 +100,17 @@ export type PropsLocale<N> = N extends keyof LocaleNamespaceMap & string
 /** Slot cardinality: single occupant, ordered list, key-dispatched, selector-routed chain, or nested wrapper layers. */
 export type SlotKind = 'single' | 'list' | 'keyed' | 'chain' | 'hoc'
 
+/**
+ * A slot's protection against being shadowed: the lowest priority a registration may take, and the reason a refused
+ * registration is told, which names the additive seat to use instead.
+ */
+export interface SlotReservation {
+  /** The lowest priority a registration into this slot may take; a lower one is refused. */
+  readonly minPriority: number
+  /** Why the cell is reserved and which seat an additive contribution should take instead. */
+  readonly reason: string
+}
+
 /** Slot data context: global, current-session-optional, or strict session-bound. */
 export type SlotScope = 'root' | 'session-maybe' | 'session'
 
@@ -118,6 +129,13 @@ export interface SlotEntryDef {
   scope: SlotScope
   /** Use span anchors and error placeholders for inline content; omitted uses div. */
   inline?: true
+  /**
+   * Reserve the slot's cell against shadowing. A registration below
+   * `minPriority` is refused instead of replacing the occupant, and the
+   * refusal quotes `reason`, which names the additive seat a plugin should
+   * take instead. Omitted, any priority shadows as usual.
+   */
+  reserved?: SlotReservation
   owner?: object
   /**
    * Optional keyed-entry prop table. A keyed registration contributes one
@@ -167,6 +185,8 @@ export type SlotSpec<E extends SlotEntryDef> = {
   scope: E['scope']
   /** Use span anchors and error placeholders for inline content; omitted uses div. */
   inline?: true
+  /** The cell's protection against shadowing, carried from the declaration. */
+  reserved?: SlotReservation
 } & ('inject' extends keyof E
   ? E extends { inject: infer Injected extends object }
     ? { inject: Injected }
@@ -1273,6 +1293,11 @@ export class SlotCore {
     // typed callers already satisfied KindOptions statically. Cell occupancy
     // clashes only at the exact priority: a different priority shadows.
     const priority = options.priority ?? 0
+    // A reserved cell refuses a shadowing registration outright: the occupant it would replace is the one the
+    // deployment promised to keep, so the refusal names the additive seat instead of letting the replacement land.
+    if (spec.reserved !== undefined && priority < spec.reserved.minPriority) {
+      throw new Error(`slot "${options.name}" is reserved: priority ${priority} is below its floor of ${spec.reserved.minPriority} — ${spec.reserved.reason}`)
+    }
     const occupantHint = (occupant: StoredEntry) =>
       `at priority ${priority}${occupant.registrant !== undefined ? ` (registered by ${occupant.registrant})` : ''} — register at a different priority to shadow it (lowest renders)`
     switch (spec.kind) {

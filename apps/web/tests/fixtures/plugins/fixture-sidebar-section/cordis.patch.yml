@@ -1,0 +1,4 @@
+# Loads the sidebar section fixture beside the studio, so a picture can show a plugin section next to Delorun's chat list.
+- insert:
+    - id: fixture-sidebar-section
+      name: '@fixture/sidebar-section'

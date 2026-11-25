@@ -68,6 +68,8 @@ The slot declaration fixes two independent axes.
 
 `priority` is a shadowing rank for `single`, `list`, `keyed`, and `hoc` cells and an election order for `chain`. Lower values run or render first. Ordinary additive contributions should choose a fresh list or hoc `id`, or keyed `key`; intentionally reusing a shipped cell replaces its presentation.
 
+A declaration may reserve its cell with `reserved: { minPriority, reason }`. A registration below `minPriority` is refused with an error quoting `reason`, which names the additive seat to take instead, so a deployment can promise that a seat it fills keeps its occupant. The floor itself and every priority above it register normally. `sidebar.workspaces` is reserved at 0, because the region holds the Workspace and Session list and the lists registered into its child seats; a plugin that offers its own tree registers into `sidebar.sections` beside it.
+
 <a id="hoc-layers"></a>
 
 ### Hoc layers

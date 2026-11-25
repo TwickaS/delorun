@@ -707,6 +707,12 @@ export function SidebarRoot({
           data-sidebar-scrollport={wide ? '' : undefined}
         >
           {!inFoot && panelList}
+          <div className={css.sectionsArea}>
+            {renderSlot('sidebar.sections', {
+              wide,
+              expandSidebar: () => { if (collapsed) toggleSidebar() },
+            })}
+          </div>
           <div className={css.regionArea}>
             {renderSlot('sidebar.workspaces', {
               wide,

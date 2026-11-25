@@ -227,7 +227,19 @@ export function apply(ctx: ClientContext): void {
         'sidebar.backdrop': { kind: 'single', scope: 'root' },
         'sidebar.toggle.badge': { kind: 'single', scope: 'root' },
         'sidebar.panellist.actions': { kind: 'list', scope: 'root' },
-        'sidebar.workspaces': { kind: 'single', scope: 'root', inject: SIDEBAR_SECTION_INJECT },
+        'sidebar.sections': { kind: 'list', scope: 'root' },
+        // The browsing region is the sidebar's one list of Workspaces and Sessions, and a distribution's own list is
+        // a child seat of it, so a lower-priority occupant would replace that list rather than sit beside it. A plugin
+        // that offers its own tree takes `sidebar.sections` instead.
+        'sidebar.workspaces': {
+          kind: 'single',
+          scope: 'root',
+          inject: SIDEBAR_SECTION_INJECT,
+          reserved: {
+            minPriority: 0,
+            reason: 'the browsing region holds the Workspace and Session list and the lists registered into its child seats; register an additive section into "sidebar.sections" instead',
+          },
+        },
         'sidebar.settings': { kind: 'single', scope: 'root' },
         'sidebar.footer.action': { kind: 'list', scope: 'root' },
         'sidebar.session.action': { kind: 'hoc', scope: 'root' },

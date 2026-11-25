@@ -14,6 +14,7 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
     'test.hoc': { kind: 'hoc'; scope: 'root' }
     'test.hoc.keyed': { kind: 'hoc'; scope: 'root' }
     'test.grandchild': { kind: 'single'; scope: 'root' }
+    'test.reserved': { kind: 'single'; scope: 'root' }
   }
 }
 
@@ -40,6 +41,10 @@ function mountFrame(core: SlotCore) {
       'test.chain': { kind: 'chain', scope: 'session' },
       'test.hoc': { kind: 'hoc', scope: 'root' },
       'test.hoc.keyed': { kind: 'hoc', scope: 'root' },
+      'test.reserved': {
+        kind: 'single', scope: 'root',
+        reserved: { minPriority: 0, reason: 'take the additive seat "test.list" instead' },
+      },
     },
   // Type-level renderSlot presence is proven by the type-chain spec; erasing
   // here keeps runtime fixtures terse.
@@ -196,6 +201,29 @@ describe('kind semantics', () => {
     core.register({ name: 'test.hoc', id: 'inner', priority: -1, registrant: 'shadow' }, Comp as never)
     expect(core.entries('test.hoc').map(e => e.options.id)).toEqual(['inner', 'outer', 'inner'])
     expect(core.entriesOfSlot('test.hoc').map(e => e.registrant ?? e.options.id)).toEqual(['shadow', 'outer'])
+  })
+
+  it('a reserved cell refuses a shadowing registration and names the additive seat', () => {
+    const core = new SlotCore()
+    mountFrame(core)
+    expect(core.specDynamic('test.reserved')?.reserved).toEqual({ minPriority: 0, reason: 'take the additive seat "test.list" instead' })
+    core.register({ name: 'test.reserved', registrant: 'browser' }, Comp)
+    // The occupant the deployment promised to keep stays: a lower priority is refused rather than replacing it.
+    expect(() => core.register({ name: 'test.reserved', priority: -10, registrant: 'plugin' }, Comp))
+      .toThrow('slot "test.reserved" is reserved: priority -10 is below its floor of 0 — take the additive seat "test.list" instead')
+    expect(core.entriesOfSlot('test.reserved').map(entry => entry.registrant)).toEqual(['browser'])
+    // The floor itself is allowed, and so is anything above it.
+    expect(() => core.register({ name: 'test.reserved', priority: 0 }, Comp)).toThrow('already has a registration')
+    expect(() => core.register({ name: 'test.reserved', priority: 5, registrant: 'later' }, Comp)).not.toThrow()
+    expect(core.entriesOfSlot('test.reserved').map(entry => entry.registrant)).toEqual(['browser'])
+  })
+
+  it('an unreserved cell still shadows at any priority', () => {
+    const core = new SlotCore()
+    mountFrame(core)
+    core.register({ name: 'test.single', registrant: 'browser' }, Comp)
+    expect(() => core.register({ name: 'test.single', priority: -10, registrant: 'plugin' }, Comp)).not.toThrow()
+    expect(core.entriesOfSlot('test.single').map(entry => entry.registrant)).toEqual(['plugin'])
   })
 
   it('chain: missing select throws; select and priority land on the stored entry', () => {
@@ -423,7 +451,7 @@ describe('subscription API', () => {
     const off = core.onMutate(key => keys.push(key))
     mountFrame(core)
     // Contribution first, then each declared child key.
-    expect(keys).toEqual(['root', 'test.single', 'test.session', 'test.list', 'test.keyed', 'test.chain', 'test.hoc', 'test.hoc.keyed'])
+    expect(keys).toEqual(['root', 'test.single', 'test.session', 'test.list', 'test.keyed', 'test.chain', 'test.hoc', 'test.hoc.keyed', 'test.reserved'])
     keys.length = 0
     core.register({ name: 'test.list', id: 'a' }, Comp)
     expect(keys).toEqual(['test.list'])

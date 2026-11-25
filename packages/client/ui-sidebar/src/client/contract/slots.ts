@@ -74,6 +74,17 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
       inject: SidebarSectionInjected
     }
     /**
+     * Additional sections beside the browsing region, rendered between the
+     * global panel list and `sidebar.workspaces` and scrolling with the
+     * navigation. Declared by this package's 'sidebar' entry; a plugin that
+     * offers its own tree registers here instead of occupying
+     * `sidebar.workspaces`, which would replace the browser and every list
+     * registered into its child seats. Each occupant owns its header, fold and
+     * rows; in the rail (`wide: false`) it may render nothing or one icon
+     * button. An unoccupied seat takes no room.
+     */
+    'sidebar.sections': { kind: 'list'; scope: 'root'; owner: SidebarSectionOwnerProps }
+    /**
      * The settings seat at the sidebar foot. Declared by this package's
      * 'sidebar' entry; ui-settings registers its trigger row + modal panel.
      * The sidebar passes only its column state — it holds no settings state.
@@ -308,6 +319,7 @@ export type SidebarRootComponentProps =
     | 'sidebar.backdrop'
     | 'sidebar.toggle.badge'
     | 'sidebar.panellist.actions'
+    | 'sidebar.sections'
     | 'sidebar.workspaces'
     | 'sidebar.settings'
     | 'sidebar.footer.action'

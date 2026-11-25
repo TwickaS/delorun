@@ -27,7 +27,7 @@ The dsh web client sidebar lets users recognize the active build, start a new se
 <a id="use-this-package"></a>
 ## Use this package
 
-The sidebar is the navigation shell: users see the brand, start new sessions, collapse the rail, and reach Settings. Feature plugins fill its seats — ui-workspace fills `sidebar.workspaces`, ui-settings registers the trigger row and settings panel at `sidebar.settings`.
+The sidebar is the navigation shell: users see the brand, start new sessions, collapse the rail, and reach Settings. Feature plugins fill its seats — ui-workspace fills `sidebar.workspaces`, ui-settings registers the trigger row and settings panel at `sidebar.settings`, and a plugin that offers its own tree registers an additive section into `sidebar.sections`.
 
 Below 768px, without a native Windows caption, the sidebar keeps its expanded content mounted inside the frame's drawer. The drawer initially focuses its collapse toggle, traps keyboard focus, closes with Escape or a mask press, and restores the invoking control unless a foreground dialog remains open. When an open drawer becomes a collapsed rail, focus remaining in its wide content transfers to the rail toggle before that content unmounts. When a collapsed rail becomes a hidden drawer, the sidebar transfers its own focus to its header opener, preserving focus elsewhere and in foreground dialogs. This includes focus in a global menu identified by the original sidebar control's `aria-controls`. Returning from a closed drawer renders the compact rail immediately, without a crossfade. Its toggle tooltip renders outside the drawer. Opening it does not resize the conversation.
 
@@ -88,7 +88,7 @@ On Desktop, the official navigation controls report `sidebar_menu_click` with `m
 <details>
 <summary>Implementation internals — click to expand</summary>
 
-The shell is pure composition: `SidebarRootComponentProps` composes the layout owner share, the global `useSessions` and `useWorkspaces` hooks, the declared brand, the `sidebar.workspaces` and `sidebar.settings` child slots, and injected navigation callbacks. The sidebar declares the `sidebar.panel.icon` Component Factory, which owns the `sidebar.panellist` list; panel rows and the More menu render a panel's registered icon through that factory. Panel metadata is derived from list registrations and locale changes; selection belongs to the layout store. The injected `trackEntryClick(attributes)` forwards to `ctx.get('productAnalytics')?.track('sidebar_menu_click', attributes)`, and `selectPanel` only selects, so each control supplies its own entry and position.
+The shell is pure composition: `SidebarRootComponentProps` composes the layout owner share, the global `useSessions` and `useWorkspaces` hooks, the declared brand, the `sidebar.sections`, `sidebar.workspaces` and `sidebar.settings` child slots, and injected navigation callbacks. The sidebar declares the `sidebar.panel.icon` Component Factory, which owns the `sidebar.panellist` list; panel rows and the More menu render a panel's registered icon through that factory. Panel metadata is derived from list registrations and locale changes; selection belongs to the layout store. The injected `trackEntryClick(attributes)` forwards to `ctx.get('productAnalytics')?.track('sidebar_menu_click', attributes)`, and `selectPanel` only selects, so each control supplies its own entry and position.
 
 Expanded navigation uses 8px outer gutters, hover and selected fills inset 3px on each side, and a 16px leading cell with a 6px label gap. New Session centers its content with 4px side margins. Its initial 12px gap above navigation combines 4px outside the scrollport and an 8px gap that scrolls away. The logo row has no bottom margin; its content starts 16px from the column's left edge, with 5px between mark and name. Only the macOS non-fullscreen top toggle shifts 4px right while expanded, retaining that offset throughout its fade-out. Collapsed geometry stays independent.
 
@@ -100,7 +100,11 @@ The sidebar root supplies inherited CSS properties to `sidebar.workspaces` and `
 
 ### Slot discipline
 
-Declaration-aware `slots.inject()` lets a replacing package activate before or after the sidebar. The foot is the `sidebar.settings` seat: the sidebar renders only the bottom-pinned layout slot and shares its column state (`wide`). The `/client` exports are the plugin body (`apply`/`inject`) plus the contract types only; SidebarRoot, the row components, and the tree derivation remain package-internal behind the slot registration.
+Declaration-aware `slots.inject()` lets a replacing package activate before or after the sidebar. The foot is the `sidebar.settings` seat: the sidebar renders only the bottom-pinned layout slot and shares its column state (`wide`).
+
+A plugin that offers its own tree — a project list, a saved-search list, a second navigation — registers a list entry into the root-scoped `sidebar.sections` slot with an `id` and an optional `order`. Sections render between the global panel list and `sidebar.workspaces`, inside the same viewport, so they scroll with the navigation and the browser's own scroller and wheel hand-off are unchanged. Each occupant receives `wide` and `expandSidebar`, owns its header, fold and rows, and may render nothing or one icon button in the rail. An unoccupied seat takes no room — the outlet's anchor is `display: contents`, so with no entries the column measures zero tall — and a sidebar with no section registrations renders exactly as it does without the seat.
+
+`sidebar.workspaces` is reserved: a registration below priority 0 is refused with an error naming `sidebar.sections`, because the region holds the Workspace and Session list and the lists registered into its child seats, and a lower-priority occupant would replace them rather than sit beside them. A plugin that would have shadowed the region takes the section seat instead. The `/client` exports are the plugin body (`apply`/`inject`) plus the contract types only; SidebarRoot, the row components, and the tree derivation remain package-internal behind the slot registration.
 
 </details>
 
