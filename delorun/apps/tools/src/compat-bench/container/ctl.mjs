@@ -182,8 +182,13 @@ const handlers = {
     return print({ ok: d.code === 0 && v.code === 0, doctor: d.code, verify: v.code, doctorOutput: d.stdout.slice(-2000), verifyOutput: v.stdout.slice(-2000) })
   },
   async version() {
+    // The host prints its own version first and the DSH version under it; the card needs both, and the first one.
     const r = run([...cli, '--version'], { timeout: 60_000 })
-    return print({ ok: r.code === 0, version: r.stdout.trim().split('\n').pop() })
+    const lines = r.stdout.trim().split('\n').map(line => line.trim()).filter(line => line !== '')
+    const own = lines.find(line => /^Delorun /i.test(line)) ?? (KIND === 'stock' ? lines.find(line => /^DSH /i.test(line)) : undefined) ?? lines[lines.length - 1] ?? ''
+    const version = own.replace(/^[A-Za-z][\w ]*?\s+/, '').trim()
+    const dsh = lines.find(line => /^DSH /i.test(line))?.replace(/^DSH\s+/, '').trim()
+    return print({ ok: r.code === 0 && version !== '', version, dsh, own })
   },
   async tree() {
     // The files under the home, for the leftovers comparison.
