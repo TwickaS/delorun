@@ -54,8 +54,18 @@ body {
   inset: 0;
 }
 
-/* The shell is fixed to the viewport, so a rubber-band bounce cannot expose the page behind it. The height follows the
-   visual viewport, which the on-screen keyboard shrinks, so the composer stays above the keyboard. */
+/* The safe-area insets as values the controller can read. A pinned PWA on iOS reports a visual viewport that excludes
+   the status bar and the home indicator, so the shell cannot be sized to it; `edges.ts` reads these to tell that case
+   from the on-screen keyboard, which shrinks the visual viewport too. */
+:root {
+  --delorun-safe-top: env(safe-area-inset-top, 0px);
+  --delorun-safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* The shell is fixed to the viewport, so a rubber-band bounce cannot expose the page behind it. Its height is the
+   screen, which `edges.ts` writes: the layout viewport, or the visual viewport while the on-screen keyboard shrinks it,
+   so the composer stays above the keyboard. The surface reaches the physical edges and the content is padded clear of
+   the insets instead. */
 [data-shell] {
   position: fixed;
   inset: 0;

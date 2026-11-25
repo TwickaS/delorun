@@ -4,8 +4,12 @@
  * unfinished it reads "Finish setup" and reopens it at the saved step. Once the guide is finished it counts the steps a
  * phone deferred to this computer ("Finish setup · N left"), opens the guide with only those steps, and is gone at zero. A deferred step whose work is already
  * done (phone access is on, a PIN is set) is cleared when the entry reads, so it never counts a finished step.
+ *
+ * The line carries a × that dismisses it. The dismissal is kept in the guide's own settings as the steps it covered, so it
+ * survives a reload and lasts only until a step the person has not dismissed arrives: a dismissal that lasted for ever
+ * would hide a genuinely unfinished setup.
  */
-import { IconChecklistOutlineRegular, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconChecklistOutlineRegular, IconCloseOutlineRegular, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, OwnerOf, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 // Type-only: the 'sidebar.footer.action' SlotMap entry.
 import type {} from '@deepseek-ai/dsh-client-ui-sidebar/client'
@@ -66,6 +70,16 @@ export async function readWaiting({ host, loadRecord, fetch }: Pick<DeferredSetu
 }
 
 /**
+ * Whether the person dismissed the entry for every step that still waits.
+ * @param waiting - the steps still waiting.
+ * @param dismissed - the steps the person dismissed the entry for.
+ * @returns true while the waiting steps are all dismissed, so a step deferred later shows the entry again.
+ */
+function allDismissed(waiting: readonly DeferrableStep[], dismissed: readonly string[]): boolean {
+  return waiting.length > 0 && waiting.every(id => dismissed.includes(id))
+}
+
+/**
  * Render the entry on the computer while a deferred step waits.
  * @param props - the foot's width, the copy and the services.
  * @returns the entry, or nothing.
@@ -83,15 +97,31 @@ export function DeferredSetupEntry({ wide, t, host, loadRecord, fetch, atCompute
   }, [computer, guideOpen, revision, host, loadRecord, fetch])
   const saved = useSyncExternalStore(useCallback(listener => progress.subscribe(listener), [progress]), () => progress.getSnapshot())
   const unfinished = saved.status === 'ready' && saved.value !== undefined && !saved.value.done
+  const dismissed = saved.status === 'ready' ? saved.value?.dismissedSteps ?? [] : []
   const start = useCallback((): void => {
     deferredOnly.set(!unfinished)
     open()
   }, [deferredOnly, open, unfinished])
+  // A dismissal lasts until a step the person has not dismissed arrives, so an unfinished setup is never hidden for good.
+  const dismiss = useCallback((): void => {
+    const merged = [...new Set([...dismissed, ...waiting])]
+    progress.set('dismissedSteps', merged).catch((error: unknown) => { console.warn('delorun onboarding: the dismissal was not saved', error) })
+  }, [dismissed, waiting, progress])
   if (!computer || (!unfinished && waiting.length === 0)) return null
+  if (allDismissed(waiting, dismissed)) return null
   const label = waiting.length === 0 ? t('finishSetup') : t('deferred.entry', { n: String(waiting.length) })
-  const button = <button type="button" className={wide ? css.entry : css.rail} aria-label={label} data-delorun-finish-setup-left={waiting.length} data-sidebar-foot-line={wide ? '' : undefined} onClick={start}>
+  const button = <button type="button" className={wide ? css.entry : css.rail} aria-label={label} data-delorun-finish-setup-left={waiting.length} onClick={start}>
     <IconChecklistOutlineRegular aria-hidden="true" />
     {wide ? <span className={css.text}>{label}</span> : waiting.length > 0 && <span className={css.count}>{waiting.length}</span>}
   </button>
-  return wide ? button : <Tooltip label={label}>{button}</Tooltip>
+  // The × sits beside the entry rather than inside it, so the entry stays one button and the × is its own target. The line
+  // carries the foot-line marker, which the foot's own rule reads to give it a row of its own.
+  return wide
+    ? <div className={css.line} data-sidebar-foot-line="">
+      {button}
+      <button type="button" className={css.dismiss} aria-label={t('deferred.dismiss')} onClick={dismiss}>
+        <IconCloseOutlineRegular aria-hidden="true" />
+      </button>
+    </div>
+    : <Tooltip label={label}>{button}</Tooltip>
 }
