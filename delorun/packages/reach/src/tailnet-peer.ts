@@ -22,37 +22,13 @@
  */
 import { request } from 'node:http'
 
-/** Why a connection could not be shown to come from a tailnet peer. */
-export type TailnetPeerRefusal =
-  /** `tailscaled`'s socket is not there: Tailscale is not installed, or not running. */
-  | 'socket-absent'
-  /** The socket is there but the daemon did not answer, or answered something this module cannot read. */
-  | 'daemon-down'
-  /** The daemon answered and does not know the address: it is not a device of this tailnet. */
-  | 'unknown-peer'
-  /** The daemon knows the device but its key has expired, so it has left the tailnet. */
-  | 'device-removed'
-  /** The address is not a tailnet address at all, so no tailnet peer can have sent it. */
-  | 'not-a-tailnet-address'
+/**
+ * The peer types are `@delorun/home-auth`'s: the home is what remembers a corroborated peer and decides what a Peer may
+ * do, so the one definition lives there and this module produces it.
+ */
+import type { TailnetPeer, TailnetPeerCheck, TailnetPeerRefusal } from '@delorun/home-auth'
 
-/** One device of the tailnet, as `tailscaled` names it. */
-export interface TailnetPeer {
-  /** The node's id in the netmap. */
-  readonly nodeId: string
-  /** The node's stable id, which survives a key rotation. */
-  readonly stableId: string
-  /** The node's MagicDNS name, without the trailing dot. */
-  readonly name: string
-  /** The tailnet login that owns the device. */
-  readonly login: string
-  /** The display name the identity provider gives that login. */
-  readonly displayName: string
-}
-
-/** What {@link checkTailnetPeer} found. */
-export type TailnetPeerCheck =
-  | { readonly kind: 'peer'; readonly peer: TailnetPeer }
-  | { readonly kind: 'refused'; readonly refusal: TailnetPeerRefusal; readonly detail: string }
+export type { TailnetPeer, TailnetPeerCheck, TailnetPeerRefusal }
 
 /** The longest answer one local API call may print before it is refused. */
 export const LOCAL_API_OUTPUT_LIMIT_BYTES = 1024 * 1024
