@@ -2968,6 +2968,11 @@
     },
     {
       "area": "Plugins",
+      "section": "Fixed",
+      "text": "A start no longer logs that it could not check the profile for plugin keys while another change was writing the profile: a change that runs inside a writer's own hold takes the profile's write lock once, so the start keeps the profile history version that records the change, and two separate writers still take turns."
+    },
+    {
+      "area": "Plugins",
       "section": "Security",
       "text": "Installing a plugin checks it and every package it brings before any of its files are fetched or any install script runs: a package without an integrity hash, a git source not pinned to a full commit, a registry or download URL that is plain http, a known GitHub advisory, a version published in the last 24 hours and a name close to one you already have are each shown where you install it, on the Plugins page and in `delorun plugin`'s output. A known critical advisory stops the installation until you choose to install it anyway, with \"Install anyway\" or `--allow-advisory <id>`; everything else only warns. When the advisory or publish-time lookup cannot run, you are told so. Scopes and git owners you trust can be listed so their plugins show only critical advisories; linked and local plugin folders are not checked."
     },
@@ -3380,6 +3385,16 @@
       "area": "Compatibility",
       "section": "Fixed",
       "text": "A script, or the desktop app's own requests, that talks to a Delorun Host on the same computer with the Host's cookie is accepted again; the Host had answered \"forbidden\" to any request that changes something and states no origin. A request from a web page on another site or another local port is still refused."
+    },
+    {
+      "area": "Compatibility",
+      "section": "Fixed",
+      "text": "The compatibility bench closes the first-use dialogs topmost first, so a plugin that opens a dialog of its own before the studio's first-run guide appears is exercised instead of stuck: the guide painted above the plugin's dialog, the click aimed at the first dialog in the page was intercepted, and every stage that drives the browser failed on it."
+    },
+    {
+      "area": "Compatibility",
+      "section": "Fixed",
+      "text": "The bench asks the host for a sign-in link for up to fifteen seconds after a studio start, because the studio answers on its port before the home process reports a host and `delorun open --print` then answers that no host is running."
     }
   ],
   "versions": [
@@ -3571,6 +3586,10 @@
             {
               "section": "Fixed",
               "text": "A plugin's Delorun requirement is checked against the Delorun that is running, and a caller that asks for the DeepSeek Harness axis alone gets only that axis. The update report decides each axis separately, so a plugin whose `engines.delorun` the target does not satisfy is now reported on the Delorun axis instead of being read as a Delorun mismatch while the Harness axis was being decided."
+            },
+            {
+              "section": "Fixed",
+              "text": "A start no longer logs that it could not check the profile for plugin keys while another change was writing the profile: a change that runs inside a writer's own hold takes the profile's write lock once, so the start keeps the profile history version that records the change, and two separate writers still take turns."
             }
           ]
         },
@@ -3616,6 +3635,19 @@
             {
               "section": "Fixed",
               "text": "The check that builds the product website reports a checkout without the site's source pictures as a limit of that machine rather than a failure of the change. The pictures are real screenshots of the studio and are not in the repository, so the check now declines with a message naming `SITE_PICTURES_DIR` and the folder to point it at, instead of failing the build with the same message as an error."
+            }
+          ]
+        },
+        {
+          "area": "Compatibility",
+          "items": [
+            {
+              "section": "Fixed",
+              "text": "The compatibility bench closes the first-use dialogs topmost first, so a plugin that opens a dialog of its own before the studio's first-run guide appears is exercised instead of stuck: the guide painted above the plugin's dialog, the click aimed at the first dialog in the page was intercepted, and every stage that drives the browser failed on it."
+            },
+            {
+              "section": "Fixed",
+              "text": "The bench asks the host for a sign-in link for up to fifteen seconds after a studio start, because the studio answers on its port before the home process reports a host and `delorun open --print` then answers that no host is running."
             }
           ]
         }
