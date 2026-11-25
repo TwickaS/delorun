@@ -4,9 +4,13 @@
  * See "Cutting a preview or release candidate" in `delorun/apps/release/README.md`.
  *
  * `tsx delorun/apps/release/scripts/cut-rc.ts --version <0.1.0-preview.N[.M]|0.1.0-rc.N[.M]> --channel <dir> --state <signer state file> --keys <dir>
- * --root <root file> --commit <sha> [--highlights <file>] [--summary <text>] [--work <dir>] [--closures-from <dir>]
+ * --root <root file>... --commit <sha> [--highlights <file>] [--summary <text>] [--work <dir>] [--closures-from <dir>]
  * [--artifacts build|existing] [--platform <platform>]... [--log-submit <url> --log-checkpoint <url> --log-tiles <url>]
  * [--log-poll-seconds <n>] [--smoke-minutes <n>] [--smoke-previous <version>] [--no-smoke] [--allow-builder-paths] [--dry-run]`
+ *
+ * `--root` repeats, oldest first, and the whole chain goes to `local-release.ts` and to the channel verification: the
+ * signer's state trusts the root it was initialised with until a release under the next root is signed, so a cut after a
+ * rotation passes both. Only the newest root goes to the log probe, which probes the log that root names.
  *
  * `--keys` is a directory holding `targets.pem` and `timestamp.pem`, and `log-entry-ecdsa.pem` when the root lists an
  * ECDSA P-256 log-entry key; their contents are passed to no log and no output, only their paths reach the signing
@@ -49,7 +53,7 @@ import { parseArgs } from 'node:util'
 import { RUNTIME_PLATFORMS, type RuntimePlatform } from '@delorun/contract-release-manifest'
 import { createHash } from 'node:crypto'
 import { packsLogName, packsName, readBundle, verifyBundle } from '@delorun/release-formats/log/bundle'
-import { checkFileRef, trustRootChain, verifyChannelManifest, verifyPacks, verifySignedManifest, verifyTimestamp } from '@delorun/release-formats/sign/verify'
+import { checkFileRef, readRoot, trustRootChain, verifyChannelManifest, verifyPacks, verifySignedManifest, verifyTimestamp } from '@delorun/release-formats/sign/verify'
 import { repositoryRoot } from '@delorun/tools/src/git.ts'
 import { parseData } from '../src/changelog/data.ts'
 import { DATA_PATH } from '../src/changelog/paths.ts'
@@ -86,8 +90,8 @@ export interface CutRequest {
   readonly state: string
   /** The directory holding `targets.pem` and `timestamp.pem`. */
   readonly keys: string
-  /** The signed root file. */
-  readonly root: string
+  /** The signed root files, oldest first: the chain a client walks. */
+  readonly roots: readonly string[]
   /** The commit to release. */
   readonly commit: string
   /** Where the release notes are written. */
@@ -131,7 +135,7 @@ export function parseCutArgs(argv: readonly string[]): CutRequest {
       'channel': { type: 'string' },
       'state': { type: 'string' },
       'keys': { type: 'string' },
-      'root': { type: 'string' },
+      'root': { type: 'string', multiple: true },
       'commit': { type: 'string' },
       'highlights': { type: 'string' },
       'summary': { type: 'string' },
@@ -150,11 +154,13 @@ export function parseCutArgs(argv: readonly string[]): CutRequest {
       'dry-run': { type: 'boolean', default: false },
     },
   })
-  const required = (name: 'version' | 'channel' | 'state' | 'keys' | 'root' | 'commit'): string => {
+  const required = (name: 'version' | 'channel' | 'state' | 'keys' | 'commit'): string => {
     const value = values[name]
     if (value === undefined || value === '') throw new Error(`pass --${name}`)
     return value
   }
+  const roots = values.root ?? []
+  if (roots.length === 0 || roots.some(root => root === '')) throw new Error('pass --root')
   const version = required('version')
   const match = CANDIDATE.exec(version)
   if (match === null) throw new Error(`--version ${version} is not a preview or release candidate such as 0.1.0-preview.2 or 0.1.0-rc.2`)
@@ -178,7 +184,7 @@ export function parseCutArgs(argv: readonly string[]): CutRequest {
     channel,
     state: resolve(required('state')),
     keys: resolve(required('keys')),
-    root: resolve(required('root')),
+    roots: roots.map(root => resolve(root)),
     commit: required('commit'),
     highlights: resolve(values.highlights ?? join(work, `notes-${version}.txt`)),
     summary: values.summary ?? `${kind === 'preview' ? 'Preview' : 'Release candidate'} ${match[3]}${iteration === undefined ? '' : `.${String(iteration)}`}.`,
@@ -248,7 +254,7 @@ function closureDirectory(request: CutRequest): string {
 export function localReleaseArgs(request: CutRequest): string[] {
   return [
     'delorun/apps/release/src/local-release.ts', '--version', request.version, '--commit', request.commit, '--summary', request.summary,
-    '--out', request.channel, '--root', request.root, '--targets-key', join(request.keys, 'targets.pem'), '--timestamp-key', join(request.keys, 'timestamp.pem'),
+    '--out', request.channel, ...request.roots.flatMap(root => ['--root', root]), '--targets-key', join(request.keys, 'targets.pem'), '--timestamp-key', join(request.keys, 'timestamp.pem'),
     '--state', request.state, '--closures-from', closureDirectory(request),
     ...request.platforms.flatMap(platform => ['--platform', platform]),
     '--log-submit', request.log.submit, '--log-checkpoint', request.log.checkpoint, '--log-tiles', request.log.tiles, '--log-poll-seconds', request.logPollSeconds,
@@ -267,7 +273,17 @@ export const LOG_ENTRY_ECDSA_KEY = 'log-entry-ecdsa.pem'
  * @returns the arguments of `probe-log.ts`.
  */
 export function probeArgs(request: CutRequest): string[] {
-  return ['delorun/apps/release/scripts/probe-log.ts', '--root', request.root, '--log-submit', request.log.submit]
+  // The probe asks the log the newest root names, so it takes that root alone; the chain is for signing and verification.
+  return ['delorun/apps/release/scripts/probe-log.ts', '--root', newestRoot(request), '--log-submit', request.log.submit]
+}
+
+/**
+ * The newest root of the chain, which names the log a release is logged to and the keys it is signed with.
+ * @param request - the request.
+ * @returns the last root file passed.
+ */
+export function newestRoot(request: CutRequest): string {
+  return request.roots.at(-1)!
 }
 
 /**
@@ -353,12 +369,23 @@ export interface VerifiedChannel {
  * @param channel - the channel directory.
  * @param version - the release the timestamp must name.
  * @param now - the clock in Unix seconds.
+ * @param chain - the root files the cut was given, oldest first; the channel must serve each of them and the timestamp
+ *   must verify under the newest. Without it, the channel's own roots are walked, newest last.
  * @returns what the channel offers.
  * @throws Error naming the first check that fails.
  */
-export function verifyChannel(channel: string, version: string, now: number): VerifiedChannel {
+export function verifyChannel(channel: string, version: string, now: number, chain?: readonly string[]): VerifiedChannel {
   const rootFiles = readdirSync(join(channel, 'root')).filter(name => /^\d+\.root\.json$/u.test(name)).sort((left, right) => parseInt(left, 10) - parseInt(right, 10))
-  const roots = trustRootChain(rootFiles.map(name => readFileSync(join(channel, 'root', name))), now)
+  const served = new Map(rootFiles.map(name => [name, readFileSync(join(channel, 'root', name))]))
+  const files = chain === undefined ? [...served.values()] : chain.map((path) => {
+    const bytes = readFileSync(path)
+    const name = `${String(readRoot(bytes).metadata.version)}.root.json`
+    const stored = served.get(name)
+    if (stored === undefined) throw new Error(`the channel serves no root/${name}, which --root names`)
+    if (!stored.equals(bytes)) throw new Error(`the channel's root/${name} is not the file --root names`)
+    return bytes
+  })
+  const roots = trustRootChain(files, now)
   const root = roots.at(-1)!
   const timestampBytes = readFileSync(join(channel, 'timestamp.json'))
   const timestamp = verifyTimestamp(root, timestampBytes, now)
@@ -507,7 +534,7 @@ export async function cutRelease(request: CutRequest, deps: CutDeps): Promise<Cu
   }
   if (existsSync(join(request.channel, 'releases', 'download', `v${request.version}`))) return failed(`the channel already holds ${request.version}`, 'pick the next candidate; a published version is never replaced')
   for (const key of ['targets.pem', 'timestamp.pem']) if (!existsSync(join(request.keys, key))) return failed(`${join(request.keys, key)} does not exist`, 'check --keys')
-  if (!existsSync(request.root)) return failed(`${request.root} does not exist`, 'check --root')
+  for (const root of request.roots) if (!existsSync(root)) return failed(`${root} does not exist`, 'check --root')
   say(`cut-rc ${request.version}: log in ${logFile}`)
 
   let started = begin('tree')
@@ -564,7 +591,7 @@ export async function cutRelease(request: CutRequest, deps: CutDeps): Promise<Cu
   started = begin('verify')
   let verified: VerifiedChannel
   try {
-    verified = verifyChannel(request.channel, request.version, Math.floor(deps.now() / 1000))
+    verified = verifyChannel(request.channel, request.version, Math.floor(deps.now() / 1000), request.roots)
     if ((verified.notes === undefined || !verified.notes.equals(readFileSync(request.highlights)))) throw new Error('the manifest does not sign the release notes written for this candidate')
     if (previous !== undefined && !verified.others.includes(previous)) throw new Error(`${previous} is no longer in the channel`)
   } catch (error) {

@@ -1,9 +1,11 @@
 /**
- * The `cut-rc.ts` command line and plan: which flags it requires, that every candidate signs its notes, what `--dry-run` prints, the closing installed-release smoke, and that key material never reaches the plan.
+ * The `cut-rc.ts` command line and plan: which flags it requires, that `--root` repeats into a chain that signing and
+ * verification take whole while the log probe takes only the newest, that every candidate signs its notes, what
+ * `--dry-run` prints, the closing installed-release smoke, and that key material never reaches the plan.
  */
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { localReleaseArgs, parseCutArgs, planSteps, previousCandidate, printPlan, smokeArgs } from '../../scripts/cut-rc.ts'
+import { localReleaseArgs, newestRoot, parseCutArgs, planSteps, previousCandidate, printPlan, probeArgs, smokeArgs } from '../../scripts/cut-rc.ts'
 
 const BASE = ['--version', '0.1.0-rc.2', '--channel', '/c/channel', '--state', '/k/state.json', '--keys', '/k', '--root', '/k/1.root.json', '--commit', 'abc123']
 
@@ -14,6 +16,35 @@ describe('cut-rc arguments', () => {
       const without = [...BASE.slice(0, index), ...BASE.slice(index + 2)]
       expect(() => parseCutArgs(without)).toThrow(`pass --${flag}`)
     }
+  })
+
+  it('takes one root as a chain of one, unchanged', () => {
+    const request = parseCutArgs(BASE)
+    expect(request.roots).toEqual(['/k/1.root.json'])
+    expect(newestRoot(request)).toBe('/k/1.root.json')
+    expect(localReleaseArgs(request).filter(arg => arg === '--root')).toHaveLength(1)
+    expect(localReleaseArgs(request)).toContain('/k/1.root.json')
+    expect(probeArgs(request)).toEqual(['delorun/apps/release/scripts/probe-log.ts', '--root', '/k/1.root.json', '--log-submit', request.log.submit])
+  })
+
+  it('takes --root more than once, oldest first, and gives the whole chain to signing and verification', () => {
+    const request = parseCutArgs([...BASE, '--root', '/k/2.root.json'])
+    expect(request.roots).toEqual(['/k/1.root.json', '/k/2.root.json'])
+    expect(newestRoot(request)).toBe('/k/2.root.json')
+    const args = localReleaseArgs(request)
+    expect(args.slice(args.indexOf('--root'), args.indexOf('--root') + 4)).toEqual(['--root', '/k/1.root.json', '--root', '/k/2.root.json'])
+    expect(args.filter(arg => arg === '--root')).toHaveLength(2)
+  })
+
+  it('gives only the newest root to the log probe, which probes the log that root names', () => {
+    const request = parseCutArgs([...BASE, '--root', '/k/2.root.json', '--root', '/k/3.root.json'])
+    expect(probeArgs(request)).toEqual(['delorun/apps/release/scripts/probe-log.ts', '--root', '/k/3.root.json', '--log-submit', request.log.submit])
+    expect(probeArgs(request)).not.toContain('/k/1.root.json')
+    expect(probeArgs(request)).not.toContain('/k/2.root.json')
+  })
+
+  it('refuses an empty --root', () => {
+    expect(() => parseCutArgs([...BASE, '--root', ''])).toThrow('pass --root')
   })
 
   it('refuses a version that is not a preview or release candidate, an unknown platform and an unknown flag', () => {
@@ -107,5 +138,14 @@ describe('cut-rc plan', () => {
     expect(text).toContain('git tag -a v0.1.0-rc.2 abc123')
     expect(text).toContain('rc update --check')
     expect(text).toContain('--log-poll-seconds 30')
+  })
+
+  it('prints the whole chain in the signing step and only the newest root in the probe step', () => {
+    const lines: string[] = []
+    printPlan(parseCutArgs([...BASE, '--root', '/k/2.root.json']), line => lines.push(line))
+    const text = lines.join('\n')
+    expect(text).toContain('--root /k/1.root.json --root /k/2.root.json')
+    expect(text).toContain('probe-log.ts --root /k/2.root.json')
+    expect(text).not.toContain('probe-log.ts --root /k/1.root.json')
   })
 })
