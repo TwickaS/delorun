@@ -281,7 +281,7 @@
     {
       "path": "packages/boot/app-boot/src/index.ts",
       "class": "security",
-      "reason": "Code refusal switch: `loadOptionalPatches` and `loadOverlayPatches` take the optional `refuseCode` flag a host passes beside the loader's `refuseCode`, and with it on `parsePatchList` \u2014 the parse point that runs at load \u2014 refuses `insert` rows with the same typed `RefusedCodeError` naming the patch file and the row's path, before any row is anchored or applied. The flag defaults to false, so every existing caller parses exactly as upstream does. Also exports contract C17's Delorun axis from `./plugin-compatibility.ts`: `DELORUN_VERSION_ENV`, `evaluateDelorunRequirement`, `getDelorunRuntimeVersion` and the `DelorunRequirement` type. `COMSPEC` and `PATHEXT` join `BOOTSTRAP_NAMES`, so a discovered `.env` cannot choose the Windows command shell or the extensions the `PATH` lookup tries. Lead verdict (2026-11-11): kept; COMSPEC and PATHEXT join the bootstrap-only names, so a discovered .env cannot choose the shell or the extension list a Windows start runs with. A discovered `.env` also cannot set NODE_COMPILE_CACHE, NODE_V8_COVERAGE, NODE_ICU_DATA, OPENSSL_CONF, OPENSSL_MODULES, OPENSSL_ENGINES, GCONV_PATH, LOCPATH, or any name starting with `LD_` or `DELORUN_LAUNCHER_`. Lead verdict (2026-11-13): approved; the refusal only widens, and the home `.env` rules are unchanged. Lead verdict (2026-11-23): approved; DELORUN_VERSION joins the bootstrap-only names, so a discovered .env cannot switch a plugin's engines.dsh check off; only Delorun's launcher sets it, from code. The live reload also stops a row the new generation still lists but now disables, and awaits its disposal before the replacement starts, so a bundle patch that swaps a service provider cannot register twice; and a change that turns off a row provisioning a service on CORE_SERVICES answers restart-required with the reason service-replaced instead of applying live.",
+      "reason": "Code refusal switch: `loadOptionalPatches` and `loadOverlayPatches` take the optional `refuseCode` flag a host passes beside the loader's `refuseCode`, and with it on `parsePatchList` — the parse point that runs at load — refuses `insert` rows with the same typed `RefusedCodeError` naming the patch file and the row's path, before any row is anchored or applied. The flag defaults to false, so every existing caller parses exactly as upstream does. Also exports contract C17's Delorun axis from `./plugin-compatibility.ts`: `DELORUN_VERSION_ENV`, `evaluateDelorunRequirement`, `getDelorunRuntimeVersion` and the `DelorunRequirement` type. `COMSPEC` and `PATHEXT` join `BOOTSTRAP_NAMES`, so a discovered `.env` cannot choose the Windows command shell or the extensions the `PATH` lookup tries. Lead verdict (2026-11-11): kept; COMSPEC and PATHEXT join the bootstrap-only names, so a discovered .env cannot choose the shell or the extension list a Windows start runs with. A discovered `.env` also cannot set NODE_COMPILE_CACHE, NODE_V8_COVERAGE, NODE_ICU_DATA, OPENSSL_CONF, OPENSSL_MODULES, OPENSSL_ENGINES, GCONV_PATH, LOCPATH, or any name starting with `LD_` or `DELORUN_LAUNCHER_`. Lead verdict (2026-11-13): approved; the refusal only widens, and the home `.env` rules are unchanged. Lead verdict (2026-11-23): approved; DELORUN_VERSION joins the bootstrap-only names, so a discovered .env cannot switch a plugin's engines.dsh check off; only Delorun's launcher sets it, from code. The live reload also stops a row the new generation still lists but now disables, and awaits its disposal before the replacement starts, so a bundle patch that swaps a service provider cannot register twice; and a change that turns off a row provisioning a service on CORE_SERVICES answers restart-required with the reason service-replaced instead of applying live.",
       "sha256": "7c1672dc638a7625fa6ad72e1a6c70edf1d4de157859a2cf9e32a7f357e0e87b"
     },
     {
@@ -1212,7 +1212,7 @@
       "path": "packages/interaction/permission-presets/src/index.ts",
       "class": "delorun-feature",
       "feature": "permission-defaults",
-      "reason": "Per-workspace permission defaults: `PermissionPresetService.unset(session)` reads whether a session holds no preset, sandbox mode or approval policy and was never seeded, the seam a distribution's per-workspace defaults read before the first choice is pinned. `pinInitialPermission` calls it for the same predicate, so a new session still pins the configured default exactly as upstream does. It is not a Remote and sets no default. `apply()` is the guard's chokepoint: it consults the mounted `sandboxModeGuard` for the whole selection before anything is appended \u2014 so a preset that keeps the mode and drops the approval policy is covered too \u2014 passes the hook to `setSandboxMode` so the mode event itself is guarded, and appends the `permission/preset` identity last, after the knob events it stands for, so a refusal leaves neither event. The `tool-ask-user` direct-tool hunks (E3) are left out."
+      "reason": "Per-workspace permission defaults: `PermissionPresetService.unset(session)` reads whether a session holds no preset, sandbox mode or approval policy and was never seeded, the seam a distribution's per-workspace defaults read before the first choice is pinned. `pinInitialPermission` calls it for the same predicate, so a new session still pins the configured default exactly as upstream does. It is not a Remote and sets no default. `apply()` is the guard's chokepoint: it consults the mounted `sandboxModeGuard` for the whole selection before anything is appended — so a preset that keeps the mode and drops the approval policy is covered too — passes the hook to `setSandboxMode` so the mode event itself is guarded, and appends the `permission/preset` identity last, after the knob events it stands for, so a refusal leaves neither event. The `tool-ask-user` direct-tool hunks (E3) are left out."
     },
     {
       "path": "packages/mcp/mcp-client/src/consent.ts",
@@ -1223,7 +1223,7 @@
     {
       "path": "packages/mcp/mcp-client/src/index.ts",
       "class": "security",
-      "reason": "MCP add-time consent (C16 switch `mcp_add_consent`): before a stdio server starts, the plugin consults the mounted consent with the configured server name, command and arguments, and a refusal throws the typed `McpConsentRefusedError` at load, which leaves the server stopped with the typed reason. Without a mounted service \u2014 or for a Streamable HTTP server, which starts no local command \u2014 activation is exactly upstream's. The review also receives the configured environment and working directory, and the lookup goes through `findMcpAddConsent`, so a server row that starts before the consent row waits for it. With a consent provider, the start is resolved (`resolveServerStart`), reviewed with its resolved paths and spawned with exactly those paths, reconnects included. Lead verdict (2026-11-11): kept; with a consent provider the server is spawned, reconnects included, with exactly the reviewed executable path and working directory. `apply` drops any configured `argv0`; a reviewed start spawns the decision's `spawnCommand` or the resolved path with the configured `command` as `argv0` (not for a Windows batch shim), and `beforeReconnect` looks the consent up and reviews the start again before each respawn, refusing when the consent is no longer mounted. Lead verdict (2026-11-13): approved after the lead review of the merged diff. Template rules (2026-11-14): with `expandTemplates`, a template in `command`, `cwd` or the value of a run-affecting environment variable (`NODE_OPTIONS`, `LD_PRELOAD`, `LD_LIBRARY_PATH`, `PATH`, `PYTHONPATH`, `DYLD_*`) is refused at load, naming the server and field, before any review or spawn, so the person never approves template text that a stored credential later turns into code. After the security sweep, an allowed start also carries `spawnArgs` (pinned-file arguments written by canonical path) and `verify` (pins the files again), and the connection awaits `verify` immediately before every spawn through `ConnectionOptions.beforeSpawn`; a changed file fails the attempt. Adds the optional `roots` config (absolute folders only), which DSH browser providers set to the Session's working directory (L38 addendum, 2026-11-17); omitted or empty, the client advertises no roots, as upstream. Denied tools: the optional `deniedTools` config field (stdio and Streamable HTTP) lists the server's own tool names the client never registers; unset, nothing is denied. Origin (A631): each review, at boot and before each reconnect, passes the plugin's own context to the consent.",
+      "reason": "MCP add-time consent (C16 switch `mcp_add_consent`): before a stdio server starts, the plugin consults the mounted consent with the configured server name, command and arguments, and a refusal throws the typed `McpConsentRefusedError` at load, which leaves the server stopped with the typed reason. Without a mounted service — or for a Streamable HTTP server, which starts no local command — activation is exactly upstream's. The review also receives the configured environment and working directory, and the lookup goes through `findMcpAddConsent`, so a server row that starts before the consent row waits for it. With a consent provider, the start is resolved (`resolveServerStart`), reviewed with its resolved paths and spawned with exactly those paths, reconnects included. Lead verdict (2026-11-11): kept; with a consent provider the server is spawned, reconnects included, with exactly the reviewed executable path and working directory. `apply` drops any configured `argv0`; a reviewed start spawns the decision's `spawnCommand` or the resolved path with the configured `command` as `argv0` (not for a Windows batch shim), and `beforeReconnect` looks the consent up and reviews the start again before each respawn, refusing when the consent is no longer mounted. Lead verdict (2026-11-13): approved after the lead review of the merged diff. Template rules (2026-11-14): with `expandTemplates`, a template in `command`, `cwd` or the value of a run-affecting environment variable (`NODE_OPTIONS`, `LD_PRELOAD`, `LD_LIBRARY_PATH`, `PATH`, `PYTHONPATH`, `DYLD_*`) is refused at load, naming the server and field, before any review or spawn, so the person never approves template text that a stored credential later turns into code. After the security sweep, an allowed start also carries `spawnArgs` (pinned-file arguments written by canonical path) and `verify` (pins the files again), and the connection awaits `verify` immediately before every spawn through `ConnectionOptions.beforeSpawn`; a changed file fails the attempt. Adds the optional `roots` config (absolute folders only), which DSH browser providers set to the Session's working directory (L38 addendum, 2026-11-17); omitted or empty, the client advertises no roots, as upstream. Denied tools: the optional `deniedTools` config field (stdio and Streamable HTTP) lists the server's own tool names the client never registers; unset, nothing is denied. Origin (A631): each review, at boot and before each reconnect, passes the plugin's own context to the consent.",
       "sha256": "3fe61a91208b3a896a6f19015daebe62ef2675b09b3a86b0e8815609403c353a"
     },
     {
@@ -1241,7 +1241,7 @@
     {
       "path": "packages/mcp/mcp-client/tests/mcp-client.spec.ts",
       "class": "security",
-      "reason": "Ambient credential scrub (H3): `buildChildEnv` drops an ambient credential-shaped name, a denylisted name and a credential-shaped value, and the configured `env` remains the only pass-through \u2014 a denylisted name with an agent-socket value reaches the child because the config named it. Lead verdict (2026-11-11): kept; shows the configured env is the only pass-through to the stdio child.",
+      "reason": "Ambient credential scrub (H3): `buildChildEnv` drops an ambient credential-shaped name, a denylisted name and a credential-shaped value, and the configured `env` remains the only pass-through — a denylisted name with an agent-socket value reaches the child because the config named it. Lead verdict (2026-11-11): kept; shows the configured env is the only pass-through to the stdio child.",
       "sha256": "a3c353e8c31e34be9f6f9e2a313983e2d213e5bdd757035ceee21cf291fa7806"
     },
     {
@@ -1320,7 +1320,7 @@
       "path": "packages/schedule/schedule/src/index.ts",
       "class": "delorun-feature",
       "feature": "scheduled-task-consent",
-      "reason": "Scheduled-task consent seam: task creation captures the creation preset \u2014 the target Session's preset when one is live, otherwise the deployment default that a created Session is pinned to, which is what the first delivery of that Session will run \u2014 when the permission-preset service is composed; an update edit re-captures it from the effective target and settles a recorded refusal, so a re-approved task is reviewed against the preset the approval named; without the service, creation and edits store exactly upstream's task."
+      "reason": "Scheduled-task consent seam: task creation captures the creation preset — the target Session's preset when one is live, otherwise the deployment default that a created Session is pinned to, which is what the first delivery of that Session will run — when the permission-preset service is composed; an update edit re-captures it from the effective target and settles a recorded refusal, so a re-approved task is reviewed against the preset the approval named; without the service, creation and edits store exactly upstream's task."
     },
     {
       "path": "packages/schedule/schedule/src/runtime.ts",
@@ -1338,13 +1338,13 @@
       "path": "packages/schedule/schedule/src/types.ts",
       "class": "delorun-feature",
       "feature": "scheduled-task-consent",
-      "reason": "Scheduled-task consent seam (C16 switch `scheduled_task_consent`): the optional consent types \u2014 the management effect a consent may name, the delivery review and its verdict, the refusal a consent records on a task it paused and its projection into the catalog entry, the `ScheduleConsentService` seam resolved opportunistically with `ctx.get('scheduleConsent')`, the context slot and the typed `schedule/consent-refused` error. Types only: with no consent composed, every consumer keeps upstream's behaviour."
+      "reason": "Scheduled-task consent seam (C16 switch `scheduled_task_consent`): the optional consent types — the management effect a consent may name, the delivery review and its verdict, the refusal a consent records on a task it paused and its projection into the catalog entry, the `ScheduleConsentService` seam resolved opportunistically with `ctx.get('scheduleConsent')`, the context slot and the typed `schedule/consent-refused` error. Types only: with no consent composed, every consumer keeps upstream's behaviour."
     },
     {
       "path": "packages/schedule/tool-schedule/src/index.ts",
       "class": "delorun-feature",
       "feature": "scheduled-task-consent",
-      "reason": "Scheduled-task consent seam: an `ask` approval of `schedule_create` or `schedule_edit` names the effect it would create \u2014 the recurrence, restated or read from the stored task, the target Session and its preset \u2014 through the composed consent, appended to the policy's reason; a created target names the deployment default its opened Session will run, a stored target Session with no live Agent names no preset rather than the caller's, and a delete names nothing because it arms nothing. Allow and deny stay as the policy resolved them, the model-facing task still carries no Host bookkeeping, and with no consent composed the approval text is upstream's. Tool registration also waits for the `agents` facility, which resolves a stored target's live Session."
+      "reason": "Scheduled-task consent seam: an `ask` approval of `schedule_create` or `schedule_edit` names the effect it would create — the recurrence, restated or read from the stored task, the target Session and its preset — through the composed consent, appended to the policy's reason; a created target names the deployment default its opened Session will run, a stored target Session with no live Agent names no preset rather than the caller's, and a delete names nothing because it arms nothing. Allow and deny stay as the policy resolved them, the model-facing task still carries no Host bookkeeping, and with no consent composed the approval text is upstream's. Tool registration also waits for the `agents` facility, which resolves a stored target's live Session."
     },
     {
       "path": "packages/session-query/session-query-sqlite/src/index.ts",
@@ -1668,12 +1668,12 @@
       "path": "vendor/loader/src/index.ts",
       "class": "delorun-feature",
       "feature": "code-refusal-switch",
-      "reason": "Code refusal switch (Delorun's C16-unrelated feature switch): the loader config gains `refuseCode` (default `false`), and with it on the `internal/config` hook walks an entry's raw config for `!!js` expression nodes before interpolating and throws the typed `RefusedCodeError` naming the configuration file (the tree base URL and the entry id \u2014 parsed YAML carries no line numbers) and the expression's path, without evaluating anything. Off, loading is byte-identical to upstream's."
+      "reason": "Code refusal switch (Delorun's C16-unrelated feature switch): the loader config gains `refuseCode` (default `false`), and with it on the `internal/config` hook walks an entry's raw config for `!!js` expression nodes before interpolating and throws the typed `RefusedCodeError` naming the configuration file (the tree base URL and the entry id — parsed YAML carries no line numbers) and the expression's path, without evaluating anything. Off, loading is byte-identical to upstream's."
     },
     {
       "path": "packages/client/connection/src/api-request-trust.ts",
       "class": "security",
-      "reason": "S2 review of the /api trust fence: a Host header must be a bare authority \u2014 no user information, no whitespace or control character, no trailing dot (a repeated Host line is answered 400 by the web server before the fence runs) \u2014 and a state-changing request on the /api channel must carry the browser's own origin account (an Origin header, or Fetch-Metadata same-origin/none), while a route may accept a cross-site document navigation whose response the initiator's page cannot read. A state-changing /api request that carries neither Origin nor Sec-Fetch-Site is accepted toward a loopback Host or an HTTPS listener, where a Fetch-Metadata browser always sends a marker, and refused toward any other plain-HTTP destination; a marker that is present and not same-origin or none is refused. Lead verdict (2026-11-11): kept; the /api target is read with the same URL parse the router uses, so no dot-segment, percent-encoded or backslash spelling reaches /api without the origin rule, and a cross-site request is refused on every route. Lead verdict (2026-11-11): kept; the count of raw Host lines leaves the fence because every web server listener, the configured one and each additional one, answers a request or upgrade with more than one Host line 400 before any gate, route or upgrade handler runs; a Fetch `Headers` that merged repeated Host values still fails the bare-authority check on the comma in the joined value, and the other Host and origin checks are unchanged.",
+      "reason": "S2 review of the /api trust fence: a Host header must be a bare authority — no user information, no whitespace or control character, no trailing dot (a repeated Host line is answered 400 by the web server before the fence runs) — and a state-changing request on the /api channel must carry the browser's own origin account (an Origin header, or Fetch-Metadata same-origin/none), while a route may accept a cross-site document navigation whose response the initiator's page cannot read. A state-changing /api request that carries neither Origin nor Sec-Fetch-Site is accepted toward a loopback Host or an HTTPS listener, where a Fetch-Metadata browser always sends a marker, and refused toward any other plain-HTTP destination; a marker that is present and not same-origin or none is refused. Lead verdict (2026-11-11): kept; the /api target is read with the same URL parse the router uses, so no dot-segment, percent-encoded or backslash spelling reaches /api without the origin rule, and a cross-site request is refused on every route. Lead verdict (2026-11-11): kept; the count of raw Host lines leaves the fence because every web server listener, the configured one and each additional one, answers a request or upgrade with more than one Host line 400 before any gate, route or upgrade handler runs; a Fetch `Headers` that merged repeated Host values still fails the bare-authority check on the comma in the joined value, and the other Host and origin checks are unchanged.",
       "sha256": "43e3e543ef27bdb99ca752c863700f75020fb8620acf633518d12ffe519b370a"
     },
     {
@@ -1727,7 +1727,7 @@
     {
       "path": "packages/client/modules/src/index.ts",
       "class": "security",
-      "reason": "The /plugins bundle route serves the plugin inventory, so an HTTP request \u2014 which arrives with no admitted Peer \u2014 asks the composition's `connection` fence before any bundle bytes are read, while an in-process read keeps its caller's Peer. Lead verdict (2026-11-11): kept; an HTTP request to /plugins with no Peer passes the connection fence before any bundle is read, and the route does not register without connection.",
+      "reason": "The /plugins bundle route serves the plugin inventory, so an HTTP request — which arrives with no admitted Peer — asks the composition's `connection` fence before any bundle bytes are read, while an in-process read keeps its caller's Peer. Lead verdict (2026-11-11): kept; an HTTP request to /plugins with no Peer passes the connection fence before any bundle is read, and the route does not register without connection.",
       "sha256": "246cc74cbe22db5ec8d1e60a50555034bb60c85945217da9d4b1f05e1b1dfc45"
     },
     {
@@ -1745,7 +1745,7 @@
     {
       "path": "packages/host/frontend-static/src/index.ts",
       "class": "security",
-      "reason": "Every dist file but the install-time ones \u2014 the Web app manifest, the favicons, the icons it names and the touch icons \u2014 now passes Connection's fence and browser authentication before its bytes are read, as the index already did, so a rebound page and an unauthenticated caller cannot read the application's bytes. `/recovery` also renders the index, behind the same fence, while an index injection row names a distribution's recovery routes (the `dshRecoveryRoutes` global `@delorun/plugin-changes` adds), so the boot page can show C21's recovery screen there; without such a row it is an ordinary missing path. It moves no refusal. Lead verdict (2026-11-11): kept; before sign-in only the named install files directly under the dist root and the root-level icons the manifest lists are served, and any other spelling, case or subdirectory falls to the sign-in check. Lead verdict on the `/recovery` route: pending; no lead review of this change is recorded yet.",
+      "reason": "Every dist file but the install-time ones — the Web app manifest, the favicons, the icons it names and the touch icons — now passes Connection's fence and browser authentication before its bytes are read, as the index already did, so a rebound page and an unauthenticated caller cannot read the application's bytes. `/recovery` also renders the index, behind the same fence, while an index injection row names a distribution's recovery routes (the `dshRecoveryRoutes` global `@delorun/plugin-changes` adds), so the boot page can show C21's recovery screen there; without such a row it is an ordinary missing path. It moves no refusal. Lead verdict (2026-11-11): kept; before sign-in only the named install files directly under the dist root and the root-level icons the manifest lists are served, and any other spelling, case or subdirectory falls to the sign-in check. Lead verdict on the `/recovery` route: pending; no lead review of this change is recorded yet.",
       "sha256": "66689443fe2bca52c001d45b0782b90891572161e877b2950549cf0d69a707df"
     },
     {
@@ -1788,7 +1788,7 @@
       "path": "packages/skill/skill-filesystem/src/index.ts",
       "class": "delorun-feature",
       "feature": "instruction-consent",
-      "reason": "Instruction-layer consent: the filesystem skill provider names its project skill directories and home store as exported constants and implements `configuredRoots()`, which reports the roots its configuration names without a workspace \u2014 the custom directories, the two default home stores and the bundled root. Discovery reads the same constants, so a configured root and a reviewed root cannot drift."
+      "reason": "Instruction-layer consent: the filesystem skill provider names its project skill directories and home store as exported constants and implements `configuredRoots()`, which reports the roots its configuration names without a workspace — the custom directories, the two default home stores and the bundled root. Discovery reads the same constants, so a configured root and a reviewed root cannot drift."
     },
     {
       "path": "packages/deliverables/tool-present/src/index.ts",
@@ -1907,7 +1907,7 @@
     {
       "path": "packages/sandbox/sandbox-local/src/seccomp.ts",
       "class": "security",
-      "reason": "C1's vsock filter (`vsock`): a hand-written classic BPF program, the `struct sock_filter` bytes of a fixed instruction list assembled with forward jumps only, that refuses `socket(AF_VSOCK, \u2026)` with EAFNOSUPPORT (reading only the family's low 32 bits, as the kernel does), `io_uring_setup` with ENOSYS, and on i386 and 32-bit Arm the `SYS_SOCKET` form of `socketcall`, on x86-64 (x32 numbers included), i386, AArch64 and Arm; it allows every other call of those and refuses every call of any other architecture with ENOSYS. `withSeccompFilter` starts bwrap from `/bin/sh`, which writes the program into a pipe on descriptor 9 with its `printf` builtin and passes `--seccomp 9`, keeping the command's standard input on 0 through descriptor 8, its exit status and its descriptors 3 to 7; a missing `printf` or a closed standard input exits 1 with a `bwrap:` line, the runner-failure signature. `vsockOffered` reads `/proc/net/protocols` for `AF_VSOCK` and counts an unreadable list as offered. Nothing is written to disk, and the parity composition is unchanged where the kernel offers no vsock. Lead verdict: approved, after an independent review and its fixes (2026-11-10).",
+      "reason": "C1's vsock filter (`vsock`): a hand-written classic BPF program, the `struct sock_filter` bytes of a fixed instruction list assembled with forward jumps only, that refuses `socket(AF_VSOCK, …)` with EAFNOSUPPORT (reading only the family's low 32 bits, as the kernel does), `io_uring_setup` with ENOSYS, and on i386 and 32-bit Arm the `SYS_SOCKET` form of `socketcall`, on x86-64 (x32 numbers included), i386, AArch64 and Arm; it allows every other call of those and refuses every call of any other architecture with ENOSYS. `withSeccompFilter` starts bwrap from `/bin/sh`, which writes the program into a pipe on descriptor 9 with its `printf` builtin and passes `--seccomp 9`, keeping the command's standard input on 0 through descriptor 8, its exit status and its descriptors 3 to 7; a missing `printf` or a closed standard input exits 1 with a `bwrap:` line, the runner-failure signature. `vsockOffered` reads `/proc/net/protocols` for `AF_VSOCK` and counts an unreadable list as offered. Nothing is written to disk, and the parity composition is unchanged where the kernel offers no vsock. Lead verdict: approved, after an independent review and its fixes (2026-11-10).",
       "sha256": "469f19e8b89fa3665a4a8226bf0bd7aa52c972b7a232dbed6b6b9b17e4faa9d2"
     },
     {
@@ -2436,121 +2436,121 @@
       "path": "packages/context/agent-instructions/locale/en.json",
       "class": "delorun-feature",
       "feature": "plugin-titles",
-      "reason": "The English plugin title reads as a sentence-case name in Settings \u2192 Plugins instead of the package id; the other languages are upstream's. Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+      "reason": "The English plugin title reads as a sentence-case name in Settings → Plugins instead of the package id; the other languages are upstream's. Plain English description in Settings → Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
     },
     {
       "path": "packages/deliverables/tool-present/locale/en.json",
       "class": "delorun-feature",
       "feature": "plugin-titles",
-      "reason": "The English plugin title reads as a sentence-case name in Settings \u2192 Plugins instead of the package id; the other languages are upstream's. Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+      "reason": "The English plugin title reads as a sentence-case name in Settings → Plugins instead of the package id; the other languages are upstream's. Plain English description in Settings → Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
     },
     {
       "path": "packages/extensions/tool-cordis/locale/en.json",
       "class": "delorun-feature",
       "feature": "plugin-titles",
-      "reason": "The English plugin title reads as a sentence-case name in Settings \u2192 Plugins instead of the package id; the other languages are upstream's. Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+      "reason": "The English plugin title reads as a sentence-case name in Settings → Plugins instead of the package id; the other languages are upstream's. Plain English description in Settings → Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
     },
     {
       "path": "packages/fs/tool-fs-search/locale/en.json",
       "class": "delorun-feature",
       "feature": "plugin-titles",
-      "reason": "The English plugin title reads as a sentence-case name in Settings \u2192 Plugins instead of the package id; the other languages are upstream's. Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+      "reason": "The English plugin title reads as a sentence-case name in Settings → Plugins instead of the package id; the other languages are upstream's. Plain English description in Settings → Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
     },
     {
       "path": "packages/fs/tool-fs/locale/en.json",
       "class": "delorun-feature",
       "feature": "plugin-titles",
-      "reason": "The English plugin title reads as a sentence-case name in Settings \u2192 Plugins instead of the package id; the other languages are upstream's. Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+      "reason": "The English plugin title reads as a sentence-case name in Settings → Plugins instead of the package id; the other languages are upstream's. Plain English description in Settings → Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
     },
     {
       "path": "packages/goal/tool-goal/locale/en.json",
       "class": "delorun-feature",
       "feature": "plugin-titles",
-      "reason": "The English plugin title reads as a sentence-case name in Settings \u2192 Plugins instead of the package id; the other languages are upstream's. Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+      "reason": "The English plugin title reads as a sentence-case name in Settings → Plugins instead of the package id; the other languages are upstream's. Plain English description in Settings → Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
     },
     {
       "path": "packages/interaction/tool-ask-user/locale/en.json",
       "class": "delorun-feature",
       "feature": "plugin-titles",
-      "reason": "The English plugin title reads as a sentence-case name in Settings \u2192 Plugins instead of the package id; the other languages are upstream's. Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+      "reason": "The English plugin title reads as a sentence-case name in Settings → Plugins instead of the package id; the other languages are upstream's. Plain English description in Settings → Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
     },
     {
       "path": "packages/jobs/tool-jobs/locale/en.json",
       "class": "delorun-feature",
       "feature": "plugin-titles",
-      "reason": "The English plugin title reads as a sentence-case name in Settings \u2192 Plugins instead of the package id; the other languages are upstream's. Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+      "reason": "The English plugin title reads as a sentence-case name in Settings → Plugins instead of the package id; the other languages are upstream's. Plain English description in Settings → Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
     },
     {
       "path": "packages/preset/persona/locale/en.json",
       "class": "delorun-feature",
       "feature": "plugin-titles",
-      "reason": "The English plugin title reads as a sentence-case name in Settings \u2192 Plugins instead of the package id; the other languages are upstream's. Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+      "reason": "The English plugin title reads as a sentence-case name in Settings → Plugins instead of the package id; the other languages are upstream's. Plain English description in Settings → Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
     },
     {
       "path": "packages/shell/tool-bash-persistent/locale/en.json",
       "class": "delorun-feature",
       "feature": "plugin-titles",
-      "reason": "The English plugin title reads as a sentence-case name in Settings \u2192 Plugins instead of the package id; the other languages are upstream's. Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+      "reason": "The English plugin title reads as a sentence-case name in Settings → Plugins instead of the package id; the other languages are upstream's. Plain English description in Settings → Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
     },
     {
       "path": "packages/shell/tool-bash/locale/en.json",
       "class": "delorun-feature",
       "feature": "plugin-titles",
-      "reason": "The English plugin title reads as a sentence-case name in Settings \u2192 Plugins instead of the package id; the other languages are upstream's. Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+      "reason": "The English plugin title reads as a sentence-case name in Settings → Plugins instead of the package id; the other languages are upstream's. Plain English description in Settings → Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
     },
     {
       "path": "packages/shell/tool-pwsh-persistent/locale/en.json",
       "class": "delorun-feature",
       "feature": "plugin-titles",
-      "reason": "The English plugin title reads as a sentence-case name in Settings \u2192 Plugins instead of the package id; the other languages are upstream's. Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+      "reason": "The English plugin title reads as a sentence-case name in Settings → Plugins instead of the package id; the other languages are upstream's. Plain English description in Settings → Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
     },
     {
       "path": "packages/shell/tool-pwsh/locale/en.json",
       "class": "delorun-feature",
       "feature": "plugin-titles",
-      "reason": "The English plugin title reads as a sentence-case name in Settings \u2192 Plugins instead of the package id; the other languages are upstream's. Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+      "reason": "The English plugin title reads as a sentence-case name in Settings → Plugins instead of the package id; the other languages are upstream's. Plain English description in Settings → Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
     },
     {
       "path": "packages/skill/skill-filesystem/locale/en.json",
       "class": "delorun-feature",
       "feature": "plugin-titles",
-      "reason": "The English plugin title reads as a sentence-case name in Settings \u2192 Plugins instead of the package id; the other languages are upstream's. Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+      "reason": "The English plugin title reads as a sentence-case name in Settings → Plugins instead of the package id; the other languages are upstream's. Plain English description in Settings → Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
     },
     {
       "path": "packages/skill/tool-skill/locale/en.json",
       "class": "delorun-feature",
       "feature": "plugin-titles",
-      "reason": "The English plugin title reads as a sentence-case name in Settings \u2192 Plugins instead of the package id; the other languages are upstream's. Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+      "reason": "The English plugin title reads as a sentence-case name in Settings → Plugins instead of the package id; the other languages are upstream's. Plain English description in Settings → Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
     },
     {
       "path": "packages/subagent/tool-subagent-control/locale/en.json",
       "class": "delorun-feature",
       "feature": "plugin-titles",
-      "reason": "The English plugin title reads as a sentence-case name in Settings \u2192 Plugins instead of the package id; the other languages are upstream's. Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+      "reason": "The English plugin title reads as a sentence-case name in Settings → Plugins instead of the package id; the other languages are upstream's. Plain English description in Settings → Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
     },
     {
       "path": "packages/subagent/tool-subagent/locale/en.json",
       "class": "delorun-feature",
       "feature": "plugin-titles",
-      "reason": "The English plugin title reads as a sentence-case name in Settings \u2192 Plugins instead of the package id; the other languages are upstream's. Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+      "reason": "The English plugin title reads as a sentence-case name in Settings → Plugins instead of the package id; the other languages are upstream's. Plain English description in Settings → Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
     },
     {
       "path": "packages/todo/tool-todo/locale/en.json",
       "class": "delorun-feature",
       "feature": "plugin-titles",
-      "reason": "The English plugin title reads as a sentence-case name in Settings \u2192 Plugins instead of the package id; the other languages are upstream's. Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+      "reason": "The English plugin title reads as a sentence-case name in Settings → Plugins instead of the package id; the other languages are upstream's. Plain English description in Settings → Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
     },
     {
       "path": "packages/web/tool-web/locale/en.json",
       "class": "delorun-feature",
       "feature": "plugin-titles",
-      "reason": "The English plugin title reads as a sentence-case name in Settings \u2192 Plugins instead of the package id; the other languages are upstream's. Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+      "reason": "The English plugin title reads as a sentence-case name in Settings → Plugins instead of the package id; the other languages are upstream's. Plain English description in Settings → Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
     },
     {
       "path": "packages/workflow/tool-workflow/locale/en.json",
       "class": "delorun-feature",
       "feature": "plugin-titles",
-      "reason": "The English plugin title reads as a sentence-case name in Settings \u2192 Plugins instead of the package id; the other languages are upstream's. Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+      "reason": "The English plugin title reads as a sentence-case name in Settings → Plugins instead of the package id; the other languages are upstream's. Plain English description in Settings → Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
     },
     {
       "path": "packages/client/ui-primitives/src/usePhone.ts",
@@ -2598,25 +2598,25 @@
       "path": "packages/client/ui-agent-preset/src/client/AgentPresetSection.tsx",
       "class": "delorun-feature",
       "feature": "settings-plain-copy",
-      "reason": "Settings \u2192 Modes shows the preset id on custom modes only; the ids of the built-in modes (standard, ptc, cordis) mean nothing to a person."
+      "reason": "Settings → Modes shows the preset id on custom modes only; the ids of the built-in modes (standard, ptc, cordis) mean nothing to a person."
     },
     {
       "path": "packages/experimental/deepseek-chat-import/locale/en.json",
       "class": "delorun-feature",
       "feature": "plugin-titles",
-      "reason": "Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+      "reason": "Plain English description in Settings → Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
     },
     {
       "path": "packages/experimental/session-search/locale/en.json",
       "class": "delorun-feature",
       "feature": "plugin-titles",
-      "reason": "Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+      "reason": "Plain English description in Settings → Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
     },
     {
       "path": "packages/experimental/session-titles-bundle/locale/en.json",
       "class": "delorun-feature",
       "feature": "plugin-titles",
-      "reason": "Plain English description in Settings \u2192 Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
+      "reason": "Plain English description in Settings → Plugins: what the plugin does for the person, with \"chat\" where upstream says session; the other languages are upstream's."
     },
     {
       "path": "packages/client/ui-settings-models/src/client/ModelsSection.tsx",
@@ -3072,7 +3072,7 @@
       "path": "packages/client/ui-subagent/src/client/SubagentHeaderLineage.tsx",
       "class": "delorun-feature",
       "feature": "live-agents",
-      "reason": "Renders the optional row and trigger positions of the agents menu (EA13): a leading mark, second-line words and a trailing indicator on each catalog row, and an addition after the trigger's count. With no plugin registered they render nothing, so rows are unchanged. `@delorun/plugin-agent-seats` fills them (monogram, state words, 5-hour ring, Answer button, \"\u00b7 N outside\"). It also renders the end slot after the root trigger, inside the same control and hidden with it, which `@delorun/plugin-multiview` fills with its icon toggle (A619)."
+      "reason": "Renders the optional row and trigger positions of the agents menu (EA13): a leading mark, second-line words and a trailing indicator on each catalog row, and an addition after the trigger's count. With no plugin registered they render nothing, so rows are unchanged. `@delorun/plugin-agent-seats` fills them (monogram, state words, 5-hour ring, Answer button, \"· N outside\"). It also renders the end slot after the root trigger, inside the same control and hidden with it, which `@delorun/plugin-multiview` fills with its icon toggle (A619)."
     },
     {
       "path": "packages/client/ui-subagent/src/client/index.ts",
@@ -3631,6 +3631,12 @@
       "class": "delorun-feature",
       "feature": "reach-route-admission",
       "reason": "Reach route admission: the export route asks the reach policy for the command call it serves, so a device that never held the unlock for `export` is refused the archive. The route previously reached every non-owner peer only through the Gateway, which decides by path rather than by action, so a capability the policy allowed was refused. No upstream action, parameter or export is removed or renamed. Lead verdict: kept; the change is the admission check the route was missing, and the policy remains the single place an action is decided."
+    },
+    {
+      "path": "packages/client/ui-slots/src/index.ts",
+      "class": "delorun-feature",
+      "feature": "delorun-sidebar-section-seat",
+      "reason": "A slot declaration may reserve its cell (SlotEntryDef.reserved, SlotSpec.reserved): a registration below the floor is refused with the reason, which names the additive seat to take instead. The sidebar reserves sidebar.workspaces so a plugin cannot replace the Workspace and Session list and the lists registered into its child seats. Offer upstream as a general slot capability."
     }
   ],
   "retired": []

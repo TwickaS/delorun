@@ -55,7 +55,7 @@ function makeHeaderProps(): HeaderLeadingControlsProps {
 }
 
 function mountShell({
-  collapsed = false, width = 300, drawer = false, shortcuts = [], panels = [], content, backdrop = null, badge = null,
+  collapsed = false, width = 300, drawer = false, shortcuts = [], panels = [], content, backdrop = null, badge = null, sections = null,
 }: {
   collapsed?: boolean
   width?: number
@@ -65,12 +65,14 @@ function mountShell({
   content?: ReactNode
   backdrop?: ReactNode
   badge?: ReactNode
+  sections?: ReactNode
 } = {}) {
   const startSession = vi.fn()
   const toggleSidebar = vi.fn()
   const trackEntryClick = vi.fn<SidebarRootComponentProps['trackEntryClick']>()
   let regionOwner: SidebarSectionOwnerProps | undefined
   let regionContext: SidebarSectionHookContext | undefined
+  let sectionsOwner: SidebarSectionOwnerProps | undefined
   let settingsOwner: SidebarSettingsOwnerProps | undefined
   let footerActionOwner: SidebarFooterActionOwnerProps | undefined
   let sessionActionOwner: SidebarSessionActionOwnerProps | undefined
@@ -101,6 +103,10 @@ function mountShell({
         if (key === 'sidebar.backdrop') return backdrop
         if (key === 'sidebar.brand.badge') return badge
         if (key === 'sidebar.panellist') return <span aria-hidden="true">P</span>
+        if (key === 'sidebar.sections') {
+          sectionsOwner = owner as SidebarSectionOwnerProps
+          return sections
+        }
         if (key === 'sidebar.settings') {
           settingsOwner = owner
           return <div data-testid="settings-seat" data-wide={owner.wide} />
@@ -133,6 +139,10 @@ function mountShell({
       if (regionContext === undefined) throw new Error('region hookContext not rendered')
       return regionContext
     },
+    sectionsOwner: () => {
+      if (sectionsOwner === undefined) throw new Error('sections owner not rendered')
+      return sectionsOwner
+    },
     settingsOwner: () => {
       if (settingsOwner === undefined) throw new Error('settings owner not rendered')
       return settingsOwner
@@ -154,6 +164,27 @@ function mountShell({
 }
 
 describe('SidebarRoot shell', () => {
+  it('renders a plugin section beside the browsing region, above it and outside it', () => {
+    mountShell({ sections: <div data-testid="plugin-section">LayerFS projects</div>, content: <div data-testid="browser" /> })
+    const section = screen.getByTestId('plugin-section')
+    const region = screen.getByTestId('region')
+    // The section is a sibling of the browsing region, not a child of it: occupying the region replaces the browser
+    // and every list registered into its child seats, which is the collision this seat exists to avoid.
+    expect(region.contains(section)).toBe(false)
+    expect(section.parentElement?.nextElementSibling?.contains(region)).toBe(true)
+    expect(screen.getByTestId('browser')).toBeTruthy()
+  })
+
+  it('hands the section seat the same column state as the browsing region', () => {
+    const shell = mountShell({ sections: <div data-testid="plugin-section" /> })
+    expect(shell.sectionsOwner().wide).toBe(shell.regionOwner().wide)
+    expect(shell.sectionsOwner().wide).toBe(true)
+    cleanup()
+    const rail = mountShell({ collapsed: true, width: 56, sections: <div data-testid="plugin-section" /> })
+    expect(rail.sectionsOwner().wide).toBe(false)
+    expect(rail.regionOwner().wide).toBe(false)
+  })
+
   it('draws an occupied backdrop behind the wide sidebar\'s top, and none in the rail', () => {
     const art = <div data-testid="backdrop-art" />
     mountShell({ backdrop: art })

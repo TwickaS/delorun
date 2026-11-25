@@ -90,6 +90,7 @@ function mountRail(options: MountOptions = {}) {
         if (key === 'sidebar.settings') return <div data-testid="settings-seat" data-wide={owner.wide} />
         if (key === 'sidebar.footer.action') return null
         if (key === 'sidebar.session.action') return options?.children ?? null
+        if (key === 'sidebar.sections') return null
         regionOwner = owner
         return <div data-testid="region" data-wide={owner.wide}><PeekControl /></div>
       }) as SidebarRootComponentProps['renderSlot']}

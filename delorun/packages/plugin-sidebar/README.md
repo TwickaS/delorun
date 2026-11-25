@@ -79,7 +79,7 @@ The row `delorun-sidebar` has twelve volatile fields ([`src/config.ts`](src/conf
 - The list shows no git branch for a workspace and the foot has no cell status, Usage or update button, because no browser service provides them in this studio; the update notice names the command and applies nothing.
 - Dragging works with a mouse or a pen. Touch and keyboard use the row's buttons and menu for the same operations.
 - T3 Code's archive and delete confirmations are not repeated: upstream's archive notice offers Undo, and deleting a workspace always asks.
-- The folded rail keeps upstream's list.
+- The folded rail keeps upstream's list. The list is a child seat of upstream's browsing region, so a plugin that occupies that region at a lower priority replaces the list with it; upstream's sidebar reserves the region against that, refusing a registration below priority 0 and naming `sidebar.sections`, the additive seat beside the list.
 
 ## Tests
 

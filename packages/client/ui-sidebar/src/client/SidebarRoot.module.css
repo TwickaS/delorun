@@ -172,6 +172,7 @@
 }
 
 :global([data-windows-titlebar]) .collapsed .panelList,
+:global([data-windows-titlebar]) .collapsed .sectionsArea,
 :global([data-windows-titlebar]) .collapsed .regionArea,
 :global([data-windows-titlebar]) .collapsed .footArea {
   display: none;
@@ -251,6 +252,7 @@
 .railIn .iconButton,
 .railIn .newSessionRow > :global([data-slot='sidebar.session.action']) > *,
 .railIn .panelList,
+.railIn .sectionsArea,
 .railIn .regionArea {
   animation: rail-in 150ms var(--ds-ease-in-out) backwards;
 }
@@ -670,7 +672,7 @@
   min-height: 0;
   display: grid;
   grid-template-columns: 4px minmax(0, 1fr) calc(var(--dsh-sidebar-inline-padding) - 2px);
-  grid-template-rows: 8px max-content 2px max-content;
+  grid-template-rows: 8px max-content 2px max-content max-content;
   align-content: start;
   margin-left: -4px;
   margin-right: calc(2px - var(--dsh-sidebar-inline-padding));
@@ -880,10 +882,23 @@
   color: var(--dsw-alias-label-primary);
 }
 
+/* Sections a plugin adds beside the browsing region. They scroll with the
+   navigation, so the browser's own scroller and the wheel hand-off are
+   unchanged. An unoccupied seat takes no room: the outlet's anchor is
+   `display: contents`, so with no entries it contributes no flex item and this
+   column measures zero tall. */
+.sectionsArea {
+  grid-column: 2;
+  grid-row: 4;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 /* The workspace seat stays mounted while its wide and rail bodies change. */
 .regionArea {
   grid-column: 2;
-  grid-row: 4;
+  grid-row: 5;
   min-height: 0;
   min-width: 0;
   display: flex;
@@ -950,6 +965,7 @@
   .railIn .newSessionRow > :global([data-slot='sidebar.session.action']) > *,
   .railIn .panelList,
   .railIn .footArea,
+  .railIn .sectionsArea,
   .railIn .regionArea,
   .root.peeking,
   .root.peekClosing {

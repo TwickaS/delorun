@@ -54,6 +54,27 @@ async function bench(declare = true) {
 }
 
 describe('ui-sidebar apply', () => {
+  it('refuses a plugin that shadows the browsing region, and keeps the list registered into it', async () => {
+    const b = await bench()
+    await b.ctx.plugin({ inject: [...inject], apply }).await()
+    // The browser occupies the region at the default priority and declares the list seat its occupant fills, which is
+    // how Delorun's chat list sits in the sidebar.
+    b.slots.register({
+      name: 'sidebar.workspaces',
+      children: { 'sidebar.workspaces.list': { kind: 'single', scope: 'root' } },
+      inject: () => ({}),
+    }, ({ renderSlot }: PropsRenderSlots<'sidebar.workspaces.list'>) => renderSlot('sidebar.workspaces.list', {} as never))
+    const list = b.slots.register({ name: 'sidebar.workspaces.list' }, () => null)
+    // A plugin that would replace the whole region — the LayerFS shape, at priority -10 — is refused outright, so the
+    // list cannot be made to disappear by shadowing the seat it lives in.
+    expect(() => b.slots.register({ name: 'sidebar.workspaces', priority: -10 }, () => null))
+      .toThrow(/slot "sidebar.workspaces" is reserved: priority -10 is below its floor of 0 .*"sidebar.sections"/)
+    expect(b.slots.entriesOfSlot('sidebar.workspaces')).toHaveLength(1)
+    expect(b.slots.entries('sidebar.workspaces.list')).toHaveLength(1)
+    list()
+    expect(b.slots.entries('sidebar.workspaces.list')).toHaveLength(0)
+  })
+
   it('keeps the host Loader entry inert', () => {
     expect(hostApply).not.toThrow()
   })
@@ -73,6 +94,7 @@ describe('ui-sidebar apply', () => {
     // The section occupant's scroller hook is the one each sidebar render supplies.
     const useSectionScroller: UseSectionScroller = () => ({ bindScrollerRef: () => {} })
     expect(section.inject.hooks.sectionScroller({} as never, { useSectionScroller })).toBe(useSectionScroller)
+    expect(b.slots.spec('sidebar.sections')).toEqual({ kind: 'list', scope: 'root' })
     expect(b.slots.spec('sidebar.settings')).toEqual({ kind: 'single', scope: 'root' })
     expect(b.slots.spec('sidebar.footer.action')).toEqual({ kind: 'list', scope: 'root' })
     expect(b.slots.spec('sidebar.session.action')).toEqual({ kind: 'hoc', scope: 'root' })
