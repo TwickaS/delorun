@@ -29,8 +29,8 @@ Multiview 把固定的智能体（队友、子智能体、Claude Code 和 Codex�
 - **弹出面板的页脚。**页脚显示“3 pinned · room for 3 more”，并提供“Pin running”（在上限允许的范围内，固定每个未固定的运行中智能体）和“Open Multiview”。没有智能体在运行，或每个运行中的智能体都已固定时，“Pin running”被禁用并说明原因。
 - **Multiview 按钮。**对话头部在智能体列表之后显示一个 Multiview 按钮，带有已固定智能体的数量，当某个已固定的智能体正在等待本人批准时还带有一个琥珀色圆点。按一次会在主对话旁边打开每个已固定的智能体，再按一次则关闭。没有任何固定时，第一次按下会先固定每个运行中的智能体；没有固定也没有运行时，按钮被禁用并说明这一点。智能体自己的对话不显示该按钮。
 - **布局菜单。**Multiview 显示期间，按钮旁的箭头会打开布局菜单：Main and column、Side by side、Grid、Main on top 和 Reset to default。预设会重新排列窗格，从不关闭任何一个。
-- **交接。**当打开的对话把工作交给队友、子智能体、Claude Code 或 Codex 时，只要还有空闲窗格，新智能体就会自行固定并打开 Multiview，每次都是如此，包括本人关闭它之后。对话打开时已经存在的智能体不会被固定。
-- **返回。**Multiview 的打开或关闭是按对话记录的，并且会被保留：打开过 Multiview 的对话，在本人回到它时会再次显示它，页面重新加载后也是如此，对其中一个智能体使用“Open full chat”之后也是如此。用按钮关闭 Multiview 会使它保持关闭。
+- **交接。**当打开的对话把工作交给队友、子智能体、Claude Code 或 Codex 时，只要还有空闲窗格，新智能体就会自行固定并打开 Multiview。对话打开时已经存在的智能体不会被固定。本人做出的关闭优先于此：只要本人在某个对话中关闭了 Multiview 且此后没有再次打开它，交接仍会固定它的智能体，但会让 Multiview 保持关闭。以任何方式再次打开它（切换按钮、页脚的“Open Multiview”、聚焦命令）都会清除这一状态，于是下一次交接会像以前一样打开它。`autoOpen` 设置仍然决定交接是否打开 Multiview；把它打开并不会覆盖本人的手动关闭。
+- **返回。**Multiview 的打开或关闭是按对话记录的，并且会被保留：打开过 Multiview 的对话，在本人回到它时会再次显示它，页面重新加载后也是如此，对其中一个智能体使用“Open full chat”之后也是如此。用按钮关闭 Multiview 会使它保持关闭，并且会阻止交接再次打开它。
 
 ## 窗格
 
@@ -76,7 +76,7 @@ Host 行 `delorun-multiview` 有七个易变字段（[`src/config.ts`](src/confi
 
 | 字段 | 默认值 | 含义 |
 | --- | --- | --- |
-| `autoOpen` | `true` | 新的交接是否打开 Multiview。为 `false` 时，智能体仍会自行固定，头部按钮显示数量和琥珀色圆点，但不会自动打开任何东西。 |
+| `autoOpen` | `true` | 新的交接是否打开 Multiview。为 `false` 时，智能体仍会自行固定，头部按钮显示数量和琥珀色圆点，但不会自动打开任何东西。把它打开并不会覆盖本人的手动关闭。 |
 | `maxPanes` | `6` | 最多的窗格数，包含主对话（2 到 12）。 |
 | `minPaneWidth` | `340` | 窗格的最小宽度，单位为 CSS 像素（240 到 1200）；较窄的窗口容纳的窗格更少。 |
 | `minPaneHeight` | `240` | 窗格的最小高度，单位为 CSS 像素（160 到 1200）。 |
@@ -98,26 +98,27 @@ Host 行 `delorun-multiview` 有七个易变字段（[`src/config.ts`](src/confi
 ## 契约
 
 - **Host 一半**（[`src/index.ts`](src/index.ts)）声明 `Config`，不挂载任何东西。设置服务把该行提供给浏览器。
-- **浏览器一半**（[`src/client/index.ts`](src/client/index.ts)）需要 `slots`、`locale`、`sessions`、`configForms` 和 `uiWorkspace`。它注册 `conversation.main.body` 中的层 `multiview`、Slot `multiview.pane.header` 和 `multiview.pane.body`、`conversation.input.dock` 中的圆点、词典 `delorunMultiview` 和 `delorunMultiviewPanes`、`conversation.session.header.actions.subagent.row.trail` 中的固定按钮、`conversation.session.header.actions.subagent.footer` 中的页脚、`conversation.session.header.actions` 中的 Multiview 按钮（顺序 11，位于顺序 10 的智能体列表之后），并提供 `ctx.multiview`。
-- **没有层时不起作用。**只有在 `conversation.main.body` 中注册了该层时才挂载这些入口。没有它，固定按钮、页脚、头部按钮和交接观察器都不存在，因为“Open Multiview”什么也不会显示；`ctx.multiview` 仍然提供。层注册时入口出现，层移除时入口消失。
-- **`ctx.multiview`**（`MultiviewService`）把每个对话的 `{ pins, layout, open }` 作为可观察对象（`of(chat)`）保存，并提供操作 `pin`、`unpin`、`pinAll`、`open`、`close`、`setLayout`、`applyPreset`、`resetLayout` 和 `reportArea`。固定项是哪些智能体拥有窗格的事实来源；布局只负责放置它们，并在每次变化时与固定项对齐。该层读取这个服务，并调用 `setLayout`、`unpin`、`close` 和 `reportArea`。
-- **打开**会在对话的状态中设置打开标志；不会选中或导航到任何东西，该层会立即显示窗格。Slot `conversation.main.body` 由 `@deepseek-ai/dsh-client-ui-conversation` 声明，Delorun 台账列出了它（Multiview U3）。
+- **浏览器一半**（[`src/client/index.ts`](src/client/index.ts)）需要 `slots`、`locale`、`sessions`、`configForms`、`uiWorkspace`、`workspaces` 和 `shortcuts`。它注册 `conversation.main.body` 中的层 `multiview`、Slot `multiview.pane.header` 和 `multiview.pane.body`、`conversation.input.dock` 中的圆点、词典 `delorunMultiview`、`delorunMultiviewPanes` 和 `delorunMultiviewLayouts`、Multiview 设置分区、`conversation.session.header.actions.subagent.row.trail` 中的固定按钮、`conversation.session.header.actions.subagent.footer` 中的页脚、`conversation.session.header.actions.subagent.end` 中的切换按钮，并提供 `ctx.multiview`。它注册命令 `multiview.toggle` 和各个布局按键，它们在每个 profile 上都未绑定，因为键盘设置的 Web 与 Desktop profile 之间不存在空闲且符合惯例的组合。
+- **没有层时不起作用。**只有在 `conversation.main.body` 中注册了该层时才挂载这些入口。没有它，固定按钮、页脚、切换按钮、聚焦命令和交接观察器都不存在，因为“Open Multiview”什么也不会显示；`ctx.multiview` 仍然提供。层注册时入口出现，层移除时入口消失。
+- **`ctx.multiview`**（`MultiviewService`）把每个对话的 `{ pins, layout, open, closedByPerson }` 作为可观察对象（`of(chat)`）保存，并提供操作 `pin`、`unpin`、`pinAll`、`open`、`close`、`closeByPerson`、`setLayout`、`applyPreset`、`resetLayout` 和 `reportArea`，以及布局操作 `defaultsOf`、`arrangementOf`、`layoutFor`、`chooseLayout`、`adoptArrangement`、`undoDefault`、`resetToAuto`、`setMainShare`、`setStackOptions`、`cycleLayout`、`swapWithMain` 和 `resizeMain`。固定项是哪些智能体拥有窗格的事实来源；布局只负责放置它们，并在每次变化时与固定项对齐。该层读取这个服务，并调用 `setLayout`、`unpin`、`close` 和 `reportArea`。
+- **打开**会在对话的状态中设置打开标志并清除 `closedByPerson`；不会选中或导航到任何东西，该层会立即显示窗格。**关闭**有两条路径：`closeByPerson` 用于本人自己的关闭（切换按钮、页脚的按钮、聚焦命令），它会设置 `closedByPerson`；`close` 用于该层自身的原因（智能体目录被清空、`reopenOnReturn` 关闭），它不会改动该标志。交接观察器只在 `autoOpen` 开启且未设置 `closedByPerson` 时才打开。Slot `conversation.main.body` 由 `@deepseek-ai/dsh-client-ui-conversation` 声明，Delorun 台账列出了它（Multiview U3）。
 - **交接观察器**订阅会话列表。主对话是保留为 `mainView` 的会话；它的智能体目录是它的 `subagentCatalog` 投影。对话成为主视图时，或它的投影第一次被读取时，目录中已有的智能体就是基线。之后的每个条目都是一次交接。另一个对话成为主视图会开始新的基线。
 - **上限**把主对话计入：`maxPanes` 为 6 时，已固定的少于 5 个就还可以再固定一个智能体。窗口最多容纳 `floor(width / minPaneWidth) × floor(height / minPaneHeight)` 个窗格；在布局报告它自己的区域之前，使用窗口的大小。
-- **持久化**（[`src/store/persist.ts`](src/store/persist.ts)）是已保存的每个对话状态的唯一所有者，这是 `localStorage` 中的客户端偏好：每个对话一个键（`dsh.multiview.v1.<host>.<chat>`），值为 `{ v: 1, pins, layout, open }`，读取时用 zod 验证。不是 JSON、未通过验证、窗格数多于最大的 `maxPanes`（12）、嵌套深度超过这样的布局所能达到的深度，或布局不一致的值，会被丢弃、移除并以警告报告，该对话从没有任何固定项开始。布局中可以有固定项未列出的窗格；存储会把两者对齐。第二个键（`dsh.multiview-index.v1.<host>`）按最近优先列出已保存的对话；保存超出 `keepChats` 的对话会移除最久未用的那些对话的键。阻止 `localStorage` 的浏览器的表现就像没有保存任何东西。没有任何内容到达模型请求，因此不写入会话事件。
+- **持久化**（[`src/store/persist.ts`](src/store/persist.ts)）是已保存的每个对话状态的唯一所有者，这是 `localStorage` 中的客户端偏好：每个对话一个键（`dsh.multiview.v1.<host>.<chat>`），值为 `{ v: 2, pins, layout, open }`，并且自布局选择器起还有可选的 `arrangement`（该对话所遵循的布局，或 `custom`）、`slots` 和 `shape`（该对话自己的 Yours 副本），自手动关闭起还有可选的 `closedByPerson`；在这些字段之前保存的值会原样加载并保留其布局，版本 1 的记录读作未记录手动关闭的记录。读取时用 zod 验证。不是 JSON、未通过验证、窗格数多于最大的 `maxPanes`（12）、嵌套深度超过这样的布局所能达到的深度，或布局不一致的值，会被丢弃、移除并以警告报告，该对话从没有任何固定项开始。布局中可以有固定项未列出的窗格；存储会把两者对齐。第二个键（`dsh.multiview-index.v1.<host>`）按最近优先列出已保存的对话；保存超出 `keepChats` 的对话会移除最久未用的那些对话的键。阻止 `localStorage` 的浏览器的表现就像没有保存任何东西。没有任何内容到达模型请求，因此不写入会话事件。
 - **文案**有英文和中文（[`src/entry/locales.ts`](src/entry/locales.ts)、[`src/panes/locales.ts`](src/panes/locales.ts) 和 [`src/layout/locales.ts`](src/layout/locales.ts)）；插件页面从 [`locale/`](locale/en.json) 为该行命名。
 
 ## 限制
 
 - 智能体弹出面板提供页脚而不是头部，所以已固定的数量和“Pin running”位于页脚，在“Open Multiview”旁边。
 - 固定是按对话进行的。对话的某个智能体所启动的智能体（嵌套行）会固定到顶层对话的 Multiview 中。
-- `reopenOnReturn` 关闭时，打开过 Multiview 的对话会在本人离开它时被关闭，页面加载时发现它是打开的也会关闭。
+- `reopenOnReturn` 关闭时，打开过 Multiview 的对话会在本人离开它时被关闭，页面加载时发现它是打开的也会关闭。那次关闭是该层自己的，因此不会抑制交接。
+- 手动关闭是按对话的，并一直持续到本人在该对话中再次打开 Multiview。它不是一项设置：`autoOpen` 决定交接是否打开 Multiview，而手动关闭决定它此刻在这个对话中是否打开。
 
 ## 测试
 
-`tests/entry/` 用 `node_modules/.bin/vitest run --config delorun/vitest.config.ts delorun/packages/plugin-multiview/tests/entry` 运行。它覆盖交接监视器、存储（固定项、上限、没有空间、布局、持久化调用）、`Config` 的默认值和范围、注册（新目录条目上自动固定而已有条目不固定、每次自动打开、自动打开关闭、上限、返回时重新打开、来自外部的关闭）以及各组件（固定状态、禁用原因、页脚、数量和琥珀色圆点、布局菜单）。
+`tests/entry/` 用 `node_modules/.bin/vitest run --config delorun/vitest.config.ts delorun/packages/plugin-multiview/tests/entry` 运行。它覆盖交接监视器、存储（固定项、上限、没有空间、布局、持久化调用）、`Config` 的默认值和范围、注册（新目录条目上自动固定而已有条目不固定、每次交接都自动打开、自动打开关闭、手动关闭会阻止交接打开且能经受重新加载、上限、返回时重新打开、来自外部的关闭）以及各组件（固定状态、禁用原因、页脚、切换按钮的按下状态、缺席、说明、琥珀色圆点和提示按键、布局选择器、右键与长按时的弹出面板、提示及其偏好）以及聚焦命令（列出时未绑定、切换与返回时保留固定项和布局、它的拒绝情形、它赋予切换按钮的按键）。
 
-`tests/layout/tiling.spec.ts` runs every layout at one to eight panes in 1440×900, 3440×1440 and 900×1400 and covers the least pane size, Auto's switch points, Main and stack, the shapes, the keyboard moves and cycling. `tests/store/defaults.client.spec.ts` covers scope resolution, Yours across chats, Undo, Reset to Auto and the moving-only rule. `tests/layout/browser/tiling-shots.mts` takes pictures of every layout at 1440 px with 2, 3, 5 and 7 panes, the picker and the Settings page in light and dark: `node --import tsx/esm delorun/packages/plugin-multiview/tests/layout/browser/tiling-shots.mts <directory>`.
+`tests/layout/tiling.spec.ts` 在 1440×900、3440×1440 和 900×1400 下以一到八个窗格运行每一种布局，覆盖最小窗格尺寸、Auto 的切换点、Main and stack、各种形状、键盘移动和循环切换。`tests/store/defaults.client.spec.ts` 覆盖作用域解析、跨对话的 Yours、撤销、Reset to Auto 以及仅移动规则。`tests/layout/browser/tiling-shots.mts` 在 1440 px 下以 2、3、5 和 7 个窗格拍摄每一种布局、选择器以及浅色和深色下的设置页面：`node --import tsx/esm delorun/packages/plugin-multiview/tests/layout/browser/tiling-shots.mts <directory>`。
 
 `tests/store/` 覆盖持久化：往返、每一种丢弃情形、大小限制、裁剪到 `keepChats`，以及被阻止或已满的存储。`tests/entry/browser/shots.mts` 在标准颜色令牌之上构建一个带有真实固定按钮、页脚和头部按钮的页面，并在无头 Chromium 中以 1440 和 390 px 拍摄浅色主题的图片：`node --import tsx/esm delorun/packages/plugin-multiview/tests/entry/browser/shots.mts <directory>`。该页面的头部和智能体行代替上游的目录组件。
 
