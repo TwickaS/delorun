@@ -2964,6 +2964,11 @@
     {
       "area": "Plugins",
       "section": "Fixed",
+      "text": "`delorun plugin remove` forgets the plugin it removed: its load copy under `changes/profiles/<profile>/active/` and the `active.json` entry that named it go, so a plugin a person installs, tries and removes leaves no copy of its files behind to load again. What Changes recorded of the plugin stays, so a change made while it was installed can still be undone, and a plugin the profile still depends on keeps its copy."
+    },
+    {
+      "area": "Plugins",
+      "section": "Fixed",
       "text": "A plugin's Delorun requirement is checked against the Delorun that is running, and a caller that asks for the DeepSeek Harness axis alone gets only that axis. The update report decides each axis separately, so a plugin whose `engines.delorun` the target does not satisfy is now reported on the Delorun axis instead of being read as a Delorun mismatch while the Harness axis was being decided."
     },
     {
@@ -3324,6 +3329,11 @@
     {
       "area": "Commands",
       "section": "Fixed",
+      "text": "The Cordis catalogues are current again. A change to what the client runner exposes left the generated API and slot catalogues behind, so a merge-tier check refused the tree."
+    },
+    {
+      "area": "Commands",
+      "section": "Fixed",
       "text": "The check that builds the product website reports a checkout without the site's source pictures as a limit of that machine rather than a failure of the change. The pictures are real screenshots of the studio and are not in the repository, so the check now declines with a message naming `SITE_PICTURES_DIR` and the folder to point it at, instead of failing the build with the same message as an error."
     },
     {
@@ -3585,6 +3595,10 @@
             },
             {
               "section": "Fixed",
+              "text": "`delorun plugin remove` forgets the plugin it removed: its load copy under `changes/profiles/<profile>/active/` and the `active.json` entry that named it go, so a plugin a person installs, tries and removes leaves no copy of its files behind to load again. What Changes recorded of the plugin stays, so a change made while it was installed can still be undone, and a plugin the profile still depends on keeps its copy."
+            },
+            {
+              "section": "Fixed",
               "text": "A plugin's Delorun requirement is checked against the Delorun that is running, and a caller that asks for the DeepSeek Harness axis alone gets only that axis. The update report decides each axis separately, so a plugin whose `engines.delorun` the target does not satisfy is now reported on the Delorun axis instead of being read as a Delorun mismatch while the Harness axis was being decided."
             },
             {
@@ -3631,6 +3645,10 @@
             {
               "section": "Fixed",
               "text": "**Fixed:** The documentation and catalogue gates pass again. The persistence catalogue, the event producer and consumer lists, the capability seams and the Cordis API catalogue are regenerated from the code they describe, and the home-patch service is classified for the package-dependency gate."
+            },
+            {
+              "section": "Fixed",
+              "text": "The Cordis catalogues are current again. A change to what the client runner exposes left the generated API and slot catalogues behind, so a merge-tier check refused the tree."
             },
             {
               "section": "Fixed",
