@@ -154,15 +154,15 @@ node_modules/.bin/tsx delorun/apps/tools/src/rehearse-upstream.ts --ref <ref>
 <a id="workflows"></a>
 ## 工作流
 
-This repository keeps three workflows in [`.github/workflows`](../../../.github/workflows) and removes every other workflow upstream wrote: each needs DeepSeek's secrets, runners or accounts, builds or publishes a release, or deploys a site. [`src/opening/workflows.ts`](src/opening/workflows.ts) lists each kept and removed workflow with its reason, and a workflow in neither list fails the check until someone classifies it. `node delorun/apps/tools/src/opening/workflows.ts --repo <checkout> --apply` deletes the removed files and drops every job of `ci.yml` except `node-24`, `node-24-lint` and `all-checks-passed`. Nothing here enables a workflow: GitHub runs one only when the repository's Actions settings allow it, and that setting is the owner's.
+本仓库在 [`.github/workflows`](../../../.github/workflows) 中保留三个工作流，并移除上游编写的其他每个工作流：它们各自需要 DeepSeek 的密钥、运行器或账户，构建或发布一个发布，或部署一个站点。[`src/opening/workflows.ts`](src/opening/workflows.ts) 列出每个保留和移除的工作流及其原因，而两个列表都不包含的工作流会使检查失败，直到有人对它分类。`node delorun/apps/tools/src/opening/workflows.ts --repo <checkout> --apply` 删除被移除的文件，并去掉 `ci.yml` 中除 `node-24`、`node-24-lint` 与 `all-checks-passed` 之外的每个作业。这里的任何东西都不会启用工作流：只有当仓库的 Actions 设置允许时 GitHub 才会运行一个工作流，而该设置属于所有者。
 
-| Workflow | Triggers | Needs DeepSeek secrets or infrastructure | What it checks |
+| 工作流 | 触发条件 | 需要 DeepSeek 的密钥或基础设施 | 它检查什么 |
 |---|---|---|---|
-| [`gates.yml`](../../../.github/workflows/gates.yml) | `pull_request`, `push` to `main` | None; GitHub-hosted runner | Delorun's gates, as [the gates](#the-gates) describe |
-| [`expected-filenames.yml`](../../../.github/workflows/expected-filenames.yml) | `pull_request`, by path | None; GitHub-hosted runner | No tracked file name contains "golden" |
-| [`ci.yml`](../../../.github/workflows/ci.yml) | `pull_request` | None needed. Upstream's runner labels apply only in upstream's repository (see the note below) | `node-24` runs upstream's static gates, `node-24-lint` its lint and duplication checks, and `all-checks-passed` is the one verdict that waits for both |
+| [`gates.yml`](../../../.github/workflows/gates.yml) | `pull_request`、对 `main` 的 `push` | 无；GitHub 托管的运行器 | Delorun 的门禁，如[门禁](#the-gates)所述 |
+| [`expected-filenames.yml`](../../../.github/workflows/expected-filenames.yml) | `pull_request`，按路径 | 无；GitHub 托管的运行器 | 没有任何受跟踪的文件名包含 “golden” |
+| [`ci.yml`](../../../.github/workflows/ci.yml) | `pull_request` | 不需要。上游的运行器标签只在上游的仓库中适用（见下面的说明） | `node-24` 运行上游的静态门禁，`node-24-lint` 运行其 lint 与重复代码检查，而 `all-checks-passed` 是等待两者的那一个结论 |
 
-`ci.yml` needs no secret, so it is kept. Each job keeps upstream's runner expression as the branch that applies in upstream's repository, where DeepSeek's runner labels such as `dsh-ubuntu-24-04-16core` stay in use. Every other repository runs the job on `ubuntu-latest`, so this repository never waits for a DeepSeek runner. The ledger's `.github/**` path rule covers the file. [`scripts/ci-workflow.spec.ts`](../../../scripts/ci-workflow.spec.ts) pins the three jobs, their runner routing and their temporary-storage and pnpm settings.
+`ci.yml` 不需要任何密钥，因此被保留。每个作业都保留上游的运行器表达式，作为在上游仓库中适用的分支，那里仍在使用 DeepSeek 的运行器标签（例如 `dsh-ubuntu-24-04-16core`）。其他每个仓库都在 `ubuntu-latest` 上运行该作业，因此本仓库从不等待 DeepSeek 的运行器。台账的 `.github/**` 路径规则覆盖该文件。[`scripts/ci-workflow.spec.ts`](../../../scripts/ci-workflow.spec.ts) 固定这三个作业、它们的运行器路由以及它们的临时存储与 pnpm 设置。
 
 ## Brief Issue
 
