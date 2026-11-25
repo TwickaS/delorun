@@ -334,6 +334,11 @@ export function decide(state: SlotState, pid: number, budget: SlotBudget): { rea
   let disk = budget.diskRuns - state.holders.filter(holder => holder.disk).length
   const perSlot = budget.memoryBytes / budget.slots
   const reserve = Math.floor(budget.slots / 4)
+  // A request's declared memory is a ceiling, not a floor: it is reserved what it declares, so a check that declares 4 GiB
+  // is reserved 4 GiB whatever its slots. A request that declares none has nothing better to say and keeps the elastic
+  // share of the budget its slots would buy, which is what `with-slots` without `--memory-gib` asks for.
+  const needOf = (request: SlotRequest): number => request.memoryBytes > 0 ? request.memoryBytes : request.min * perSlot
+  const memoryOf = (request: SlotRequest, granted: number): number => request.memoryBytes > 0 ? request.memoryBytes : granted * perSlot
   // What a fitting request is granted from the free slots: what it asks for, at most the machine less the reserve.
   const grantOf = (request: SlotRequest, free: number): number => Math.max(request.min, Math.min(request.want, free, request.priority === 0 ? budget.slots : budget.slots - reserve))
   // The first earlier request that does not fit is the head. It holds back every later one, except that a small later
@@ -360,7 +365,7 @@ export function decide(state: SlotState, pid: number, budget: SlotBudget): { rea
   for (const request of state.waiting) {
     // A request the hold blocks starts nothing while it lasts, so it neither takes slots nor holds back a later request.
     if (state.hold !== undefined && !allowed(state.hold, request.cwd)) continue
-    const need = Math.max(request.memoryBytes, request.min * perSlot)
+    const need = needOf(request)
     const fits = request.min <= slots && need <= memory
     const diskFree = !request.disk || disk > 0
     if (request.pid === pid) {
@@ -372,7 +377,7 @@ export function decide(state: SlotState, pid: number, budget: SlotBudget): { rea
       if (!fits) return { waits: `${(memory / 1024 ** 3).toFixed(1)} GiB of memory is free and it needs ${(need / 1024 ** 3).toFixed(1)} GiB` }
       if (!diskFree) return { waits: `the ${String(budget.diskRuns)} disk-heavy places are taken` }
       const granted = grantOf(request, slots)
-      return { slots: granted, memoryBytes: Math.min(memory, Math.max(request.memoryBytes, granted * perSlot)) }
+      return { slots: granted, memoryBytes: Math.min(memory, memoryOf(request, granted)) }
     }
     if (!fits) {
       if (head === undefined) {
@@ -394,7 +399,7 @@ export function decide(state: SlotState, pid: number, budget: SlotBudget): { rea
       continue
     }
     const takes = grantOf(request, slots)
-    const takesMemory = Math.max(need, Math.min(memory, takes * perSlot))
+    const takesMemory = Math.min(memory, memoryOf(request, takes))
     slots -= takes
     memory -= takesMemory
     takenSlots += takes
@@ -493,19 +498,49 @@ export async function takeSlots(host: QueueHost, paths: SlotPaths, budget: SlotB
   }
 }
 
+/** Where a budget's figures came from, so `--queue` shows the derivation rather than a bare number. */
+export interface BudgetOrigin {
+  /** The machine's memory, before the headroom. */
+  readonly machineBytes: number
+  /** The memory kept outside the runs. */
+  readonly headroomBytes: number
+  /** The CPUs the machine reports. */
+  readonly cpus: number
+  /** The variables that overrode a measured figure, and their values. */
+  readonly overrides: readonly string[]
+  /** The disk's `rotational` flag, or undefined where the machine reports none. */
+  readonly rotational?: boolean
+}
+
+/**
+ * The line that says how the budget was derived: the machine's memory, the headroom taken off it, the CPUs, and each
+ * variable that overrode a measured figure.
+ * @param budget - the machine's budget.
+ * @param origin - where the figures came from.
+ * @returns the line.
+ */
+export function describeBudgetOrigin(budget: SlotBudget, origin: BudgetOrigin): string {
+  const gib = (bytes: number): string => `${(bytes / 1024 ** 3).toFixed(1)} GiB`
+  const disk = origin.rotational === undefined ? 'no disk reported' : origin.rotational ? 'a spinning disk' : 'a disk that reports no seek cost'
+  const overrides = origin.overrides.length === 0 ? '' : `; overridden by ${origin.overrides.join(', ')}`
+  return `budget: ${String(origin.cpus)} CPUs, ${gib(origin.machineBytes)} of memory less ${gib(origin.headroomBytes)} of headroom is ${gib(budget.memoryBytes)}, ${String(budget.diskRuns)} disk-heavy places (${disk})${overrides}`
+}
+
 /**
  * The lines `run-checks --queue` prints: the budget, each holder with its slots, memory and how long it has held, and each
  * waiting request in serving order.
  * @param state - the machine's state.
  * @param budget - the machine's budget.
  * @param now - the current time in milliseconds.
+ * @param origin - where the budget's figures came from, when the caller knows.
  * @returns the lines, the machine hold first when there is one.
  */
-export function describeSlots(state: SlotState, budget: SlotBudget, now: number): string[] {
+export function describeSlots(state: SlotState, budget: SlotBudget, now: number, origin?: BudgetOrigin): string[] {
   const gib = (bytes: number): string => `${(bytes / 1024 ** 3).toFixed(1)} GiB`
   const used = state.holders.reduce((sum, holder) => sum + holder.slots, 0)
   const lines = state.hold === undefined ? [] : describeHold(state.hold, now)
   lines.push(`slots: ${String(used)} of ${String(budget.slots)} held, ${String(budget.diskRuns)} disk-heavy places, ${gib(budget.memoryBytes)} of memory; ${String(state.waiting.length)} waiting`)
+  if (origin !== undefined) lines.push(`  ${describeBudgetOrigin(budget, origin)}`)
   if (state.oldHolder !== undefined) lines.push(`  an old worktree's run in process ${String(state.oldHolder)} holds the whole machine`)
   if (state.oldWaiting.length > 0) lines.push(`  ${String(state.oldWaiting.length)} run(s) of old worktrees wait in the previous queue`)
   for (const holder of state.holders) lines.push(`  holding: process ${String(holder.pid)}, ${String(holder.slots)} slots, ${gib(holder.memoryBytes)}${holder.disk ? ', disk-heavy' : ''}${holder.priority === 0 ? ', trunk' : ''}, for ${String(Math.round((now - holder.since) / 1000))} s: ${holder.label}`)

@@ -6,23 +6,30 @@
  *
  * @module @delorun/tools/checks/slot-host
  */
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, readlinkSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { ensurePrivateDir } from './private-dir.ts'
 import { processGuard, type QueueHost } from './run-queue.ts'
 import type { SlotBudget, SlotPaths } from './slots.ts'
 
+const GIB = 1024 ** 3
+
 /** The variable that sets the machine's CPU slots. */
 export const SLOTS_ENV = 'DELORUN_CHECKS_SLOTS'
+/** The variable that sets the memory the runs may hold together, in GiB. */
+export const MEMORY_ENV = 'DELORUN_CHECKS_MEMORY_GIB'
 /** The variable that sets how many disk-heavy holders may run at once. */
 export const DISK_RUNS_ENV = 'DELORUN_CHECKS_DISK_RUNS'
 /**
- * Disk-heavy holders at once when the environment names no other count. On a 22-CPU, 21 GB machine with an NVMe-backed WSL
- * disk, two disk-heavy holders (one of 15 slots, one of 5) kept the I/O pressure (`/proc/pressure/io`, "some") at 0.5% to 4%
- * and stalled tasks for 0.9% of a 30 s window, while five more runs waited for a disk place with the CPU load near 10. The
- * disk had room for a third holder, and the slots and memory still bound the total.
+ * Disk-heavy holders at once when the environment names no other count. The figure was measured on a 22-CPU, 21 GB machine
+ * with an NVMe-backed WSL disk, where two holders kept the I/O pressure (`/proc/pressure/io`, "some") at 0.5% to 4% and the
+ * disk had room for a third. It is a starting point, not a measurement of this machine: a disk that reports no seek cost
+ * (`rotational` 0, as an NVMe or a virtio disk does) takes more holders before it saturates, so {@link diskRunsFor} raises
+ * the count on one, and `DELORUN_CHECKS_DISK_RUNS` overrides both.
  */
 const DEFAULT_DISK_RUNS = 3
+/** Disk-heavy holders on a disk that reports no seek cost, where the disk is not the first thing to saturate. */
+const SOLID_STATE_DISK_RUNS = 4
 
 /**
  * The directories: the user's budget directory, and the previous queue's directory and lock file, which old worktrees
@@ -66,16 +73,76 @@ function positive(env: NodeJS.ProcessEnv, name: string, fallback: number): numbe
 }
 
 /**
- * The machine's budget: `DELORUN_CHECKS_SLOTS` CPU slots, else the CPUs; the memory the runner budgets; and
- * `DELORUN_CHECKS_DISK_RUNS` disk-heavy places, else 3.
- * @param cpus - the CPUs this process may use.
- * @param memoryBytes - the memory the runs may hold together.
+ * A positive number of GiB from the environment, in bytes.
  * @param env - the environment.
- * @returns the budget.
- * @throws Error when either variable is not a positive whole number.
+ * @param name - the variable.
+ * @param fallback - the bytes when the variable is unset or empty.
+ * @returns the bytes.
+ * @throws Error when the variable is set to anything but a positive number.
  */
-export function machineBudget(cpus: number, memoryBytes: number, env: NodeJS.ProcessEnv): SlotBudget {
-  return { slots: positive(env, SLOTS_ENV, cpus), memoryBytes, diskRuns: positive(env, DISK_RUNS_ENV, DEFAULT_DISK_RUNS) }
+function gib(env: NodeJS.ProcessEnv, name: string, fallback: number): number {
+  const text = env[name]
+  if (text === undefined || text === '') return fallback
+  const value = Number(text)
+  if (!Number.isFinite(value) || value <= 0) throw new Error(`${name} must be a positive number of GiB, got ${text}`)
+  return Math.round(value * GIB)
+}
+
+/**
+ * The disk-heavy places a disk takes: {@link SOLID_STATE_DISK_RUNS} on a disk that reports no seek cost, else
+ * {@link DEFAULT_DISK_RUNS}.
+ * @param rotational - the disk's `rotational` flag, or undefined where the machine reports none.
+ * @returns the count.
+ */
+export function diskRunsFor(rotational: boolean | undefined): number {
+  return rotational === false ? SOLID_STATE_DISK_RUNS : DEFAULT_DISK_RUNS
+}
+
+/**
+ * The machine's budget: `DELORUN_CHECKS_SLOTS` CPU slots, else the CPUs; `DELORUN_CHECKS_MEMORY_GIB` of memory, else the
+ * memory the runner budgets; and `DELORUN_CHECKS_DISK_RUNS` disk-heavy places, else what the disk takes.
+ * @param cpus - the CPUs this process may use.
+ * @param memoryBytes - the memory the runs may hold together, from {@link runMemoryBytes}.
+ * @param env - the environment.
+ * @param rotational - the disk's `rotational` flag, or undefined where the machine reports none.
+ * @returns the budget.
+ * @throws Error when a variable is not a positive number.
+ */
+export function machineBudget(cpus: number, memoryBytes: number, env: NodeJS.ProcessEnv, rotational?: boolean): SlotBudget {
+  return { slots: positive(env, SLOTS_ENV, cpus), memoryBytes: gib(env, MEMORY_ENV, memoryBytes), diskRuns: positive(env, DISK_RUNS_ENV, diskRunsFor(rotational)) }
+}
+
+/**
+ * The disk's `rotational` flag for the file system a directory lies on, read from `/sys/dev/block`.
+ * @param dir - a directory on the disk.
+ * @param read - reads a file's text; it throws for a file that does not exist.
+ * @param link - reads a symbolic link's target.
+ * @returns false for a disk that reports no seek cost, true for one that does, and undefined where the machine reports none.
+ */
+export function diskRotational(dir: string, read: (path: string) => string = path => readFileSync(path, 'utf8'), link: (path: string) => string = path => readlinkSync(path)): boolean | undefined {
+  let device: string
+  try {
+    // `/sys/dev/block` names each block device by its major:minor, which `stat` packs into one number.
+    const dev = statSync(dir).dev
+    device = `${String((dev >> 8) & 0xfff)}:${String((dev & 0xff) | ((dev >> 12) & 0xfff00))}`
+  } catch (error) {
+    // ENOENT: no such directory.
+    void error
+    return undefined
+  }
+  try {
+    // The entry links to the device's directory, which for a partition is `.../block/<disk>/<partition>`: the disk is the
+    // directory above it, and only the disk has a `queue`.
+    const target = link(`/sys/dev/block/${device}`)
+    const parts = target.split('/')
+    const at = parts.lastIndexOf('block')
+    const disk = parts[at + 1] ?? ''
+    return read(`/sys/block/${disk}/queue/rotational`).trim() !== '0'
+  } catch (error) {
+    // No /sys/dev/block, or no queue for the device: the machine reports no disk.
+    void error
+    return undefined
+  }
 }
 
 /**

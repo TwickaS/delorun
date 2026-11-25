@@ -65,8 +65,8 @@ import { canScope, cgroupBudget, checkEnvironment, ioPressure, memoryReport, rem
 import { catalog, criticalPath, declineClosureOffHost, declineUnansweredDocker, dependentsLeftForMerge, leftForMerge, readsPnpmScriptEnvironment, select, selectPreCommit, staleDelorunBuilds, type Budgets, type Check, type GateTier, type Planned, type UpstreamPackage, unknownSelectors } from './checks/plan.ts'
 import { checksToRun, fitToGrant, runDemand, withoutIdleNeeds } from './checks/demand.ts'
 import { isLightPlan, gatePriority } from './checks/run-queue.ts'
-import { machineBudget, nodeSlotHost, privateSlotPaths } from './checks/slot-host.ts'
-import { describeSlots, GRANT_ENV, grantFromEnv, grantToEnv, holdMachine, readSlots, takeSlots, unholdMachine, type SlotGrant } from './checks/slots.ts'
+import { DISK_RUNS_ENV, diskRotational, machineBudget, MEMORY_ENV, nodeSlotHost, privateSlotPaths, SLOTS_ENV } from './checks/slot-host.ts'
+import { describeSlots, GRANT_ENV, grantFromEnv, grantToEnv, holdMachine, readSlots, takeSlots, unholdMachine, type BudgetOrigin, type SlotGrant } from './checks/slots.ts'
 import { closureHostProblem } from './checks/closure.ts'
 import { gateFailure, logTail, probeDocker, runPlan, type Outcome, type Result } from './checks/run.ts'
 import { sharedCheckoutNote, sharedCheckoutRefusal } from './checks/shared-checkout.ts'
@@ -391,6 +391,23 @@ function cacheState(check: WithUnits<Check>, cache: PassCache | undefined): stri
 }
 
 /**
+ * Where the machine's budget came from, for `--queue` to show the derivation rather than a bare number.
+ * @param machine - the machine's CPUs and memory, before the headroom.
+ * @param memory - the memory the runs may hold together, from `runMemoryBytes`.
+ * @param cpus - the CPUs this process may use.
+ * @param env - the environment, for the variables that override a measured figure.
+ * @returns the origin.
+ */
+function budgetOrigin(machine: { readonly cpus: number, readonly memoryBytes: number }, memory: number, cpus: number, env: NodeJS.ProcessEnv): BudgetOrigin {
+  const overrides = [SLOTS_ENV, MEMORY_ENV, DISK_RUNS_ENV].flatMap((name) => {
+    const value = env[name]
+    return value === undefined || value === '' ? [] : [`${name}=${value}`]
+  })
+  const rotational = diskRotational(tmpdir())
+  return { machineBytes: machine.memoryBytes, headroomBytes: machine.memoryBytes - memory, cpus, overrides, ...rotational === undefined ? {} : { rotational } }
+}
+
+/**
  * The budget a check's line names: its memory, its CPUs and whether it runs alone.
  * @param check - the check.
  * @returns such as `0.3 GiB, 1 CPU`.
@@ -574,8 +591,8 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
   }
 
   if (values.queue) {
-    const budgetNow = machineBudget(cpus, memory, env)
-    for (const line of describeSlots(readSlots(nodeSlotHost(text => process.stderr.write(text)), privateSlotPaths(tmpdir(), process.getuid?.() ?? -1)), budgetNow, Date.now())) console.log(line)
+    const budgetNow = machineBudget(cpus, memory, env, diskRotational(tmpdir()))
+    for (const line of describeSlots(readSlots(nodeSlotHost(text => process.stderr.write(text)), privateSlotPaths(tmpdir(), process.getuid?.() ?? -1)), budgetNow, Date.now(), budgetOrigin(budget, memory, cpus, env))) console.log(line)
     return 0
   }
   const workers = workerCounts(cpus, memory)
@@ -695,7 +712,7 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
   // what will really run.
   plan = withoutIdleNeeds(plan, checksToRun(plan, cache))
   const running = checksToRun(plan, cache)
-  const slotBudget = machineBudget(cpus, memory, env)
+  const slotBudget = machineBudget(cpus, memory, env, diskRotational(tmpdir()))
   const inherited = grantFromEnv(env[GRANT_ENV])
   let grant: SlotGrant | undefined = inherited
   if (!light && !preflight && inherited === undefined && running.length > 0 && !isLightPlan(running)) {

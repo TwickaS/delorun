@@ -23,21 +23,32 @@ import { RUNNER_CONTROL_ENV } from './cache.ts'
 const GIB = 1024 ** 3
 
 /**
- * Memory kept outside the run, for the desktop, editors and agents: at least 2 GiB and an eighth of the machine.
+ * The share of the machine kept outside the runs, for the desktop, editors and agents. A fraction rather than a fixed
+ * floor, so the headroom follows the machine it is measured on: an eighth of 23 GiB is 2.9 GiB, where a 2 GiB floor was
+ * a guess made for a 21 GB machine and would leave a small machine with nothing to run in.
+ */
+const HEADROOM_FRACTION = 1 / 8
+/** The least headroom, so a machine of a few GiB still keeps something for the work beside the runs. */
+const MIN_HEADROOM_BYTES = GIB
+/** The least a run may be budgeted, so a machine whose headroom leaves less still runs one check. */
+const MIN_RUN_BYTES = GIB
+
+/**
+ * Memory kept outside the run, for the desktop, editors and agents: an eighth of the machine, and at least 1 GiB.
  * @param memoryBytes - the machine's or the cgroup's memory.
  * @returns the bytes to leave free.
  */
 export function headroomBytes(memoryBytes: number): number {
-  return Math.max(2 * GIB, Math.floor(memoryBytes / 8))
+  return Math.max(MIN_HEADROOM_BYTES, Math.floor(memoryBytes * HEADROOM_FRACTION))
 }
 
 /**
  * The run's memory ceiling.
  * @param memoryBytes - the machine's memory.
- * @returns the memory less {@link headroomBytes}, and at least 2 GiB.
+ * @returns the memory less {@link headroomBytes}, and at least 1 GiB.
  */
 export function runMemoryBytes(memoryBytes: number): number {
-  return Math.max(2 * GIB, memoryBytes - headroomBytes(memoryBytes))
+  return Math.max(MIN_RUN_BYTES, memoryBytes - headroomBytes(memoryBytes))
 }
 
 /** Memory a fork-suite worker holds at its peak: the whole fork suite peaked at 6.4 GiB with 17 workers. */

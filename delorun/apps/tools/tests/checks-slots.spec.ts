@@ -101,10 +101,35 @@ class Machine {
 describe('a grant', () => {
   it('takes what it wants of an idle machine but leaves a quarter of the slots, which a trunk push may take', async () => {
     const machine = new Machine()
-    expect(await takeSlots(machine.host(1), paths, budget, demand())).toEqual({ slots: 15, memoryBytes: 15 * GIB, waitedMs: 0 })
+    // The declared memory is the ceiling: 15 slots do not buy 15 GiB when the request declares 1 GiB.
+    expect(await takeSlots(machine.host(1), paths, budget, demand())).toEqual({ slots: 15, memoryBytes: GIB, waitedMs: 0 })
     expect(machine.files.has('/q/1-000000000001000-1.held')).toBe(true)
     const trunk = new Machine()
     expect((await takeSlots(trunk.host(1), paths, budget, demand({ priority: 0 }))).slots).toBe(20)
+  })
+
+  it('reserves what a request declares, not the share of the budget its slots would buy, so a declared 4 GiB is never reserved more', async () => {
+    // The machine the brief measured: 9 slots, 20.5 GiB, a build that declares 4 GiB and asks for 8 slots.
+    const measured: SlotBudget = { slots: 9, memoryBytes: Math.round(20.5 * GIB), diskRuns: 3 }
+    const build = demand({ want: 8, min: 8, memoryBytes: 4 * GIB, disk: true, label: 'build:artifacts' })
+    const machine = new Machine()
+    const grant = await takeSlots(machine.host(1), paths, measured, build)
+    // The old arithmetic reserved max(4, 8 x 20.5/9) = 18.2 GiB, 4.6 times what the check declares.
+    expect(grant.memoryBytes).toBe(4 * GIB)
+    expect(grant.slots).toBe(8)
+    // The 16.5 GiB the build no longer holds is free for the runs that were waiting behind it: a run that needs 5 GiB
+    // starts at once, where the old reservation left only 2.3 GiB of the budget free and it waited.
+    const beside = new Machine()
+    beside.hold(7, { slots: 8, memoryBytes: 4 * GIB, disk: true })
+    const tests = await takeSlots(beside.host(1), paths, measured, demand({ want: 1, min: 1, memoryBytes: 5 * GIB }))
+    expect(tests).toEqual({ slots: 1, memoryBytes: 5 * GIB, waitedMs: 0 })
+    expect(beside.sleeps).toBe(0)
+  })
+
+  it('keeps the elastic share for a request that declares no memory, as the wrapper without --memory-gib asks', async () => {
+    const machine = new Machine()
+    // A request that declares nothing has no ceiling to state, so its slots' share of the budget stands.
+    expect(await takeSlots(machine.host(1), paths, budget, demand({ memoryBytes: 0 }))).toEqual({ slots: 15, memoryBytes: 15 * GIB, waitedMs: 0 })
   })
 
   it('starts a small run beside a large holder, with the memory it needs', async () => {
@@ -123,7 +148,7 @@ describe('a grant', () => {
       if (count === 2) machine.files.delete('/s/held-7.json')
       if (count === 4) machine.live.delete(8)
     }
-    const grant = await takeSlots(machine.host(1), paths, budget, demand({ min: 2, memoryBytes: GIB }))
+    const grant = await takeSlots(machine.host(1), paths, budget, demand({ min: 2, memoryBytes: 2 * GIB }))
     expect(machine.sleeps).toBe(4)
     expect(grant.slots).toBe(15)
     expect(machine.files.has('/s/held-8.json')).toBe(false)
@@ -396,9 +421,10 @@ describe('the order of requests', () => {
       }
     }
     machine.onSleep = (count) => { if (count === 1) machine.live.delete(2) }
-    const grant = await takeSlots(machine.host(1), paths, budget, demand())
+    // The request declares 11 GiB, so its grant and the 10 GiB holder overfill the 20 GiB budget.
+    const grant = await takeSlots(machine.host(1), paths, budget, demand({ memoryBytes: 11 * GIB }))
     expect(machine.sleeps).toBe(1)
-    expect(grant).toMatchObject({ slots: 15, memoryBytes: 15 * GIB })
+    expect(grant).toMatchObject({ slots: 15, memoryBytes: 11 * GIB })
   })
 
   it('keeps the claim of the lower process id when two claims carry the same request time', async () => {
@@ -564,6 +590,17 @@ describe('the files', () => {
       '  waiting 2: process 9, 2-2 slots, trunk, for 58 s: with-slots: tsc',
     ])
     expect(describeSlots({ holders: [{ file: 'h', pid: 7, slots: 1, memoryBytes: 0, disk: false, priority: 1, label: 'x', since: 0, requested: 0 }], waiting: [], oldWaiting: [] }, budget, 0)[1]).toBe('  holding: process 7, 1 slots, 0.0 GiB, for 0 s: x')
+  })
+
+  it('shows how the budget was derived, so a person can see where the figures came from', () => {
+    const lines = describeSlots({ holders: [], waiting: [], oldWaiting: [] }, budget, 0, { machineBytes: 23 * GIB, headroomBytes: Math.floor(23 * GIB / 8), cpus: 12, overrides: [], rotational: false })
+    // The budget is the test's own 20 GiB, not the 23 GiB less the headroom: the line reports the figures it is given.
+    expect(lines[1]).toBe('  budget: 12 CPUs, 23.0 GiB of memory less 2.9 GiB of headroom is 20.0 GiB, 2 disk-heavy places (a disk that reports no seek cost)')
+    // Each variable that overrode a measured figure is named with its value.
+    const overridden = describeSlots({ holders: [], waiting: [], oldWaiting: [] }, budget, 0, { machineBytes: 23 * GIB, headroomBytes: 3 * GIB, cpus: 12, overrides: ['DELORUN_CHECKS_SLOTS=9', 'DELORUN_CHECKS_MEMORY_GIB=20'], rotational: true })
+    expect(overridden[1]).toBe('  budget: 12 CPUs, 23.0 GiB of memory less 3.0 GiB of headroom is 20.0 GiB, 2 disk-heavy places (a spinning disk); overridden by DELORUN_CHECKS_SLOTS=9, DELORUN_CHECKS_MEMORY_GIB=20')
+    // A machine that reports no disk says so rather than guessing one.
+    expect(describeSlots({ holders: [], waiting: [], oldWaiting: [] }, budget, 0, { machineBytes: 23 * GIB, headroomBytes: 3 * GIB, cpus: 12, overrides: [] })[1]).toContain('(no disk reported)')
   })
 
   it('hand a grant to the re-executed run and refuse a malformed one', () => {
