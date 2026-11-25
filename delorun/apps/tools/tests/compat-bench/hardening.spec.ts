@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { BENCH_LABEL, hardenedRunArgs, inspectProblems, pickBenchPort, type InspectedContainer, type RunSpec } from '../../src/compat-bench/docker.ts'
+import { BENCH_LABEL, IMAGE_ENV, hardenedRunArgs, inspectProblems, pickBenchPort, type InspectedContainer, type RunSpec } from '../../src/compat-bench/docker.ts'
 
 const OUT = '/tmp/bench-out'
 const spec: RunSpec = { name: 'bench-x', image: 'img:1', runId: 'r1', outDir: OUT, user: '1000:1000' }
@@ -44,6 +44,13 @@ describe('the run arguments', () => {
 describe('the inspect check', () => {
   it('finds nothing wrong with a hardened container', () => {
     expect(inspectProblems(hardened(), { outDir: OUT, volumes: ['bench-home-r1'] })).toEqual([])
+  })
+
+  it('accepts the environment a bench image sets for itself, and still refuses a name the run added', () => {
+    const image = { ...hardened(), Config: { ...hardened().Config, Env: IMAGE_ENV.map(name => `${name}=from-the-image`) } }
+    const expected = { outDir: OUT, volumes: ['bench-home-r1'] }
+    expect(inspectProblems(image, expected)).toEqual([])
+    expect(inspectProblems({ ...image, Config: { ...image.Config, Env: [...image.Config.Env!, 'BENCH_RUN_ID=r1', 'STRAY_NAME=1'] } }, expected)).toEqual(['the environment holds STRAY_NAME, which is not on the allow-list'])
   })
 
   it('names each way a container departs from the hardening', () => {

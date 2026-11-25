@@ -38,6 +38,8 @@ export interface RunState {
   installed: boolean
   /** Whether the studio started with the plugin. */
   started: boolean
+  /** Whether the plugin is still on; the studio's switch turned it off when it refused to turn it back on. */
+  pluginOn: boolean
   /** The plugin's own Settings label, learned from its manifest, for the clash check. */
   pluginLabel: string | undefined
   /** The exercise file on the host, if any. */
@@ -87,7 +89,9 @@ const START_FAILURES: readonly RegExp[] = [/failed to start/i, /failed to import
 export async function timed(name: StageName, body: () => Promise<Omit<StageResult, 'name' | 'durationMs'>>): Promise<StageResult> {
   const began = Date.now()
   try {
-    return { name, durationMs: Date.now() - began, ...await body() }
+    // The body runs first: reading the clock in the object literal would measure only the wait before the work.
+    const result = await body()
+    return { ...result, name, durationMs: Date.now() - began }
   } catch (error) {
     return { name, durationMs: Date.now() - began, status: 'fail', failures: [classifyFailure(name, [error instanceof Error ? error.message : String(error)])] }
   }
@@ -145,6 +149,19 @@ export async function startStudio(state: RunState): Promise<{ readonly ok: boole
 }
 
 /**
+ * The lines of a host report a card keeps: its summary of counts, then each line that reports a problem.
+ * @param label - the command whose output this is.
+ * @param output - its text.
+ * @returns the notes, one line each.
+ */
+export function hostNotes(label: string, output: string): string[] {
+  const lines = output.split('\n').map(line => line.trim()).filter(line => line !== '')
+  const summary = lines.find(line => /^\d+ passed/.test(line))
+  const problems = lines.filter(line => /^[!✗×]/.test(line) || /^failed\s/.test(line))
+  return [...(summary === undefined ? [] : [`${label}: ${summary}`]), ...problems.slice(0, 12).map(line => `${label}: ${line}`)]
+}
+
+/**
  * Stage 2: start, then `delorun doctor` and `verify`.
  * @param state - the run.
  * @returns the result.
@@ -160,7 +177,13 @@ export async function start(state: RunState): Promise<StageResult> {
     const doctor = await state.box.script('ctl', ['doctor'], { timeoutMs: 240_000 })
     const facts: Record<string, string | number | boolean> = { startMs: started.startMs }
     if (typeof doctor.skipped === 'string') facts.doctor = `skipped: ${doctor.skipped}`
-    else { facts.doctor = Number(doctor.doctor) === 0 ? 'ok' : `exit ${String(doctor.doctor)}`; facts.verify = Number(doctor.verify) === 0 ? 'ok' : `exit ${String(doctor.verify)}` }
+    else {
+      facts.doctor = Number(doctor.doctor) === 0 ? 'ok' : `exit ${String(doctor.doctor)}`
+      facts.verify = Number(doctor.verify) === 0 ? 'ok' : `exit ${String(doctor.verify)}`
+      // The card carries what the host said about itself, not only the exit codes: the issue asks for the doctor output.
+      state.notes.push(...hostNotes('delorun doctor', String(doctor.doctorOutput ?? '')))
+      state.notes.push(...hostNotes('delorun verify', String(doctor.verifyOutput ?? '')))
+    }
     return { status: 'pass', failures: [], facts }
   })
 }
@@ -254,7 +277,17 @@ export async function restart(state: RunState): Promise<StageResult> {
     if (!page.ok) return { status: 'fail', failures: [classifyFailure('restart', [String(page.error ?? 'the screens did not draw after the restart')])] }
     if (state.host === 'stock') return { status: 'pass', failures: [], facts: { 'config kept': true, 'off and on': 'not offered for a third-party plugin on stock' } }
     const toggled = await browse(state, 'toggle', ['--package', state.packageName])
-    if (!toggled.ok) return { status: 'fail', failures: [classifyFailure('restart', [String(toggled.error ?? 'switching the plugin off and on failed')])] }
+    if (toggled.ok !== true) return { status: 'fail', failures: [classifyFailure('restart', [String(toggled.error ?? 'switching the plugin off and on failed')])], facts: { 'config kept': true } }
+    if (toggled.restored !== true) {
+      // The studio took the switch off and would not put it back: the plugin is not at fault, but it is no longer loaded,
+      // so every later stage would measure a home without it.
+      state.pluginOn = false
+      return {
+        status: 'fail',
+        failures: [{ signature: 'the studio switched the plugin off and would not switch it back on', evidence: [String(toggled.refusal ?? 'the switch did not return to its first state')], cause: 'studio-switch-refused', fixClass: 'delorun-fix' }],
+        facts: { 'config kept': true, 'off and on': 'switched off, not back on' },
+      }
+    }
     return { status: 'pass', failures: [], facts: { 'config kept': true, 'off and on': 'done without a restart' } }
   })
 }
@@ -277,6 +310,7 @@ export async function readRegions(state: RunState): Promise<RegionSignature> {
  */
 export async function clashes(state: RunState): Promise<StageResult> {
   return await timed('clashes', async () => {
+    if (!state.pluginOn) return { status: 'skipped', reason: 'the studio switched the plugin off before this stage', failures: [] }
     if (state.baseline === undefined) return { status: 'skipped', reason: 'no baseline for this image', failures: [] }
     const found = compareRegions(state.baseline.regions, await readRegions(state))
     if (found.length === 0) return { status: 'pass', failures: [], facts: { regions: 'sidebar, theme and Settings unchanged' } }
@@ -304,6 +338,7 @@ export async function sampleCost(state: RunState): Promise<CostSample> {
  */
 export async function cost(state: RunState): Promise<StageResult> {
   return await timed('cost', async () => {
+    if (!state.pluginOn) return { status: 'skipped', reason: 'the studio switched the plugin off before this stage', failures: [] }
     if (state.baseline === undefined) return { status: 'skipped', reason: 'no baseline for this image', failures: [] }
     const samples: CostSample[] = []
     for (let run = 0; run < COST_RUNS; run++) samples.push(await sampleCost(state))

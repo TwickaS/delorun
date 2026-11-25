@@ -130,6 +130,41 @@ function printProfile(profile: CpuProfile): void {
   console.log(`CPU PROFILE (self ms)\n${top.map(([key, ms]) => `${ms.toFixed(0).padStart(6)}  ${key}`).join('\n')}`)
 }
 
+/** One trace event, as this harness reads it. */
+interface TraceEvent {
+  name: string
+  dur?: number
+  args?: Record<string, unknown>
+}
+
+/** The JavaScript frames that forced a layout, innermost first, from a trace event's stack. */
+function forcedBy(event: TraceEvent): string[] {
+  const stack = (event.args?.['beginData'] as { stackTrace?: Array<{ functionName?: string; url?: string; lineNumber?: number }> } | undefined)?.stackTrace
+  return (stack ?? []).slice(0, 10).map(frame => [frame.functionName ?? '(anonymous)', (frame.url ?? '').split('/').slice(-2).join('/') + ':' + String(frame.lineNumber ?? -1)].join(' '))
+}
+
+/** Print the events of one trace name that a script forced, grouped by the JavaScript that forced them. */
+function printForced(traced: readonly TraceEvent[], name: string): void {
+  const events = traced.filter(event => event.name === name && event.dur !== undefined)
+  const groups = new Map<string, { count: number; ms: number }>()
+  let forcedCount = 0
+  let forcedMs = 0
+  for (const event of events) {
+    const frames = forcedBy(event)
+    if (frames.length === 0) continue
+    forcedCount += 1
+    forcedMs += (event.dur ?? 0) / 1000
+    const key = frames.slice(0, 8).join(' <- ')
+    const group = groups.get(key) ?? { count: 0, ms: 0 }
+    group.count += 1
+    group.ms += (event.dur ?? 0) / 1000
+    groups.set(key, group)
+  }
+  const lines = [...groups.entries()].sort((left, right) => right[1].ms - left[1].ms).slice(0, 10)
+    .map(([key, group]) => group.ms.toFixed(1).padStart(8) + ' ms ' + String(group.count).padStart(5) + 'x  ' + key)
+  console.log('FORCED ' + name + ': ' + String(forcedCount) + ' of ' + String(events.length) + ', ' + forcedMs.toFixed(1) + ' ms forced by script\n' + lines.join('\n'))
+}
+
 async function measure<T>(cdp: CDPSession, action: () => Promise<T>): Promise<{ measurement: Measurement; value: T }> {
   const before = await chromiumMetrics(cdp)
   const started = performance.now()
@@ -427,7 +462,7 @@ describe('manual web performance: Multiview panes', () => {
       const traced: Array<{ name: string; dur?: number; args?: Record<string, unknown> }> = []
       if (tracing) {
         cdp.on('Tracing.dataCollected', (payload) => { traced.push(...(payload.value as typeof traced)) })
-        await cdp.send('Tracing.start', { traceConfig: { includedCategories: ['devtools.timeline', 'disabled-by-default-devtools.timeline.invalidationTracking'] } } as never)
+        await cdp.send('Tracing.start', { traceConfig: { includedCategories: ['devtools.timeline', 'disabled-by-default-devtools.timeline.invalidationTracking', 'disabled-by-default-devtools.timeline.stack'] } } as never)
       }
       if (profiling) { await cdp.send('Profiler.enable'); await cdp.send('Profiler.setSamplingInterval', { interval: 200 }); await cdp.send('Profiler.start') }
       const openStream = await measure(cdp, () => streamOnce(scaffold, page, 'MV_STREAM_OPEN'))
@@ -438,6 +473,8 @@ describe('manual web performance: Multiview panes', () => {
         await done
         const recalcs = traced.filter(event => event.name === 'UpdateLayoutTree' && event.dur !== undefined).sort((left, right) => (right.dur ?? 0) - (left.dur ?? 0)).slice(0, 8)
         console.log(`BIGGEST UpdateLayoutTree (ms, elements)\n${recalcs.map(event => `${((event.dur ?? 0) / 1000).toFixed(0)} ${JSON.stringify(event.args)}`).join('\n')}`)
+        printForced(traced, 'Layout')
+        printForced(traced, 'UpdateLayoutTree')
         const reasons = new Map<string, number>()
         for (const event of traced) {
           if (event.name !== 'StyleRecalcInvalidationTracking') continue
