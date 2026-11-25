@@ -26,6 +26,12 @@
  * the lock or a slot file without `start` counts for a process only if that process started before the file was last
  * written; a reused id of a later process, or the id of a thread of another process, holds nothing.
  *
+ * The machine's pressure is an alarm rather than a ceiling. `decide` takes the pressure the caller read (`machine.ts`),
+ * and while a resource has been over its threshold for the alarm's window it grants nothing new, with the reason
+ * `the machine is overloaded: ...`; holders keep what they have, as they do under a hold, and the requests proceed in their
+ * normal order once the pressure falls. A caller that reads no pressure, or a machine whose kernel reports none, grants as
+ * it did before: the alarm holds work only on evidence of sustained overload, never on a missing reading.
+ *
  * A machine hold stops the queue from granting anything new. `hold.json` in the same directory (`{ reason, since, allow }`)
  * makes every request wait with the reason `machine held: <reason>`, whatever slots are free, except a request whose working
  * directory is inside one of the worktree roots in `allow`; a request that records no working directory is not exempt.
@@ -43,6 +49,7 @@
  * @module @delorun/tools/checks/slots
  */
 import { z } from 'zod'
+import { describeOverload, overloadOf, type Pressure } from './machine.ts'
 import type { QueueHost } from './run-queue.ts'
 
 /** How long a waiting run sleeps between looks at the requests. */
@@ -149,6 +156,8 @@ export interface SlotState {
   readonly oldWaiting: readonly { readonly pid: number, readonly priority: number, readonly since: number }[]
   /** The machine hold, when `hold.json` exists. */
   readonly hold?: SlotHold
+  /** The machine's pressure, when the caller read it; the alarm holds new grants while a resource is over its threshold. */
+  readonly pressure?: Pressure
 }
 
 /** The hold file's name in the slots directory. */
@@ -273,9 +282,10 @@ function startedBefore(host: QueueHost, pid: number, modified: number | undefine
  * by the time it is read is skipped, not removed, since its process may have just replaced it.
  * @param host - the process and file system.
  * @param paths - the directories.
+ * @param pressure - reads the machine's pressure, for the alarm; a caller that gives none is not held by it.
  * @returns the waiting requests in serving order, the holders, and an old worktree's holder.
  */
-export function readSlots(host: QueueHost, paths: SlotPaths): SlotState {
+export function readSlots(host: QueueHost, paths: SlotPaths, pressure?: () => Pressure | undefined): SlotState {
   const { fs } = host
   const waiting: SlotRequest[] = []
   const holders: SlotHolder[] = []
@@ -315,7 +325,8 @@ export function readSlots(host: QueueHost, paths: SlotPaths): SlotState {
   const lock = Number(fs.read(paths.oldLock))
   const hold = readHold(host, paths)
   const oldHolder = old[0] ?? (Number.isInteger(lock) && lock > 0 && lock !== host.pid && !granted.has(lock) && holds(lock, paths.oldLock) ? lock : undefined)
-  return { waiting, holders, oldWaiting, ...oldHolder === undefined ? {} : { oldHolder }, ...hold === undefined ? {} : { hold } }
+  const read = pressure?.()
+  return { waiting, holders, oldWaiting, ...oldHolder === undefined ? {} : { oldHolder }, ...hold === undefined ? {} : { hold }, ...read === undefined ? {} : { pressure: read } }
 }
 
 /**
@@ -328,6 +339,10 @@ export function readSlots(host: QueueHost, paths: SlotPaths): SlotState {
 export function decide(state: SlotState, pid: number, budget: SlotBudget): { readonly slots: number, readonly memoryBytes: number } | { readonly waits: string } {
   // A held machine grants nothing new to a request outside the allowed worktrees; holders keep what they have.
   if (state.hold !== undefined && !allowed(state.hold, state.waiting.find(request => request.pid === pid)?.cwd)) return { waits: `machine held: ${state.hold.reason}` }
+  // The alarm holds every new grant while the machine has been overloaded for its window. Holders are never interrupted:
+  // the pressure falls as they finish, and the waiting requests then proceed in their normal order.
+  const overload = overloadOf(state.pressure)
+  if (overload !== undefined) return { waits: describeOverload(overload) }
   if (state.oldHolder !== undefined) return { waits: `an old worktree's run in process ${String(state.oldHolder)} holds the machine` }
   let slots = budget.slots - state.holders.reduce((sum, holder) => sum + holder.slots, 0)
   let memory = budget.memoryBytes - state.holders.reduce((sum, holder) => sum + holder.memoryBytes, 0)
@@ -438,9 +453,10 @@ export function stepsBack(state: SlotState, pid: number, budget: SlotBudget): bo
  * @param paths - the directories.
  * @param budget - the machine's budget.
  * @param demand - what the run asks for.
+ * @param pressure - reads the machine's pressure for the alarm; a caller that gives none is not held by it.
  * @returns the grant.
  */
-export async function takeSlots(host: QueueHost, paths: SlotPaths, budget: SlotBudget, demand: SlotDemand): Promise<SlotGrant> {
+export async function takeSlots(host: QueueHost, paths: SlotPaths, budget: SlotBudget, demand: SlotDemand, pressure?: () => Pressure | undefined): Promise<SlotGrant> {
   const { fs } = host
   fs.ensureDir(paths.dir)
   fs.ensureDir(paths.oldQueue)
@@ -470,13 +486,13 @@ export async function takeSlots(host: QueueHost, paths: SlotPaths, budget: SlotB
   let said: string | undefined
   let lastReport = since
   for (;;) {
-    const state = readSlots(host, paths)
+    const state = readSlots(host, paths, pressure)
     const decision = decide(state, host.pid, budget)
     if ('slots' in decision) {
       write(held, { pid: host.pid, ...start === undefined ? {} : { start }, slots: decision.slots, memoryBytes: decision.memoryBytes, disk: demand.disk, priority: demand.priority, label: demand.label, since: host.now(), requested: since })
       fs.remove(request)
       // Another run may have claimed in the same instant: the later claim on each overfilled resource steps back.
-      const after = readSlots(host, paths)
+      const after = readSlots(host, paths, pressure)
       if (!stepsBack(after, host.pid, budget)) {
         fs.remove(directory)
         fs.rename(waitingTicket, ticket)
@@ -510,6 +526,8 @@ export interface BudgetOrigin {
   readonly overrides: readonly string[]
   /** The disk's `rotational` flag, or undefined where the machine reports none. */
   readonly rotational?: boolean
+  /** A declared figure far above the hardware, which the queue reports rather than overrides. */
+  readonly warning?: string
 }
 
 /**
@@ -539,7 +557,10 @@ export function describeSlots(state: SlotState, budget: SlotBudget, now: number,
   const gib = (bytes: number): string => `${(bytes / 1024 ** 3).toFixed(1)} GiB`
   const used = state.holders.reduce((sum, holder) => sum + holder.slots, 0)
   const lines = state.hold === undefined ? [] : describeHold(state.hold, now)
+  const overload = overloadOf(state.pressure)
+  if (overload !== undefined) lines.push(`alarm: ${describeOverload(overload)}; new grants wait, holders keep theirs`)
   lines.push(`slots: ${String(used)} of ${String(budget.slots)} held, ${String(budget.diskRuns)} disk-heavy places, ${gib(budget.memoryBytes)} of memory; ${String(state.waiting.length)} waiting`)
+  if (origin !== undefined && origin.warning !== undefined) lines.push(`  warning: ${origin.warning}`)
   if (origin !== undefined) lines.push(`  ${describeBudgetOrigin(budget, origin)}`)
   if (state.oldHolder !== undefined) lines.push(`  an old worktree's run in process ${String(state.oldHolder)} holds the whole machine`)
   if (state.oldWaiting.length > 0) lines.push(`  ${String(state.oldWaiting.length)} run(s) of old worktrees wait in the previous queue`)

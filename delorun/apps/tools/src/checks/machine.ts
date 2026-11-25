@@ -368,3 +368,131 @@ export function ioPressure(read: (path: string) => string): number | undefined {
     return undefined
   }
 }
+
+/** The resources whose pressure the alarm reads, each from its own file under `/proc/pressure`. */
+export const PRESSURE_RESOURCES = ['cpu', 'memory', 'io'] as const
+
+/** A resource whose pressure the alarm reads. */
+export type PressureResource = typeof PRESSURE_RESOURCES[number]
+
+/** The windows the kernel averages pressure over, in seconds. */
+export const PRESSURE_WINDOWS = [10, 60, 300] as const
+
+/** A window the kernel averages pressure over, in seconds. */
+export type PressureWindow = typeof PRESSURE_WINDOWS[number]
+
+/** One resource's pressure, as `/proc/pressure/<resource>` reports it. */
+export interface PressureReading {
+  /** The share of the window in which some task stalled, as a percentage. */
+  readonly some: number
+  /** The share of the window in which every task stalled, as a percentage; 0 where the kernel reports none. */
+  readonly full: number
+}
+
+/** The machine's pressure, by resource and window. */
+export type Pressure = Readonly<Record<PressureResource, Readonly<Record<PressureWindow, PressureReading>>>>
+
+/**
+ * The pressure a `/proc/pressure/<resource>` file reports, for each window it names.
+ * @param text - the file's text.
+ * @returns the readings by window, or undefined when the text names no window.
+ */
+export function parsePressure(text: string): Readonly<Record<PressureWindow, PressureReading>> | undefined {
+  // Each line is one kind of stall, `some` or `full`, followed by a reading for every window: `some avg10=0.66 avg60=1.29
+  // avg300=3.55 total=...`. The kind is named once, so the windows are read from the line it heads.
+  const line = (kind: 'some' | 'full'): Map<number, number> => {
+    const found = new Map<number, number>()
+    for (const entry of text.split('\n')) {
+      if (!entry.startsWith(kind)) continue
+      for (const [, window, value] of entry.matchAll(/avg(\d+)=([\d.]+)/g)) found.set(Number(window), Number(value))
+    }
+    return found
+  }
+  const some = line('some')
+  const full = line('full')
+  const readings: Partial<Record<PressureWindow, PressureReading>> = {}
+  for (const window of PRESSURE_WINDOWS) {
+    const stalled = some.get(window)
+    if (stalled === undefined) continue
+    readings[window] = { some: stalled, full: full.get(window) ?? 0 }
+  }
+  const [ten, sixty, threeHundred] = PRESSURE_WINDOWS.map(window => readings[window])
+  return ten === undefined || sixty === undefined || threeHundred === undefined ? undefined : { 10: ten, 60: sixty, 300: threeHundred }
+}
+
+/**
+ * The machine's pressure on every resource the alarm reads. A resource the kernel does not report is left out, so a
+ * machine without pressure stall information yields no pressure at all rather than a false calm.
+ * @param read - reads a file, or throws when there is none.
+ * @returns the pressure, or undefined where the kernel reports none.
+ */
+export function readPressure(read: (path: string) => string): Pressure | undefined {
+  const readOne = (resource: PressureResource): Readonly<Record<PressureWindow, PressureReading>> | undefined => {
+    try {
+      return parsePressure(read(`/proc/pressure/${resource}`))
+    } catch (error) {
+      // ENOENT: not Linux, or a kernel without pressure stall information.
+      void error
+      return undefined
+    }
+  }
+  const [cpu, memory, io] = PRESSURE_RESOURCES.map(readOne)
+  return cpu === undefined || memory === undefined || io === undefined ? undefined : { cpu, memory, io }
+}
+
+/**
+ * The share of the window in which some task stalled on a resource, which is the figure the alarm reads: `some` counts a
+ * machine that is still serving other work, where `full` counts only one where nothing ran at all.
+ * @param pressure - the machine's pressure.
+ * @param resource - the resource.
+ * @param window - the window, in seconds.
+ * @returns the percentage, or undefined when the kernel reports no such reading.
+ */
+export function pressureOf(pressure: Pressure | undefined, resource: PressureResource, window: PressureWindow): number | undefined {
+  return pressure?.[resource]?.[window].some
+}
+
+/**
+ * The threshold above which a resource counts as overloaded, as a percentage of the window. The figures are far above the
+ * baseline this machine runs at (cpu `some avg300` 12%, memory `full avg300` 0.11%, io `some avg300` 0.27%), so ordinary
+ * work never reaches them: cpu at 50% of a five-minute window means half the machine's time was spent waiting for a CPU,
+ * memory at 10% means the kernel was reclaiming for a tenth of it, and io at 50% means the disk was the limit throughout.
+ */
+export const OVERLOAD_PERCENT: Readonly<Record<PressureResource, number>> = { cpu: 50, memory: 10, io: 50 }
+
+/** The window the alarm averages over: five minutes, so a spike of a few seconds never trips it. */
+export const ALARM_WINDOW: PressureWindow = 300
+
+/** Why the alarm is on, or undefined when the machine is not overloaded. */
+export interface Overload {
+  /** The resources over their threshold, with the share of the window each stalled for. */
+  readonly resources: readonly { readonly resource: PressureResource, readonly percent: number, readonly threshold: number }[]
+  /** The window the figures are averaged over, in seconds. */
+  readonly window: PressureWindow
+}
+
+/**
+ * Whether the machine has been overloaded for the alarm's window, and on what. A resource the kernel does not report is
+ * not overloaded: the alarm holds new grants only on evidence, never on a missing reading.
+ * @param pressure - the machine's pressure, or undefined where the kernel reports none.
+ * @param thresholds - the threshold of each resource, as a percentage; {@link OVERLOAD_PERCENT} by default.
+ * @param window - the window to average over; {@link ALARM_WINDOW} by default.
+ * @returns the overload, or undefined when no resource is over its threshold.
+ */
+export function overloadOf(pressure: Pressure | undefined, thresholds: Readonly<Record<PressureResource, number>> = OVERLOAD_PERCENT, window: PressureWindow = ALARM_WINDOW): Overload | undefined {
+  const resources = PRESSURE_RESOURCES.flatMap((resource) => {
+    const percent = pressureOf(pressure, resource, window)
+    return percent === undefined || percent < thresholds[resource] ? [] : [{ resource, percent, threshold: thresholds[resource] }]
+  })
+  return resources.length === 0 ? undefined : { resources, window }
+}
+
+/**
+ * The line that says why the alarm holds new grants, for a wait report and `--queue`.
+ * @param overload - the overload.
+ * @returns such as `the machine is overloaded: cpu 61.2% of the last 300 s (over 50%)`.
+ */
+export function describeOverload(overload: Overload): string {
+  const parts = overload.resources.map(({ resource, percent, threshold }) => `${resource} ${percent.toFixed(1)}% of the last ${String(overload.window)} s (over ${String(threshold)}%)`)
+  return `the machine is overloaded: ${parts.join(', ')}`
+}

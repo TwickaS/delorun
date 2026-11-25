@@ -99,6 +99,27 @@ export function diskRunsFor(rotational: boolean | undefined): number {
 }
 
 /**
+ * How far above the hardware a declared slot count may go before the queue says so. A generous ceiling is meant to sit near
+ * the machine and rarely bind; a figure several times the CPUs is not a ceiling at all, and it also distorts the memory
+ * arithmetic, since a request that declares no memory is reserved its slots' share of the budget (`slots.ts`).
+ */
+export const SLOTS_CEILING_FACTOR = 2
+
+/**
+ * The line that says a declared slot count is far above the hardware, or undefined when it is not. The figure is the
+ * owner's to set, so the queue reports the mismatch rather than overriding it: a count left over from a larger machine
+ * overfills this one, and the memory arithmetic follows the count rather than the machine.
+ * @param budget - the machine's budget.
+ * @param cpus - the CPUs this process may use.
+ * @returns the warning, or undefined when the count is within {@link SLOTS_CEILING_FACTOR} times the CPUs.
+ */
+export function budgetWarning(budget: SlotBudget, cpus: number): string | undefined {
+  const ceiling = Math.max(1, cpus * SLOTS_CEILING_FACTOR)
+  if (budget.slots <= ceiling) return undefined
+  return `${SLOTS_ENV}=${String(budget.slots)} is ${(budget.slots / cpus).toFixed(1)} times this machine's ${String(cpus)} CPUs: set it near the hardware, or the queue overfills the machine and reserves memory by a share of a budget it does not have`
+}
+
+/**
  * The machine's budget: `DELORUN_CHECKS_SLOTS` CPU slots, else the CPUs; `DELORUN_CHECKS_MEMORY_GIB` of memory, else the
  * memory the runner budgets; and `DELORUN_CHECKS_DISK_RUNS` disk-heavy places, else what the disk takes.
  * @param cpus - the CPUs this process may use.
