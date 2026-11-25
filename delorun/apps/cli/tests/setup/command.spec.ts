@@ -129,7 +129,7 @@ describe('delorun setup', { timeout: 60_000 }, () => {
   it('a run without a terminal takes the safe defaults, as --yes does, instead of refusing', async () => {
     expect(await setupCommand.run([], context)).toBe(EXIT.ok)
     expect(lines.join('')).toContain('Delorun is set up. Nothing is running yet.')
-    expect(lines.join('')).toContain('Add your model key in the studio (the welcome screen asks for it), or run delorun setup key.')
+    expect(lines.join('')).toContain('Add your model key in the studio (the first-run guide\'s Models step asks for it), or run delorun setup key.')
   })
 
   it('a run without a terminal takes --provider and its flags like --yes', async () => {

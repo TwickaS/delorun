@@ -251,6 +251,19 @@ describe('a start\'s announcement', TIMEOUT, () => {
       'err No browser took the studio link. Run delorun open --print for a link that signs in once, within one minute.\n',
     ])
   })
+
+  it('names the printed link alone where there is no browser, so the hint never contradicts it', async () => {
+    const written: string[] = []
+    const output = { stdout: (text: string) => void written.push(`out ${text}`), stderr: (text: string) => void written.push(`err ${text}`) }
+    const noBrowser = { ...browserOpener([]), canOpen: () => false, link: vi.fn() }
+    await announceStudio(home, PROFILE, true, output, noBrowser)
+    expect(written).toEqual(['err There is no browser to open here. Run delorun open --print for a link that signs in once, within one minute.\n'])
+    expect(noBrowser.link).not.toHaveBeenCalled()
+    // A start that was not asked to open the studio still names the command, which works from a browser elsewhere.
+    written.length = 0
+    await announceStudio(home, PROFILE, false, output, noBrowser)
+    expect(written).toEqual(['out Run delorun open to open the studio in your browser.\n'])
+  })
 })
 
 describe('a home process\'s answer', TIMEOUT, () => {

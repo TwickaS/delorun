@@ -36,7 +36,7 @@ export const en = {
   'copy.done': 'Copied',
   'copy.failed': 'Could not copy. Select the command and copy it yourself.',
 
-  'welcome.lead': 'Pick your language, then connect a model.',
+  'welcome.lead': 'Pick your language. The next step connects a model.',
   'welcome.devices': 'You can finish setup on any device signed in to your Tailscale:',
   'welcome.language': 'Language',
   'welcome.language.own': 'Show Delorun in English',
@@ -392,7 +392,7 @@ export const zh: Record<OnboardingLocaleKey, string> = {
   'copy.done': '已复制',
   'copy.failed': '无法复制。请选中命令后自行复制。',
 
-  'welcome.lead': '先选择语言，再连接模型。',
+  'welcome.lead': '先选择语言，下一步再连接模型。',
   'welcome.devices': '你可以在任何登录了你的 Tailscale 的设备上完成设置：',
   'welcome.language': '语言',
   'welcome.language.own': '用中文显示 Delorun',

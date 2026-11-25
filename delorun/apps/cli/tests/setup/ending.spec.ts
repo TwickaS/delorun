@@ -76,7 +76,7 @@ describe('the next steps', () => {
   })
 
   it('ask for a key first when no provider was chosen, and name the variable when it is unset', () => {
-    expect(steps({ modelProvider: null })).toContain('  1. Add your model key in the studio (the welcome screen asks for it), or run delorun setup key.\n  2. Start')
+    expect(steps({ modelProvider: null })).toContain('  1. Add your model key in the studio (the first-run guide\'s Models step asks for it), or run delorun setup key.\n  2. Start')
     expect(steps({}, {})).toContain('  1. Set DEEPSEEK_API_KEY in your terminal, then run delorun stop and delorun start if Delorun is running. It is the DeepSeek key you chose.')
     expect(steps({ modelProvider: { ...DEEPSEEK_ENV as NonNullable<typeof DEEPSEEK_ENV>, credential: { source: 'prompt' } } }, {})).not.toContain('Set DEEPSEEK_API_KEY')
   })
