@@ -96,12 +96,16 @@ export function createStudioRows(ctx: Context, resolveText: (text: LocalizedText
     const { busy, failed } = store.getSnapshot()
     store.set({ rows, ...busy === undefined ? {} : { busy }, ...failed === undefined ? {} : { failed } })
   }
-  // The Host announces every change to the profile's rows, including the one this surface writes.
-  ctx.effect(() => {
-    const stop = ctx.get('remote')?.$on('plugin-manager/changed', () => { void read() })
-    return () => { stop?.() }
-  }, 'delorun-theme: the studio plugins follow the profile')
-  void read()
+  // The read waits for the plugin manager: the theme loads before the Remote assembly mounts its namespaces, so a read
+  // taken at registration would find no manager and never try again. The Host then announces every change to the
+  // profile's rows, including the one this surface writes.
+  ctx.inject(['remote.pluginManager'], (ready) => {
+    ready.effect(() => {
+      const stop = ready.get('remote')?.$on('plugin-manager/changed', () => { void read() })
+      return () => { stop?.() }
+    }, 'delorun-theme: the studio plugins follow the profile')
+    void read()
+  })
   return {
     hooks: { rows: store },
     setEnabled: (rowId, enabled) => {
