@@ -21,6 +21,7 @@ import type { DeviceId, ReachListenerId } from '@delorun/contract-admission'
 import { HOME_AUTH_FILES } from '@delorun/contract-device-approval'
 import { DELORUN_HOME_ENTRIES } from '@delorun/contract-home-layout'
 import type { DeviceRecord } from './records.ts'
+import type { TailnetPeerCheck } from './tailnet-peers.ts'
 import { CHALLENGE_LIMIT_BOUNDS, CHALLENGE_LIMIT_DEFAULTS, PAIRING_BOUNDS, PAIRING_DEFAULTS, REQUEST_DISPLAYS, resolvePairing, WINDOWLESS_MODES, type ChallengeLimits, type PairingConfig, type PairingView } from './pairing.ts'
 import type { IssuedOwnerCode } from './owner-code.ts'
 import {
@@ -387,6 +388,24 @@ export class HomeAuthService extends Service {
    */
   servedListener(listener: string): ServedListener | undefined {
     return this.core?.servedListener(listener)
+  }
+
+  /**
+   * Ask Tailscale's local API who a forwarded address is (A667), through the check a reach provider supplied.
+   * @param address - the address `tailscaled` forwarded.
+   * @returns the peer, or the refusal that says why none could be named.
+   */
+  checkTailnetPeer(address: string): Promise<TailnetPeerCheck> {
+    return this.core?.checkTailnetPeer(address) ?? Promise.resolve({ kind: 'refused', refusal: 'socket-absent', detail: 'the home has not started' })
+  }
+
+  /**
+   * Supply the Tailscale local API check, which the reach provider that serves a listener owns.
+   * @param check - the check, or undefined to corroborate no address.
+   * @returns the disposer, which restores the previous check.
+   */
+  supplyTailnetCheck(check: ((address: string) => Promise<TailnetPeerCheck>) | undefined): () => void {
+    return this.core?.supplyTailnetCheck(check) ?? (() => {})
   }
 
   /**

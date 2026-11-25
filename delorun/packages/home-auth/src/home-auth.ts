@@ -53,6 +53,7 @@ import { SESSION_TOKEN_BYTES, hashSecret, newSecret, systemRandom, type RandomBy
 import { loadHomeKey, type HomeKey } from './home-key.ts'
 import { Challenges, signInVerifies } from './sign-in.ts'
 import type { SecretSink } from '@delorun/contract-operational-logs'
+import type { TailnetPeerCheck } from './tailnet-peers.ts'
 
 /** The length of one claim attempt window: a minute, which is C5's owner claim limit. */
 const CLAIM_WINDOW_MS = 60 * 1000
@@ -265,6 +266,8 @@ export class HomeAuth {
   private readonly random: RandomBytes
   private readonly secrets: SecretSink | undefined
   private readonly served = new Map<ReachListenerId, ServedListener>()
+  /** The Tailscale local API check a reach provider supplied, or undefined when none did. */
+  private tailnetCheck: ((address: string) => Promise<TailnetPeerCheck>) | undefined
   private readonly challenges: Challenges
   /** The approval window and its requests. */
   readonly approvals: Approvals
@@ -831,6 +834,29 @@ export class HomeAuth {
    */
   servedListener(listener: string): ServedListener | undefined {
     return this.served.get(listener as ReachListenerId)
+  }
+
+  /**
+   * Ask Tailscale's local API who a forwarded address is (A667). The reach provider that owns the Tailscale dependency
+   * supplies this; without one the home corroborates no address, so every device keeps today's behaviour.
+   * @param address - the address `tailscaled` forwarded.
+   * @returns the peer, or the refusal that says why none could be named.
+   */
+  checkTailnetPeer(address: string): Promise<TailnetPeerCheck> {
+    return this.tailnetCheck === undefined
+      ? Promise.resolve({ kind: 'refused', refusal: 'socket-absent', detail: 'no reach provider supplies the Tailscale check' })
+      : this.tailnetCheck(address)
+  }
+
+  /**
+   * Supply the Tailscale local API check, which the reach provider that serves a listener owns.
+   * @param check - the check, or undefined to corroborate no address.
+   * @returns the disposer, which restores the previous check.
+   */
+  supplyTailnetCheck(check: ((address: string) => Promise<TailnetPeerCheck>) | undefined): () => void {
+    const previous = this.tailnetCheck
+    this.tailnetCheck = check
+    return () => { this.tailnetCheck = previous }
   }
 
   /**

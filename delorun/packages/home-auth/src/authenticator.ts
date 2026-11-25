@@ -48,6 +48,10 @@ import { COMPUTER_ONLY_ROW_MODULES, createReachAccessPolicy, protectedPluginsIn,
 import { reachesDevicePath } from './reach-paths.ts'
 import { HOME_AUTH_HTTP_STATUS, HomeAuthError } from './errors.ts'
 import { takeUnlockToken } from './unlock-token.ts'
+import { TailnetPeerCache } from './tailnet-peers.ts'
+
+/** The header `tailscaled` writes the peer's own tailnet address into on every request it proxies. */
+export const FORWARDED_FOR_HEADER = 'x-forwarded-for'
 
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface RemoteErrorDetailsMap {
@@ -109,6 +113,18 @@ export interface ReachPeer {
   readonly factor: IdentityFactor
   /** The PIN mode page unlock this Peer, one page's, was admitted under; none for a locked page. */
   readonly unlockId?: string
+  /** Whether the connection was shown to come from a device of the home's own tailnet (A666, A667). */
+  readonly tailnetPeer?: true
+}
+
+/**
+ * The peer address `tailscaled` forwarded, from the `X-Forwarded-For` header it overwrites on every request it proxies.
+ * @param request - the request.
+ * @returns the address, or undefined when the header names none.
+ */
+export function forwardedPeerOf(request: ConnectionIndexRequest): string | undefined {
+  const value = headerOf(request, FORWARDED_FOR_HEADER).split(',')[0]?.trim() ?? ''
+  return value === '' ? undefined : value
 }
 
 /**
@@ -262,12 +278,17 @@ export class HomeAuthAuthenticator extends Authenticator {
 
   private readonly peers = new Map<string, PeerScope>()
   private readonly reachPeers = new Map<PeerId, ReachPeer>()
+  /** The corroborated tailnet peers, by forwarded address; empty until a provider supplies the check. */
+  private readonly tailnetPeers: TailnetPeerCache
 
   /**
    * @param ctx - the plugin context, which injects `homeAuth` and `connection`.
    */
   constructor(ctx: Context) {
     super(ctx)
+    // The check is supplied by the reach provider that serves the listener, which owns the Tailscale dependency; without
+    // one no address is ever corroborated, so every device keeps today's behaviour.
+    this.tailnetPeers = new TailnetPeerCache(address => ctx.homeAuth.checkTailnetPeer(address))
     ctx.effect(() => () => {
       for (const peer of this.peers.values()) void peer.dispose()
       this.peers.clear()
@@ -419,15 +440,21 @@ export class HomeAuthAuthenticator extends Authenticator {
         return refused('UNLOCK_INVALID')
       }
     }
-    const key = `${served.listener}\u0000${session.deviceId}\u0000${unlockId ?? ''}`
+    // A666, A667: whether this connection was shown to come from a device of the home's own tailnet. The answer is read
+    // from memory, because admission is synchronous; a miss asks the daemon for the next request from that address and
+    // leaves this one with today's behaviour, so a Tailscale that cannot answer never widens what a device may do.
+    const forwarded = forwardedPeerOf(request)
+    const tailnetPeer = forwarded === undefined ? undefined : this.tailnetPeers.peerOf(forwarded)
+    if (forwarded !== undefined && tailnetPeer === undefined) void this.tailnetPeers.refresh(forwarded)
+    const key = `${served.listener}\u0000${session.deviceId}\u0000${unlockId ?? ''}\u0000${tailnetPeer === undefined ? '' : 'tailnet'}`
     let peer = this.peers.get(key)
     if (peer === undefined) {
-      peer = this.ctx.connection.createPeer({ principal: reachDevicePrincipal(session.deviceId, served.listener, unlockId) })
+      peer = this.ctx.connection.createPeer({ principal: reachDevicePrincipal(session.deviceId, served.listener, unlockId, tailnetPeer === undefined ? undefined : true) })
       this.peers.set(key, peer)
       // The holds a Peer's grants opened end with the Peer.
       const holder = { deviceId: session.deviceId, listener: served.listener, unlockId }
       peer.signal.addEventListener('abort', () => { this.ctx.homeAuth.faceGrants()?.endPeer(holder) }, { once: true })
-      this.reachPeers.set(peer.id, { deviceId: session.deviceId, listener: served.listener, factor: session.factor, ...unlockId === undefined ? {} : { unlockId } })
+      this.reachPeers.set(peer.id, { deviceId: session.deviceId, listener: served.listener, factor: session.factor, ...unlockId === undefined ? {} : { unlockId }, ...tailnetPeer === undefined ? {} : { tailnetPeer: true } })
     }
     const rolled = admission.rolled
     return {

@@ -2,6 +2,86 @@
   "$comment": "Documented exceptions to the infrastructure gate. Each entry names a repository-relative path, the exact identifier it may hold, and the reason it is not a deployment's identifier.",
   "entries": [
     {
+      "path": "delorun/packages/home-auth/tests/tailnet-peer-trust.spec.ts",
+      "value": "100.64.0.1",
+      "reason": "The first address of the tailnet range, used as a stand-in peer address in the corroborated-peer cache's tests; it names no deployment."
+    },
+    {
+      "path": "delorun/packages/home-auth/tests/tailnet-peer-trust.spec.ts",
+      "value": "phone.tailnet.ts.net",
+      "reason": "A stand-in MagicDNS name for a tailnet device in the peer's tests; it names no deployment."
+    },
+    {
+      "path": "delorun/packages/reach/src/tailnet-peer.ts",
+      "value": "fd7a:115c:a1e0::",
+      "reason": "The tailnet's IPv6 range, named in the address test's documentation comment; it is the range, not a device."
+    },
+    {
+      "path": "delorun/packages/reach/tests/tailnet-peer.spec.ts",
+      "value": "100.101.102.103",
+      "reason": "A stand-in tailnet peer address in the local API check's tests; it names no deployment."
+    },
+    {
+      "path": "delorun/packages/reach/tests/tailnet-peer.spec.ts",
+      "value": "100.64.0.1",
+      "reason": "The first address of the tailnet range, asserted to be inside it by the address test; it names no deployment."
+    },
+    {
+      "path": "delorun/packages/reach/tests/tailnet-peer.spec.ts",
+      "value": "100.63.0.1",
+      "reason": "The address just below the tailnet range, asserted to be outside it by the address test."
+    },
+    {
+      "path": "delorun/packages/reach/tests/tailnet-peer.spec.ts",
+      "value": "100.63.255.255",
+      "reason": "The last address below the tailnet range, asserted to be outside it by the address test."
+    },
+    {
+      "path": "delorun/packages/reach/tests/tailnet-peer.spec.ts",
+      "value": "100.127.255.254",
+      "reason": "The last address of the tailnet range, asserted to be inside it by the address test."
+    },
+    {
+      "path": "delorun/packages/reach/tests/tailnet-peer.spec.ts",
+      "value": "100.128.0.0",
+      "reason": "The first address above the tailnet range, asserted to be outside it by the address test."
+    },
+    {
+      "path": "delorun/packages/reach/tests/tailnet-peer.spec.ts",
+      "value": "fd7a:115c:a1e0::5b2a:1e58",
+      "reason": "A stand-in tailnet IPv6 address, asserted to be inside the range by the address test."
+    },
+    {
+      "path": "delorun/packages/reach/tests/tailnet-peer.spec.ts",
+      "value": "fd7a:115c:a1e1::1",
+      "reason": "An address just outside the tailnet's IPv6 range, asserted to be outside it by the address test."
+    },
+    {
+      "path": "delorun/packages/reach/tests/tailnet-peer.spec.ts",
+      "value": "phone.tailnet.ts.net",
+      "reason": "A stand-in MagicDNS name for a tailnet device in the peer's tests; it names no deployment."
+    },
+    {
+      "path": "delorun/packages/reach/tests/tailnet-peer.spec.ts",
+      "value": "x.ts.net",
+      "reason": "A stand-in MagicDNS name in the half-answer test; it names no deployment."
+    },
+    {
+      "path": "delorun/packages/reach/tests/tailnet-peer.spec.ts",
+      "value": "100.128.0.1",
+      "reason": "An address above the tailnet range, asserted to be refused as not a tailnet address by the address test."
+    },
+    {
+      "path": "delorun/packages/reach/tests/tailnet-peer.spec.ts",
+      "value": "10.0.0.1",
+      "reason": "A private address, asserted to be refused as not a tailnet address by the address test."
+    },
+    {
+      "path": "delorun/packages/reach/tests/tailnet-peer.spec.ts",
+      "value": "192.168.1.5",
+      "reason": "A private address, asserted to be refused as not a tailnet address by the address test."
+    },
+    {
       "path": "scripts/test-non-loopback-address.spec.ts",
       "value": "169.254.83.107",
       "reason": "A mocked link-local interface address in the probe's test; the probe must skip it."

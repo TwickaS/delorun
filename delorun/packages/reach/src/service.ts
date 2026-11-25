@@ -32,6 +32,7 @@ import {
 import { openFront, type LoopbackFront } from './front.ts'
 import { MAX_SERVE_CHECK_INTERVAL_MS, TailscalePrivateProvider, type ReachProvider, type ReachSpec } from './provider.ts'
 import { ReachError, readComputerUser, systemTailscale, type TailscaleRunner } from './tailscale.ts'
+import { checkTailnetPeer } from './tailnet-peer.ts'
 
 declare module '@deepseek-ai/cordis' {
   interface Context {
@@ -224,6 +225,10 @@ export class ReachService extends Service {
     if (!this.config.enabled) return
     this.ctx.effect(() => this.ctx.webServer.register({ kind: 'exact', path: REACH_STATUS_PATH, handler: (request, response) => { this.answerStatus(request, response).catch((error: unknown) => { this.statusFailed(response, error) }) } }), 'reach status route')
     this.ctx.effect(() => this.register(new TailscalePrivateProvider(this.tailscale())), 'reach tailscale-private provider')
+    // A666, A667: the Tailscale private listener is the only one whose connections Tailscale can name, so this provider
+    // supplies the local API check the home corroborates a forwarded address with. A home without it corroborates no
+    // address, and every device keeps today's behaviour.
+    this.ctx.effect(() => this.ctx.homeAuth.supplyTailnetCheck(address => checkTailnetPeer(address)), 'reach tailnet peer check')
     this.ctx.effect(() => async () => { await this.serialize(() => this.stopAll()) }, 'reach options')
     const rows: ReachConfigRows = {
       tailscalePrivate: { ...this.config.tailscalePrivate, address: brandString<StudioAddress>(this.config.tailscalePrivate.address) },

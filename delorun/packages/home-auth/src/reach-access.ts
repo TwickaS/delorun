@@ -62,6 +62,12 @@ export interface ReachDevicePrincipal {
    * a locked page, and every Peer without PIN mode, has none.
    */
   readonly unlockId?: string
+  /**
+   * Whether this Peer's connection was shown to come from a device of the home's own tailnet, which A666 treats as the
+   * home's own computer: its elevated actions need no unlock. The home sets it from Tailscale's local API answer for
+   * the connection's forwarded address, never from the address alone. A Peer without it keeps today's behaviour.
+   */
+  readonly tailnetPeer?: true
 }
 
 /**
@@ -69,10 +75,17 @@ export interface ReachDevicePrincipal {
  * @param deviceId - the device's id in the home's device list.
  * @param listener - the reach listener its Peer sits on.
  * @param unlockId - the page unlock the Peer was admitted under, none for a locked page.
+ * @param tailnetPeer - whether the connection was shown to come from a device of the home's own tailnet.
  * @returns the principal its Peers on that listener speak for.
  */
-export function reachDevicePrincipal(deviceId: string, listener: ReachListenerId, unlockId?: string): ReachDevicePrincipal {
-  return unlockId === undefined ? { kind: REACH_DEVICE, deviceId, listener } : { kind: REACH_DEVICE, deviceId, listener, unlockId }
+export function reachDevicePrincipal(deviceId: string, listener: ReachListenerId, unlockId?: string, tailnetPeer?: true): ReachDevicePrincipal {
+  return {
+    kind: REACH_DEVICE,
+    deviceId,
+    listener,
+    ...unlockId === undefined ? {} : { unlockId },
+    ...tailnetPeer === undefined ? {} : { tailnetPeer },
+  }
 }
 
 /**
@@ -211,18 +224,30 @@ export const REACH_ALLOWED_ACTIONS = {
   'event:schedule/changed': 'refresh the scheduled follow-ups',
 } as const satisfies Readonly<Record<RemoteAccessAction, string>>
 
-const ACCOUNT = 'account sign-in is off in Delorun, and an account change belongs to the home\'s own computer'
 const OPEN_ON_COMPUTER = 'opens an application on the home\'s computer, which a device has no use for'
+const ACCOUNT = 'account sign-in is off in Delorun, and an account change belongs to the home\'s own computer'
 
 /**
  * Every action a device never takes over a reach listener, unlocked or not, with why it belongs to the home's own
- * computer: each reaches the home's credentials or account, or acts on the computer's own screen. A full-access grant,
- * device approval and starting or extending an unlock are refused at their own routes and guards, outside these tables.
- * The refusal names the action; this table tells a deliberate refusal from an action nobody classified. It is fixed in
- * code: no configuration moves an action out of it.
+ * computer (A666, A678).
+ *
+ * A666 makes a tailnet peer the home's own computer, so this table is what genuinely belongs to that computer and not
+ * to a device: who can get in, what the home exposes, and the computer's own screen. It is deliberately short. The
+ * actions that reach the home's credentials, its account or its own screen are here; the actions that merely widen what
+ * the agent can reach are in {@link REACH_ELEVATED_ACTIONS}, where a tailnet peer takes them without an unlock.
+ *
+ * The rows that decide who can get in — approving a device, adding a passkey, the PIN, an elevation, remote access, the
+ * gate and reach rows, the home-auth and reach settings, and the Delorun home itself — are refused at their own routes
+ * and guards as well, outside these tables. This table is the Remote methods and forwarded events; it is fixed in code,
+ * and no configuration moves an action out of it.
  */
 export const REACH_DENIED_ACTIONS = {
   'settings/openSettingsDocument': 'opens the settings document in an editor on the home\'s computer, which a device has no use for',
+  'session/openWorkspacePath': OPEN_ON_COMPUTER,
+  'session/workspacePathApplications': OPEN_ON_COMPUTER,
+  // A678 keeps these classified rather than dropped: Delorun's own profiles disable the account service, so the methods
+  // never register there, but a composition that mounts it — the denial suite's, and upstream's parity profile — still
+  // has to name them, and a refusal that names an action is what tells a deliberate refusal from an unclassified one.
   'account/getNotificationContent': ACCOUNT,
   'account/getNotifications': ACCOUNT,
   'account/reportNotificationEvent': ACCOUNT,
@@ -237,9 +262,7 @@ export const REACH_DENIED_ACTIONS = {
   'account/watchExpiry': ACCOUNT,
   'event:deepseek-account/session-expired': ACCOUNT,
   'event:deepseek-account/model-sign-in-required': ACCOUNT,
-  'session/openWorkspacePath': OPEN_ON_COMPUTER,
-  'session/workspacePathApplications': OPEN_ON_COMPUTER,
-} as const satisfies Readonly<Record<RemoteAccessAction, string>>
+} as const satisfies Partial<Readonly<Record<RemoteAccessAction, string>>>
 
 /**
  * The actions of {@link REACH_DENIED_ACTIONS} that dangerous mode lifts for a device that holds an unlock. None: opening a
@@ -1162,6 +1185,14 @@ export function createCondition(
 ): ReachCondition {
   const { deviceId, listener, unlockId } = principal
   /**
+   * Whether this Peer's connection was shown to come from a device of the home's own tailnet (A666, A667). Such a Peer
+   * is the home's own computer, so its elevated actions need no unlock. The home sets this from Tailscale's local API
+   * answer for the connection, never from the arriving address, and a connection it could not corroborate keeps the
+   * unlock. It lifts the unlock alone: {@link REACH_DENIED_ACTIONS} stays refused, and every computer-only switch,
+   * protected row and default-permission refusal below still decides.
+   */
+  const tailnetPeer = principal.tailnetPeer === true
+  /**
    * The running unlock this principal's Peer holds: its page's under PIN mode, otherwise the device's.
    * @returns the unlock's id, or undefined.
    */
@@ -1178,6 +1209,17 @@ export function createCondition(
    * @returns the refusal, or undefined when an unlock admits it.
    */
   const unlocked = (action: RemoteAccessAction, reason: string, call: boolean, scope: string, args?: unknown, row = `remote:${action}`): RemoteAccessDecision | undefined => {
+    // A666: a tailnet peer is the home's own computer, so an elevated action needs no unlock. This is checked before the
+    // grant store, because the person at the computer is asked for nothing either. It admits the action and nothing
+    // else: the refusals decided before this call, and every one after it, still decide.
+    //
+    // A677 keeps two things gated for a tailnet peer, because a shell is what would otherwise make the "who can get in"
+    // rows reachable: a terminal, which is a shell outside the sandbox, and the answer that grants full access. Both
+    // fall through to the unlock below, so they need a grant or an unlock as they do today.
+    if (tailnetPeer && !TAILNET_GATED_ACTIONS.has(action)) {
+      if (call) facts.logElevated(`home-auth: tailnet peer action: device=${deviceId} listener=${listener} action=${action}`)
+      return undefined
+    }
     const faced = facts.faceGrants?.()
     // A face action is admitted by a grant for exactly this call, from Face ID or, on a device with no passkey, from its
     // PIN (A483), or by the device's Face ID pass on this listener when its row allows one (A499); no unlock window, code or approval grace admits it.
@@ -1265,7 +1307,7 @@ export function createCondition(
       const refused = unlocked(action, `elevation-required: ${action}`, args !== undefined, scope, args)
       if (refused !== undefined) return refused
     }
-    if (KEY_SET.has(action) && facts.unlockModeEnabled()) {
+    if (KEY_SET.has(action) && facts.unlockModeEnabled() && !tailnetPeer) {
       const faced = facts.faceGrants?.()
       if (faced !== undefined) {
         // Saving or removing a key needs a grant for this call, whatever the page's PIN unlock says (A483: never a
@@ -1346,6 +1388,19 @@ const FACE_KEY_ACTIONS: ReadonlySet<string> = new Set(['credentials/set', 'crede
 
 /** The actions a hold never admits: a terminal is created, and a folder made, only with a grant for that call. */
 const ALWAYS_GRANTED: ReadonlySet<string> = new Set(['terminal/create', 'directoryPicker/createDirectory'])
+
+/**
+ * The actions a tailnet peer still needs an unlock for, though A666 makes it the home's own computer (A677).
+ *
+ * A terminal is a shell on the computer outside the sandbox, and a shell is what would let a device reach the rows that
+ * decide who can get in — approving a device, adding a passkey, the PIN — which A666 keeps at the computer. Gating the
+ * shell is what keeps that carve-out enforced by the tables rather than by the absence of a shell. The answer that
+ * grants full access is gated for the same reason: it removes the sandbox for a chat.
+ */
+export const TAILNET_GATED_ACTIONS: ReadonlySet<string> = new Set([
+  ...Object.keys(REACH_ELEVATED_ACTIONS).filter(action => action.startsWith('terminal/')),
+  'answer:full-access',
+])
 
 
 /** The id every `directoryPicker/*` hold carries: the picker has no id of its own, so one device holds one. */
