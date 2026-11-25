@@ -299,6 +299,58 @@ describe('file upload service', () => {
     await fiber.dispose()
   })
 
+  it('mints the Worker URL through the page\'s delorun-blob-worker policy', async () => {
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:https://harness.test/own')
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+    class FakeWorker {
+      static last: FakeWorker | undefined
+      onmessage: ((event: MessageEvent) => void) | null = null
+      onerror: ((event: ErrorEvent) => void) | null = null
+      readonly postMessage = vi.fn()
+      readonly terminate = vi.fn()
+      constructor(readonly url: string) { FakeWorker.last = this }
+    }
+    vi.stubGlobal('Worker', FakeWorker)
+    vi.stubGlobal('document', { baseURI: 'https://harness.test/mount/' })
+    const createScriptURL = vi.fn((url: string) => `trusted:${url}`)
+    ;(globalThis as { __DSH_TRUSTED_TYPES__?: unknown }).__DSH_TRUSTED_TYPES__ = { blobWorker: { createScriptURL } }
+    try {
+      const ctx = new Context()
+      const fiber = ctx.plugin(FileUploadRuntime)
+      await fiber
+      const pending = (ctx.fileUpload as FileUploadRuntime).post({ path: 'api/upload', body: new Blob(['bytes']) })
+      expect(createScriptURL).toHaveBeenCalledWith('blob:https://harness.test/own')
+      expect(FakeWorker.last?.url).toBe('trusted:blob:https://harness.test/own')
+      FakeWorker.last?.onmessage?.({ data: { kind: 'complete', status: 200, body: 'done' } } as MessageEvent)
+      await expect(pending).resolves.toEqual({ status: 200, body: 'done' })
+      await fiber.dispose()
+    } finally {
+      delete (globalThis as { __DSH_TRUSTED_TYPES__?: unknown }).__DSH_TRUSTED_TYPES__
+    }
+  })
+
+  // A page that enforces Trusted Types refuses a plain string at the constructor; the policy is the only way in.
+  it('refuses to construct a Worker when the policy refuses the blob URL, and releases the URL', async () => {
+    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:https://evil.test/foreign')
+    const revoked = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+    const constructed = vi.fn()
+    vi.stubGlobal('Worker', constructed)
+    vi.stubGlobal('document', { baseURI: 'https://harness.test/mount/' })
+    ;(globalThis as { __DSH_TRUSTED_TYPES__?: unknown }).__DSH_TRUSTED_TYPES__ = { blobWorker: { createScriptURL: () => null } }
+    try {
+      const ctx = new Context()
+      const fiber = ctx.plugin(FileUploadRuntime)
+      await fiber
+      await expect((ctx.fileUpload as FileUploadRuntime).post({ path: 'api/upload', body: new Blob(['bytes']) }))
+        .rejects.toThrow('refused by the delorun-blob-worker policy')
+      expect(constructed).not.toHaveBeenCalled()
+      expect(revoked).toHaveBeenCalledWith('blob:https://evil.test/foreign')
+      await fiber.dispose()
+    } finally {
+      delete (globalThis as { __DSH_TRUSTED_TYPES__?: unknown }).__DSH_TRUSTED_TYPES__
+    }
+  })
+
   it('transfers stream ownership to the dedicated Worker', async () => {
     vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:worker')
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})

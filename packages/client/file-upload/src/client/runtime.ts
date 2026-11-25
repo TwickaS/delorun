@@ -271,6 +271,30 @@ function customTransport(customFetch: FileUploadFetch): FileUploadTransport {
   }
 }
 
+/** The page boot's `delorun-blob-worker` Trusted Types policy, read structurally. */
+interface BlobWorkerPolicy {
+  createScriptURL(input: string): string | null
+}
+
+/**
+ * The URL to hand `new Worker`: this page's own blob URL, minted through the
+ * `delorun-blob-worker` Trusted Types policy when the page created one, and the
+ * raw URL otherwise (a browser without Trusted Types). A page that enforces
+ * Trusted Types refuses a plain string at the constructor, so the policy is the
+ * only way in.
+ * @param url - the `blob:` URL this page created for its Worker source.
+ * @returns the URL the constructor accepts.
+ * @throws Error when the policy refuses the URL.
+ */
+function workerScriptUrl(url: string): string {
+  const policy = (globalThis as { __DSH_TRUSTED_TYPES__?: { blobWorker?: BlobWorkerPolicy } })
+    .__DSH_TRUSTED_TYPES__?.blobWorker
+  if (policy === undefined) return url
+  const trusted = policy.createScriptURL(url)
+  if (trusted === null) throw new Error(`file upload: Worker URL ${url} refused by the delorun-blob-worker policy`)
+  return trusted
+}
+
 function workerTransport(): FileUploadTransport {
   return {
     post(request) {
@@ -280,7 +304,13 @@ function workerTransport(): FileUploadTransport {
       const workerUrl = URL.createObjectURL(new Blob([
         `(${fileUploadWorker.toString()})()`,
       ], { type: 'text/javascript' }))
-      const worker = new Worker(workerUrl, { name: 'dsh-file-upload' })
+      let worker: Worker
+      try {
+        worker = new Worker(workerScriptUrl(workerUrl), { name: 'dsh-file-upload' })
+      } catch (error) {
+        URL.revokeObjectURL(workerUrl)
+        return Promise.reject(error)
+      }
       URL.revokeObjectURL(workerUrl)
       return new Promise((resolve, reject) => {
         let settled = false

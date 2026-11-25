@@ -38,6 +38,31 @@ it('transfers a private copy and releases the Worker and URL after parsing', asy
   expect(vi.getTimerCount()).toBe(0)
 })
 
+it('mints the parser Worker URL through the page\'s delorun-blob-worker policy', async () => {
+  const createScriptURL = vi.fn((url: string) => `trusted:${url}`)
+    ;(globalThis as { __DSH_TRUSTED_TYPES__?: unknown }).__DSH_TRUSTED_TYPES__ = { blobWorker: { createScriptURL } }
+  try {
+    const result = parseExcel(new Uint8Array([1]), 'xlsx', limits, new AbortController().signal)
+    expect(createScriptURL).toHaveBeenCalledWith('blob:excel-test')
+    instance.onmessage!({ data: { ok: true, value: preview } })
+    await expect(result).resolves.toEqual(preview)
+  } finally {
+    delete (globalThis as { __DSH_TRUSTED_TYPES__?: unknown }).__DSH_TRUSTED_TYPES__
+  }
+})
+
+// A page that enforces Trusted Types refuses a plain string at the constructor; the policy is the only way in.
+it('reports an invalid workbook when the policy refuses the blob URL, and releases the URL', async () => {
+  ;(globalThis as { __DSH_TRUSTED_TYPES__?: unknown }).__DSH_TRUSTED_TYPES__ = { blobWorker: { createScriptURL: () => null } }
+  try {
+    await expect(parseExcel(new Uint8Array([1]), 'xlsx', limits, new AbortController().signal))
+      .rejects.toThrow('invalid')
+    expect(revokeUrl).toHaveBeenCalledWith('blob:excel-test')
+  } finally {
+    delete (globalThis as { __DSH_TRUSTED_TYPES__?: unknown }).__DSH_TRUSTED_TYPES__
+  }
+})
+
 it('does not allocate a Worker for aborted or oversized input', async () => {
   const worker = vi.fn()
   vi.stubGlobal('Worker', worker)

@@ -1,5 +1,6 @@
 /** Browser lifetime for the isolated spreadsheet parser. */
 import workerSource from './worker.ts?raw'
+import { workerScriptUrl } from '../worker-script-url.ts'
 import type { ExcelFormat } from './format.ts'
 import { EXCEL_UNSUPPORTED_FEATURES, type ExcelLimits, type ExcelPreview } from './model.ts'
 
@@ -20,7 +21,7 @@ export function parseExcel(
     const url = URL.createObjectURL(new Blob([workerSource], { type: 'text/javascript' }))
     let worker: Worker
     try {
-      worker = new Worker(url, { name: 'dsh-excel' })
+      worker = new Worker(workerScriptUrl(url), { name: 'dsh-excel' })
     } catch (error) {
       URL.revokeObjectURL(url)
       reject(new Error('invalid', { cause: error }))
