@@ -93,6 +93,7 @@ export function SubagentModelSelectionFields(props: SubagentModelSelectionFields
             {state.catalogPartial
               ? <p className={css.notice}>{t('subagentModelSelectionPartial')}</p>
               : null}
+            <p className={css.hint}>{t('subagentModelSelectionNarrowing')}</p>
             {state.candidates.length > 0
               ? (
                 <fieldset className={css.models}>
@@ -116,7 +117,6 @@ export function SubagentModelSelectionFields(props: SubagentModelSelectionFields
               : state.catalogStatus === 'ready'
                 ? <p className={css.notice}>{t('subagentModelSelectionEmpty')}</p>
                 : null}
-            {state.invalid ? <p className={css.invalid}>{t('subagentModelSelectionRequired')}</p> : null}
           </div>
         )
         : null}

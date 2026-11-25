@@ -19,9 +19,9 @@ export const AllowedModelRouteSchema: z<AllowedModelRoute> = z.object({
   model: z.string().min(1).required(),
 })
 
-/** Exact routes authorized for one Session. */
+/** Optional per-Session narrowing of the routes explicit selection may name. */
 export interface ModelSelectionPolicy {
-  /** Exact provider/model routes authorized for explicit selection. */
+  /** Exact provider/model routes this Session narrows explicit selection to. */
   readonly routes: readonly AllowedModelRoute[]
 }
 
@@ -93,8 +93,7 @@ function assertNonEmpty(value: string | undefined, field: keyof DelegationModelR
  * @param configured - Tool-instance child defaults.
  * @param request - Model-facing route override.
  * @param enabled - Whether this tool instance permits model-facing selection.
- * @param policy - Session allowlist; omission permits only the current parent route.
- * @param parentOptions - Current parent route used when no policy is recorded.
+ * @param policy - Session narrowing; omission leaves the live LLM adapter as the authority.
  * @returns Child Agent options, preserving omission when no layer contributes one.
  */
 export function requestedAgentOptions(
@@ -102,7 +101,6 @@ export function requestedAgentOptions(
   request: DelegationModelRequest,
   enabled: boolean,
   policy: ModelSelectionPolicy | undefined,
-  parentOptions: AgentOptions,
 ): AgentOptions | undefined {
   if (!hasDelegationModelRequest(request)) return configured
   if (!enabled) {
@@ -117,7 +115,7 @@ export function requestedAgentOptions(
       : 'child LLM `reasoning_effort` requires both `provider` and `model`; supply both or omit all three fields')
   }
 
-  assertAllowedModelSelection(policy, parentOptions, { provider: request.provider, model: request.model })
+  assertAllowedModelSelection(policy, { provider: request.provider, model: request.model })
   return {
     ...configured,
     provider: request.provider,
@@ -128,25 +126,21 @@ export function requestedAgentOptions(
 }
 
 /**
- * Enforce Session authorization for a complete, explicitly selected child route.
- * @param policy - Session allowlist; omission permits only the current parent route.
- * @param parentOptions - Current parent route used when no policy is recorded.
+ * Enforce a recorded Session narrowing for a complete, explicitly selected child route.
+ * A Session that recorded no policy admits the route here: the live LLM adapter
+ * decides which providers and models are configured and enabled, and
+ * {@link preflightChildLlmRoute} reports its refusal before the child exists.
+ * @param policy - Session narrowing; omission defers to the live adapter.
  * @param route - Validated provider/model pair from the tool call.
  */
 export function assertAllowedModelSelection(
   policy: ModelSelectionPolicy | undefined,
-  parentOptions: AgentOptions,
   route: AllowedModelRoute,
 ): void {
+  if (policy === undefined) return
   const { provider, model } = route
-  const allowed = policy === undefined
-    ? provider === parentOptions.provider && model === parentOptions.model
-    : policy.routes.some(route => route.provider === provider && route.model === model)
-  if (allowed) return
-  throw new Error(`child LLM route "${provider}/${model}" is not allowed for this Session`
-    + (policy === undefined
-      ? '; without a recorded model-selection policy, explicit selection is limited to the parent route'
-      : ''))
+  if (policy.routes.some(candidate => candidate.provider === provider && candidate.model === model)) return
+  throw new Error(`child LLM route "${provider}/${model}" is not allowed for this Session`)
 }
 
 /**

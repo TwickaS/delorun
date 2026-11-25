@@ -9,13 +9,14 @@ import { assertAllowedModelRoutes, type AllowedModelRoute } from './model-select
 declare module '@deepseek-ai/dsh-session/types' {
   interface SessionEventMap {
     /**
-     * Records this Session’s authorized child provider/model routes. Appended
-     * before the first model request; absence restricts explicit selection
-     * to the current parent route. Log-only: it carries
-     * no `surfaceOp` and never enters model history.
+     * Records this Session’s child provider/model narrowing. Appended before
+     * the first model request. Absence leaves the live LLM adapter as the
+     * authority, so any configured route is selectable; an empty list refuses
+     * explicit selection; a non-empty list narrows it to those routes.
+     * Log-only: it carries no `surfaceOp` and never enters model history.
      */
     'subagent/model-selection-policy': {
-      /** Exact routes this Session may select explicitly for a child. */
+      /** Routes this Session narrows explicit child selection to; empty refuses it. */
       allowedModels: AllowedModelRoute[]
     }
   }
@@ -24,7 +25,7 @@ declare module '@deepseek-ai/dsh-session/types' {
 const modelSelectionPolicySchema: zod.ZodType<AllowedModelRoute[] | null> = zod.array(zod.object({
   provider: zod.string().min(1),
   model: zod.string().min(1),
-}).strict()).min(1).nullable()
+}).strict()).nullable()
 
 /**
  * Host-only projection of the durable model-selection policy.
@@ -39,18 +40,15 @@ export const subagentModelSelectionProjectionDefinition = {
     if (policy !== null || event.type !== 'subagent/model-selection-policy') return policy
     const { allowedModels } = event.data
     assertAllowedModelRoutes(allowedModels)
-    if (allowedModels.length === 0) {
-      throw new Error('subagent/model-selection-policy requires at least one route')
-    }
     return allowedModels
   },
 } satisfies ProjectionDefinition<'subagentModelSelectionPolicy', AllowedModelRoute[] | null>
 
 /**
- * Read the exact route list authorized for a Session.
+ * Read the route narrowing recorded for a Session.
  * @param subagentModelSelectionProjectionHandle - registered policy state reader.
  * @param session - session whose durable decision is read.
- * @returns a detached route list, or undefined to restrict selection to the parent route.
+ * @returns a detached route list, or undefined when the Session recorded none.
  */
 export function subagentModelSelectionPolicy(
   subagentModelSelectionProjectionHandle: Pick<ProjectionHandle<AllowedModelRoute[] | null>, 'stateOf'>,

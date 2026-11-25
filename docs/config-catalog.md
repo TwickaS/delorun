@@ -4805,8 +4805,10 @@ export interface Config extends PresetSelectionConfig {
   toolName?: string
   /**
    * Expose optional child `provider`, `model`, and `reasoning_effort` fields.
-   * Requires provider `agentOptions` support. Execution enforces the Session
-   * policy, or restricts explicit selection to the current parent route.
+   * Defaults to true. A Session that recorded a route policy narrows explicit
+   * selection to it; otherwise the live LLM adapter decides which configured
+   * routes are reachable. A provider that cannot apply child `agentOptions`
+   * offers no route fields, and an explicit `true` against one fails the mount.
    */
   modelSelection?: boolean
   /**

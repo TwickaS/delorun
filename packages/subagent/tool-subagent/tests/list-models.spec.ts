@@ -120,7 +120,7 @@ describe('list_subagent_models', () => {
       provider: 'mock', toolName: 'other_subagent', modelSelection: true,
     })
     expect(ctx.tools.get('list_subagent_models')).toBeUndefined()
-    const discoveryConfig = { provider: 'mock', toolName: 'discovery_subagent', modelDiscovery: true }
+    const discoveryConfig = { provider: 'mock', toolName: 'discovery_subagent', modelDiscovery: true, modelSelection: false }
     const owner = await ctx.plugin(tool, discoveryConfig)
     const schemas = ctx.tools.schemas()
     expect(schemas.filter(schema => schema.name === 'list_subagent_models')).toHaveLength(1)
@@ -168,7 +168,7 @@ describe('list_subagent_models', () => {
     expect(ctx.tools.get('list_subagent_models', second.agent)).toBeUndefined()
   })
 
-  it('requires a calling Agent and an effective parent route', async () => {
+  it('requires a calling Agent and lists every configured provider without a Session policy', async () => {
     const ctx = ownContext(new Context())
     await ctx.plugin(SessionProjectionRegistry)
     await ctx.plugin(SystemPrompt)
@@ -181,14 +181,15 @@ describe('list_subagent_models', () => {
     expect(text(await call(ctx, {}))).toContain('requires a calling agent')
     await ctx.fiber.dispose()
 
-    const parentContext = await setup({ provider: 'mock', withModelSelection: true, hostSelectionEnabled: false })
+    const parentContext = await setup({ provider: 'mock', withModelSelection: true, hostPolicyRecorded: false })
     const agent = modelSelectionSetupAgent(parentContext)
+    parentContext.llm.registerAdapter(['alpha', 'beta'], new CatalogAdapter())
     const result = await executeToolFixture(parentContext, {
-      signal: testToolSignal, callId: ToolCallId('missing-parent-route'),
+      signal: testToolSignal, callId: ToolCallId('no-session-policy'),
       name: 'list_subagent_models', arguments: {}, agent,
     })
-    expect(result.isError).toBe(true)
-    expect(text(result)).toContain('without a parent provider and model')
+    expect(result.isError).toBe(false)
+    expect(text(result)).toBe('alpha — ALPHA API\nbeta — BETA API')
   })
 
   it('reads the recorded Session allowlist through the delegation plugin', async () => {
@@ -338,23 +339,23 @@ describe('list_subagent_models', () => {
     }
   })
 
-  it.each([false, true])('resolves only the current parent model without a Session policy (empty catalog: %s)', async (empty) => {
+  it.each([false, true])('lists the advertised catalog without a Session policy (empty catalog: %s)', async (empty) => {
     const ctx = await setup({
       provider: 'mock',
       withModelSelection: true,
-      hostSelectionEnabled: false,
+      hostPolicyRecorded: false,
       parentAgentOptions: { provider: 'alpha', model: 'unlisted' },
     })
     const adapter = new CatalogAdapter(empty)
-    const listModels = vi.spyOn(adapter, 'listModels')
     ctx.llm.registerAdapter(['alpha'], adapter)
     const result = await executeToolFixture(ctx, {
-      signal: testToolSignal, callId: ToolCallId('parent-only-discovery'),
+      signal: testToolSignal, callId: ToolCallId('unlisted-discovery'),
       name: 'list_subagent_models', arguments: { provider: 'alpha' }, agent: modelSelectionSetupAgent(ctx),
     })
     expect(result.isError).toBe(false)
-    expect(text(result)).toBe('alpha/unlisted — Fast: Focused work.')
-    expect(listModels).not.toHaveBeenCalled()
+    expect(text(result)).toBe(empty
+      ? '(no advertised models for alpha)'
+      : 'alpha/fast — Fast: Focused work.\nalpha/plain — Plain')
   })
 
   it('inspects exact-model efforts, descriptions, and defaults', async () => {

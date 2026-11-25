@@ -134,8 +134,9 @@ describe('SubagentModelSelectionCardController', () => {
 
     face.toggleEnabled()
 
+    // Enabling with no stored routes is a valid draft: it allows every configured model.
     expect(face.hooks.subagentModelSelectionCard.getSnapshot()).toMatchObject({
-      enabled: true, dirty: true, invalid: true,
+      enabled: true, dirty: true, invalid: false,
     })
   })
 
@@ -184,7 +185,8 @@ describe('SubagentModelSelectionCardController', () => {
     face.toggleModel('missing')
     expect(state().dirty).toBe(false)
     face.toggleModel('alpha\0fast')
-    expect(state()).toMatchObject({ dirty: true, invalid: true })
+    // Unticking every route is a valid narrowing: it allows any configured model.
+    expect(state()).toMatchObject({ dirty: true, invalid: false })
     face.discard()
     expect(state()).toMatchObject({ dirty: false, invalid: false, enabled: true })
 

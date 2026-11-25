@@ -46,7 +46,7 @@ kind: "package-reference"
 |---|---|---|
 | `provider` | 必填 | `ctx.subagents` 上的提供方名称（如 `spawn`、`fork`、`acp`） |
 | `toolName` | `subagent` | 面向模型的工具名称；每个已加载实例必须不同 |
-| `modelSelection` | `false` | 公开可选子级路由字段；要求提供方支持 `agentOptions` |
+| `modelSelection` | `true` | 公开可选子级路由字段；不支持 `agentOptions` 的提供方不公开任何路由字段，对其显式设置 `true` 会使挂载失败 |
 | `modelDiscovery` | `false` | 注册 `list_subagent_models`；每个工具作用域仅在一个实例上启用 |
 | `agentOptions` | — | 配置的子级 `provider`、`model`、适配器所有的 `reasoningEffort` 与正整数 `maxTokens` 默认值；要求提供方支持 `agentOptions`，并会覆盖提供方持有的路由默认值 |
 | `agentPreset` | — | 独立子级 preset 的默认 id；要求进程内 spawn |
@@ -74,7 +74,7 @@ kind: "package-reference"
 
 ### 选择子级 LLM
 
-设置 `modelSelection: true` 后，该实例公开可选的 `provider`、`model` 和 `reasoning_effort` 字段；未设置的实例拒绝选择字段。在每个工具作用域的一个实例上设置 `modelDiscovery: true`，以注册 `list_subagent_models`；该选项独立于 `modelSelection`，默认关闭。同一作用域的第二个发现工具所有者会注册失败。发现工具随其所属插件实例存续，在委派提供方缺席时仍然可用，并在该实例卸载时移除。Web 与 Desktop preset 为 spawn 启用发现和路由字段，为 fork 保持两者关闭。Host 的 `/model-selection-settings` 服务在 Agent 创建时读取用户偏好，与工具安装无关。创建监听器在投影注册完成前订阅并等待句柄；注册失败或所属插件卸载会使 Agent 发布失败。启用时，精确路由列表记录在每个新顶层 Session 中，由子 Session 继承，并在恢复时保留；之后的设置编辑只影响新 Session。没有已记录 Session 策略时，发现和显式选择只允许父 Agent 当前生效的 provider/model 及其支持的强度。路由字段要求后端公布 `agentOptions`；进程内 Spawn、Fork 和 DSH SDK 满足条件，ACP、Codex 和 Claude Code 会使挂载失败。
+`modelSelection` 默认开启，公开可选的 `provider`、`model` 和 `reasoning_effort` 字段；`modelSelection: false` 会隐藏并拒绝这些字段。子代理可以在任意层级，用你已配置的任意提供方和模型运行，包括与父级不同的提供方。在每个工具作用域的一个实例上设置 `modelDiscovery: true`，以注册 `list_subagent_models`；该选项独立于 `modelSelection`，默认关闭。同一作用域的第二个发现工具所有者会注册失败。发现工具随其所属插件实例存续，在委派提供方缺席时仍然可用，并在该实例卸载时移除。Web 与 Desktop preset 为 spawn 启用发现，为 fork 保持关闭。Host 的 `/model-selection-settings` 服务在 Agent 创建时读取用户偏好，与工具安装无关。创建监听器在投影注册完成前订阅并等待句柄；注册失败或所属插件卸载会使 Agent 发布失败。启用时，路由列表记录在每个新顶层 Session 中，由子 Session 继承，并在恢复时保留；之后的设置编辑只影响新 Session。已记录的空列表是一种收窄，允许全部已配置路由，由实时 LLM 适配器决定可用范围；非空列表把显式选择收窄到这些路由；未记录任何内容的 Session 同样由适配器决定。路由字段要求后端公布 `agentOptions`；进程内 Spawn、Fork 和 DSH SDK 满足条件，ACP、Codex 和 Claude Code 不公开路由字段，对其显式设置 `modelSelection: true` 会使挂载失败。
 
 一次调用需同时提供 `provider` 与 `model`；`reasoning_effort` 要求同一次调用包含这两个字段。仅指定强度的调用会在查询路由或创建子级之前被拒绝。省略全部三个字段时，保留配置的子级默认值与现有回退行为。静态的 `provider.agentRouteDefaults` 在存在时构成提供方／模型基线；工具配置与模型字段会在路由相关强度合并和确切路由预检前覆盖它。没有这些默认值的提供方会使用父 agent 最新已记录请求中的兼容值，再使用父级首次请求前的创建选项，并保留配置的 `maxTokens`。显式提供提供方／模型组合但省略强度时，会清除配置及继承的强度，即使路由未变，也由所选模型解析自己的默认值。实时 LLM 适配器在创建子 agent 前校验有效路由。目录成员资格只提供建议，因此适配器接受时，模型可以使用未列出的 id。
 
@@ -139,7 +139,7 @@ kind: "package-reference"
 
 #### 模型看到什么
 
-生成的默认 [`subagent` schema](../../../docs/tool-catalog.zh.md#deepseek-aidsh-tool-subagent) 在提供方存在时以配置的工具名公开。设置了 `modelSelection` 的实例在每个 Session 中都会增加 `provider`、`model`、`reasoning_effort` 及路由指导。`allowedAgentPresets` 增加 `agent_preset` 枚举及默认或继承选择的引导。上下文继承和继续执行能力决定任务与后续工作描述。Agent 限制同时作用于继承自 preset 的委派工具的 schema、执行入口和指导文本，恢复历史 `toolFilter` 覆盖时也相同；同级 Agent 不受影响。preset 选择提示仅依赖工具配置，因此不依赖其他 preset 的声明顺序。
+生成的默认 [`subagent` schema](../../../docs/tool-catalog.zh.md#deepseek-aidsh-tool-subagent) 在提供方存在时以配置的工具名公开。在公布 `agentOptions` 的提供方上启用 `modelSelection` 的实例，会在每个 Session 中增加 `provider`、`model`、`reasoning_effort` 及路由指导。`allowedAgentPresets` 增加 `agent_preset` 枚举及默认或继承选择的引导。上下文继承和继续执行能力决定任务与后续工作描述。Agent 限制同时作用于继承自 preset 的委派工具的 schema、执行入口和指导文本，恢复历史 `toolFilter` 覆盖时也相同；同级 Agent 不受影响。preset 选择提示仅依赖工具配置，因此不依赖其他 preset 的声明顺序。
 
 #### Token 影响
 
@@ -153,7 +153,7 @@ kind: "package-reference"
 
 #### 模型看到什么
 
-可选的 `list_subagent_models` 定义读取调用 Session 的路由策略，没有已记录策略时使用当前父级路由。可选的 `ctx.llm` 服务不可用时，调用会被拒绝。有已记录策略时，提供方模型列表取公布目录与 Session 授权路由的交集。没有策略时，只解析当前父级模型，即使目录未列出它。发现工具的描述说明何时查询子级路由或强度，并要求省略可选查询字段而不是传空字符串。委派工具各自说明选择字段及其默认行为。精确模型查询允许已授权但目录未列出的 ID；未授权的提供方／模型查询会在访问适配器前失败。目录或精确模型查询失败以及取消都会使调用被拒绝。执行过程独立强制同一策略。
+可选的 `list_subagent_models` 定义读取调用 Session 的路由收窄范围。可选的 `ctx.llm` 服务不可用时，调用会被拒绝。没有收窄范围时，它列出每个已配置提供方及其公布的模型。存在非空收窄范围时，提供方与模型列表取公布目录与这些路由的交集。发现工具的描述说明何时查询子级路由或强度，并要求省略可选查询字段而不是传空字符串。委派工具各自说明选择字段及其默认行为。精确模型查询允许目录未列出的 ID；收窄范围之外的路由会在访问适配器前失败。目录或精确模型查询失败以及取消都会使调用被拒绝。执行过程独立强制同一收窄范围。
 
 #### Token 影响
 
@@ -243,8 +243,8 @@ Delegation depth for `subagent`: current 1, maximum 1, remaining levels 0. Do no
 - **本工具不等待结果**——使用完成通知或子任务消息。程序化结果等待由 subagent 服务提供。
 - **预设选项不含描述**——`agent_preset` 只公开 id 及默认或继承提示。schema 不读取候选预设文档，因此注册不依赖它们的声明顺序。请使用能够表达各候选用途的 id。
 - **预设引用在委派时检查**——Host 挂载和预设内挂载的工具都在启动子级时解析目标。目标可以在工具注册后声明或替换，因此加载工具无法确定后续调用时目标是否可用。拼错或不可用的 id 在被选中前不会被发现；选中它的调用会返回错误。
-- **随附 fork 工具省略模型选择**：其配置保持 `modelSelection` 关闭，以保留对继承前缀的复用。自定义 fork 工具可以启用它，并接受与其他委派工具相同的 Session 授权和适配器校验。
-- **深度上限按实例固定** — 更换上限需要另一个不同名称的工具。子级角色和工具由所选 Agent Preset 配置。显式 LLM 选择需要 `modelSelection`，并受 Session 授权路由限制，没有启用策略时只允许当前父级路由。
+- **随附 fork 工具关闭模型选择**：其配置设置 `modelSelection: false`，以保留对继承前缀的复用。自定义 fork 工具可以启用它，并接受与其他委派工具相同的 Session 收窄范围和适配器校验。
+- **深度上限按实例固定** — 更换上限需要另一个不同名称的工具。子级角色和工具由所选 Agent Preset 配置。显式 LLM 选择需要 `modelSelection`，且只受非空已记录路由列表收窄；否则由实时适配器决定哪些已配置路由可用。
 
 <a id="dev-note"></a>
 ### 开发备注
