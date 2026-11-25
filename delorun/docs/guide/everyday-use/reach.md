@@ -264,6 +264,12 @@ Choose **Use PIN instead** on the sheet to confirm the same action with your PIN
 
 Cancelling the phone's own sheet counts for nothing. A wrong passkey or a wrong PIN counts as a wrong PIN try: the fifth on one phone removes that phone, and ten across all phones pause PIN and Face ID confirmations until you run `delorun devices pin resume` at your computer.
 
+**A device on your tailnet is your computer.** When a request reaches Delorun from a device on your own tailnet, Delorun asks Tailscale who that device is, on every connection, and treats it as your own computer: the actions that otherwise ask for Face ID or your PIN happen without asking. The actions that stay at your computer stay there, and so do the ones that reach your account or act on your computer's own screen.
+
+Delorun asks Tailscale's local API, which names the device and its user from Tailscale's own list of your devices. If Tailscale cannot answer — it is not running, its socket is missing, it does not know the address, or the device has left your tailnet — Delorun asks for Face ID or your PIN as it does today. It never assumes a device is on your tailnet because a request arrived.
+
+**What that check does and does not prove.** Tailscale confirms the address belongs to a device of your tailnet, so a request claiming an address that is not one of your devices is refused. It does not prove the request came from that device: the port Tailscale forwards to on your computer can be reached by any program running as your own user, and such a program can claim any address. That is not a new risk — a program running as your user can already open the studio on your computer directly — but it is why Delorun describes the device as confirmed by Tailscale, not as proven.
+
 **What Face ID does not do.**
 
 - It does not sign a phone in. The phone's own key and your approval still do that.

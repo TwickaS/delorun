@@ -12,6 +12,12 @@
  * that does not answer, an address the daemon does not know, and a device whose key has expired or that left the
  * tailnet. {@link checkTailnetPeer} returns the refusal as a value, so a caller cannot mistake one for a peer.
  *
+ * **What this proves, and what it does not.** The daemon corroborates the address against its own netmap, so a header
+ * naming a device that is not in the tailnet is refused. It does not prove the request came from that device: the fixed
+ * listener port on `127.0.0.1` is reachable by every process of the person's user, and such a process can send the
+ * header itself. That is not a widening of the trust boundary — that user can already reach the studio on the loopback
+ * listener — but it is why a peer is described as corroborated, never as cryptographically proven.
+ *
  * @module @delorun/reach/tailnet-peer
  */
 import { request } from 'node:http'

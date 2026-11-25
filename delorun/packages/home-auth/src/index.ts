@@ -126,6 +126,7 @@ export {
   type HomeAuthLocalCode,
 } from './errors.ts'
 export { AttemptLimiter, type AttemptLimiterOptions } from './rate-limit.ts'
+export { PEER_CACHE_TTL_MS, TailnetPeerCache, type TailnetPeer, type TailnetPeerCheck, type TailnetPeerRefusal } from './tailnet-peers.ts'
 export { OwnerCodeStore, type IssuedOwnerCode, type OwnerCodeRecord, type OwnerCodeStoreOptions } from './owner-code.ts'
 export { DeviceStore, MAX_TRUSTED_DEVICES } from './devices.ts'
 export {

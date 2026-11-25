@@ -62,6 +62,12 @@ export interface ReachDevicePrincipal {
    * a locked page, and every Peer without PIN mode, has none.
    */
   readonly unlockId?: string
+  /**
+   * Whether this Peer's connection was shown to come from a device of the home's own tailnet, which A666 treats as the
+   * home's own computer: its elevated actions need no unlock. The home sets it from Tailscale's local API answer for
+   * the connection's forwarded address, never from the address alone. A Peer without it keeps today's behaviour.
+   */
+  readonly tailnetPeer?: true
 }
 
 /**
@@ -69,10 +75,17 @@ export interface ReachDevicePrincipal {
  * @param deviceId - the device's id in the home's device list.
  * @param listener - the reach listener its Peer sits on.
  * @param unlockId - the page unlock the Peer was admitted under, none for a locked page.
+ * @param tailnetPeer - whether the connection was shown to come from a device of the home's own tailnet.
  * @returns the principal its Peers on that listener speak for.
  */
-export function reachDevicePrincipal(deviceId: string, listener: ReachListenerId, unlockId?: string): ReachDevicePrincipal {
-  return unlockId === undefined ? { kind: REACH_DEVICE, deviceId, listener } : { kind: REACH_DEVICE, deviceId, listener, unlockId }
+export function reachDevicePrincipal(deviceId: string, listener: ReachListenerId, unlockId?: string, tailnetPeer?: true): ReachDevicePrincipal {
+  return {
+    kind: REACH_DEVICE,
+    deviceId,
+    listener,
+    ...unlockId === undefined ? {} : { unlockId },
+    ...tailnetPeer === undefined ? {} : { tailnetPeer },
+  }
 }
 
 /**
@@ -1162,6 +1175,14 @@ export function createCondition(
 ): ReachCondition {
   const { deviceId, listener, unlockId } = principal
   /**
+   * Whether this Peer's connection was shown to come from a device of the home's own tailnet (A666, A667). Such a Peer
+   * is the home's own computer, so its elevated actions need no unlock. The home sets this from Tailscale's local API
+   * answer for the connection, never from the arriving address, and a connection it could not corroborate keeps the
+   * unlock. It lifts the unlock alone: {@link REACH_DENIED_ACTIONS} stays refused, and every computer-only switch,
+   * protected row and default-permission refusal below still decides.
+   */
+  const tailnetPeer = principal.tailnetPeer === true
+  /**
    * The running unlock this principal's Peer holds: its page's under PIN mode, otherwise the device's.
    * @returns the unlock's id, or undefined.
    */
@@ -1178,6 +1199,13 @@ export function createCondition(
    * @returns the refusal, or undefined when an unlock admits it.
    */
   const unlocked = (action: RemoteAccessAction, reason: string, call: boolean, scope: string, args?: unknown, row = `remote:${action}`): RemoteAccessDecision | undefined => {
+    // A666: a tailnet peer is the home's own computer, so an elevated action needs no unlock. This is checked before the
+    // grant store, because the person at the computer is asked for nothing either. It admits the action and nothing
+    // else: the refusals decided before this call, and every one after it, still decide.
+    if (tailnetPeer) {
+      if (call) facts.logElevated(`home-auth: tailnet peer action: device=${deviceId} listener=${listener} action=${action}`)
+      return undefined
+    }
     const faced = facts.faceGrants?.()
     // A face action is admitted by a grant for exactly this call, from Face ID or, on a device with no passkey, from its
     // PIN (A483), or by the device's Face ID pass on this listener when its row allows one (A499); no unlock window, code or approval grace admits it.
@@ -1265,7 +1293,7 @@ export function createCondition(
       const refused = unlocked(action, `elevation-required: ${action}`, args !== undefined, scope, args)
       if (refused !== undefined) return refused
     }
-    if (KEY_SET.has(action) && facts.unlockModeEnabled()) {
+    if (KEY_SET.has(action) && facts.unlockModeEnabled() && !tailnetPeer) {
       const faced = facts.faceGrants?.()
       if (faced !== undefined) {
         // Saving or removing a key needs a grant for this call, whatever the page's PIN unlock says (A483: never a
