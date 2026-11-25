@@ -174,8 +174,8 @@ interface TrustedTypePolicyFactory {
 export interface TrustedTypesStash {
   /** The `delorun-plugin-loader` policy, which applies the script URL rule. */
   readonly pluginLoader: TrustedScriptUrlPolicy
-  /** The `delorun-blob-worker` policy, which admits a same-origin `blob:` Worker URL. */
-  readonly blobWorker: TrustedScriptUrlPolicy
+  /** The `delorun-blob-worker` policy, which admits a same-origin `blob:` Worker URL; absent when the page's policy omits its name. */
+  readonly blobWorker?: TrustedScriptUrlPolicy
   /** Replace the allowlist with the client module registry's current boot manifest. */
   register(manifest: BootBundleRows): void
 }
@@ -226,6 +226,13 @@ function sanitiseParsed(html: string): string {
  * to the client module loader and to the feature bundles that build a Worker
  * from a Blob. Does nothing when the page's browser has no `trustedTypes`, and
  * leaves the page unchanged when a policy name is already taken.
+ *
+ * A Content Security Policy's `trusted-types` directive names the policies a
+ * page may create, so a policy whose name that directive omits cannot exist.
+ * The blob Worker policy is therefore created on its own: a page whose policy
+ * omits it keeps the `default` and `delorun-plugin-loader` policies, and the
+ * stash carries no `blobWorker`, which leaves each Worker sink handing the
+ * constructor its raw URL exactly as before.
  * @param scope - the page's global scope.
  * @returns the stash the loader reads, or `undefined` without Trusted Types support.
  */
@@ -241,13 +248,32 @@ export function installTrustedTypes(scope: { trustedTypes?: TrustedTypePolicyFac
     const pluginLoader = factory.createPolicy<TrustedScriptUrlPolicy>('delorun-plugin-loader', {
       createScriptURL: pluginScriptUrl,
     })
-    const blobWorker = factory.createPolicy<TrustedScriptUrlPolicy>('delorun-blob-worker', {
-      createScriptURL: blobWorkerScriptUrl,
-    })
-    const stash: TrustedTypesStash = { pluginLoader, blobWorker, register: registerPluginScriptBundles }
+    const blobWorker = createBlobWorkerPolicy(factory)
+    const stash: TrustedTypesStash = {
+      pluginLoader,
+      ...(blobWorker === undefined ? {} : { blobWorker }),
+      register: registerPluginScriptBundles,
+    }
     ;(globalThis as { __DSH_TRUSTED_TYPES__?: TrustedTypesStash })[TRUSTED_TYPES_STASH] = stash
     return stash
   } catch {
+    return undefined
+  }
+}
+
+/**
+ * Create the `delorun-blob-worker` policy, or report that the page's Content
+ * Security Policy does not name it.
+ * @param factory - the page's Trusted Types policy factory.
+ * @returns the policy, or `undefined` when the policy name is not admitted.
+ */
+function createBlobWorkerPolicy(factory: TrustedTypePolicyFactory): TrustedScriptUrlPolicy | undefined {
+  try {
+    return factory.createPolicy<TrustedScriptUrlPolicy>('delorun-blob-worker', {
+      createScriptURL: blobWorkerScriptUrl,
+    })
+  } catch {
+    // The `trusted-types` directive omits this policy's name, so the page may not create it.
     return undefined
   }
 }

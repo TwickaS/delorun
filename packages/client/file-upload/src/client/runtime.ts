@@ -291,7 +291,11 @@ function workerScriptUrl(url: string): string {
     .__DSH_TRUSTED_TYPES__?.blobWorker
   if (policy === undefined) return url
   const trusted = policy.createScriptURL(url)
-  if (trusted === null) throw new Error(`file upload: Worker URL ${url} refused by the delorun-blob-worker policy`)
+  // A browser wraps the policy's `null` as an empty TrustedScriptURL rather than returning null, so the refusal is
+  // read from the string form; a policy that returns null outright (a stand-in in a spec) is refused the same way.
+  if (trusted === null || String(trusted) === '') {
+    throw new Error(`file upload: Worker URL ${url} refused by the delorun-blob-worker policy`)
+  }
   return trusted
 }
 

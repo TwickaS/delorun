@@ -59,7 +59,7 @@ export function reachContentSecurityPolicy(nonce: string): string {
     "media-src 'self' data:",
     "font-src 'self' data:",
     "connect-src 'self'",
-    "worker-src 'self'",
+    "worker-src 'self' blob:",
     "manifest-src 'self'",
     "frame-src 'self' blob:",
     "frame-ancestors 'none'",
@@ -67,7 +67,7 @@ export function reachContentSecurityPolicy(nonce: string): string {
     "base-uri 'self'",
     "form-action 'self'",
     "require-trusted-types-for 'script'",
-    'trusted-types default delorun-plugin-loader',
+    'trusted-types default delorun-plugin-loader delorun-blob-worker',
   ].join('; ')
 }
 

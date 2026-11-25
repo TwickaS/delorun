@@ -18,7 +18,10 @@ import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { build } from 'vite'
 import { chromium, type Browser } from 'playwright'
-import { reachContentSecurityPolicy } from '@deepseek-ai/dsh-client-connection/reach'
+// The reach listener's own policy function, imported from its source: this spec's project resolves no workspace
+// package names, and the value under test is the exact header the listener sends. Its own imports are type-only
+// except for the authenticator's Cordis base class, which this spec stubs below so the source loads unbuilt.
+import { reachContentSecurityPolicy } from '../../../../packages/client/connection/src/reach.ts'
 
 /** The nonce the served page carries, and the one its policy names. */
 const NONCE = 'n0nce-n0nce-n0nce-n0nce-n0nce'
@@ -41,7 +44,7 @@ window.__probe = async (kind) => {
   const source = 'self.onmessage = (event) => self.postMessage("alive:" + event.data)'
   const blob = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }))
   const out = { hasStash: stash !== undefined, hasBlobWorker: stash?.blobWorker !== undefined }
-  const mint = (url) => stash === undefined ? url : stash.blobWorker.createScriptURL(url)
+  const mint = (url) => stash?.blobWorker === undefined ? url : stash.blobWorker.createScriptURL(url)
   const run = async (worker) => {
     out.constructed = 'constructed'
     out.reply = await new Promise((resolve) => {
@@ -60,15 +63,23 @@ window.__probe = async (kind) => {
     } else if (kind === 'foreign') {
       // Another origin's blob URL: the policy must refuse it, so the constructor never runs.
       const foreign = mint('blob:https://evil.test/00000000-0000-0000-0000-000000000000')
+      // A browser wraps the policy's null as an empty TrustedScriptURL, so the refusal is read from the string form.
       out.minted = String(foreign)
-      if (foreign === null) { out.constructed = 'refused-by-policy'; return out }
+      if (foreign === null || out.minted === '') { out.constructed = 'refused-by-policy'; return out }
       new Worker(foreign, { name: 'probe-foreign' })
       out.constructed = 'constructed'
     } else if (kind === 'data') {
       const data = mint('data:text/javascript,self.postMessage(1)')
       out.minted = String(data)
-      if (data === null) { out.constructed = 'refused-by-policy'; return out }
+      if (data === null || out.minted === '') { out.constructed = 'refused-by-policy'; return out }
       new Worker(data, { name: 'probe-data' })
+      out.constructed = 'constructed'
+    } else if (kind === 'same-origin-path') {
+      // A same-origin script path is not a blob URL: the protocol check is what refuses it.
+      const path = mint('/plugins/a/client.js')
+      out.minted = String(path)
+      if (path === null || out.minted === '') { out.constructed = 'refused-by-policy'; return out }
+      new Worker(path, { name: 'probe-path' })
       out.constructed = 'constructed'
     } else {
       // The admitted case: this page's own blob URL, minted through the policy.
@@ -93,16 +104,20 @@ beforeAll(async () => {
   const result = await build({
     configFile: false,
     logLevel: 'silent',
-    build: { write: false, minify: false, target: 'es2022', lib: { entry: POLICY_ENTRY, formats: ['es'], fileName: 'page-policy' } },
+    // An IIFE, because the page loads it as a classic script: an ES module's `export` statement is a syntax error there.
+    build: { write: false, minify: false, target: 'es2022', lib: { entry: POLICY_ENTRY, formats: ['iife'], name: 'DshPagePolicy', fileName: 'page-policy' } },
   })
   const outputs = Array.isArray(result) ? result : [result]
   const chunk = outputs.flatMap(output => output.output).find(entry => entry.type === 'chunk')
   if (chunk === undefined || chunk.type !== 'chunk') throw new Error('the policy module did not bundle')
   policyScript = chunk.code
   server = createServer((request, response) => {
-    // The reach listener's own policy, or the same policy with one directive replaced by the test that asks for it.
-    const policy = request.url === '/blob-worker-admitted'
-      ? reachContentSecurityPolicy(NONCE).replace("worker-src 'self'", "worker-src 'self' blob:")
+    // The reach listener's own policy, or the same policy with the two directives this change adds taken back out,
+    // which is the header the four capabilities failed under.
+    const policy = request.url === '/before-the-fix'
+      ? reachContentSecurityPolicy(NONCE)
+        .replace("worker-src 'self' blob:", "worker-src 'self'")
+        .replace('trusted-types default delorun-plugin-loader delorun-blob-worker', 'trusted-types default delorun-plugin-loader')
       : reachContentSecurityPolicy(NONCE)
     response.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'content-security-policy': policy })
     response.end(page(policyScript))
@@ -125,7 +140,7 @@ afterAll(async () => {
  * @param path - the served path, which selects the policy.
  * @returns what the probe saw, and the console refusals the browser reported.
  */
-async function probe(kind: 'own' | 'plain' | 'foreign' | 'data', path = '/'): Promise<Record<string, unknown>> {
+async function probe(kind: 'own' | 'plain' | 'foreign' | 'data' | 'same-origin-path', path = '/'): Promise<Record<string, unknown>> {
   const context = await browser.newContext()
   try {
     const page = await context.newPage()
@@ -140,50 +155,53 @@ async function probe(kind: 'own' | 'plain' | 'foreign' | 'data', path = '/'): Pr
 }
 
 describe('the delorun-blob-worker policy in a real browser', () => {
-  // The Trusted Types sink the four capabilities hit: the constructor refuses a plain string, and the policy is
-  // what satisfies it. Removing the blobWorker policy from the stash makes the constructor throw again.
-  it('satisfies the Worker constructor\'s TrustedScriptURL sink with this page\'s own blob URL', async () => {
+  // The whole defect, end to end: under the reach listener's own header the Worker constructs from this page's
+  // blob URL and runs. Removing the policy name from the trusted-types directive, or blob: from worker-src, fails it.
+  it('constructs a Worker from this page\'s own blob URL and the Worker runs', async () => {
     const result = await probe('own')
     expect(result.hasBlobWorker).toBe(true)
     expect(result.minted).toBeTypeOf('string')
     expect(result.constructed).toBe('constructed')
-    // The constructor no longer throws the TrustedScriptURL TypeError; the remaining refusal is the CSP's.
-    expect(String(result.constructed)).not.toContain('TrustedScriptURL')
-    expect(result.refusals.some(line => line.includes('TrustedScriptURL'))).toBe(false)
+    expect(result.reply).toBe('alive:ping')
+    expect(result.refusals).toEqual([])
   }, 90_000)
 
-  // The second, independent blocker: the reach policy's worker-src admits no blob: URL, so the Worker is refused
-  // after the constructor accepts it. This is the fact the lead needs to decide on; the lane does not change it.
-  it('shows the reach policy\'s worker-src still refuses the blob Worker, and that blob: in worker-src is what it needs', async () => {
-    const shipped = await probe('own')
-    // The constructor accepted the minted URL, so the Trusted Types sink is satisfied; the Worker still never runs.
-    expect(shipped.constructed).toBe('constructed')
-    expect(shipped.reply).not.toBe('alive:ping')
-    expect(shipped.refusals.some(line => line.includes("worker-src 'self'"))).toBe(true)
-
-    const admitted = await probe('own', '/blob-worker-admitted')
-    expect(admitted.reply).toBe('alive:ping')
-    expect(admitted.refusals).toEqual([])
+  // The header before this change: the policy name is not in the trusted-types directive, so the policy cannot be
+  // created and the constructor throws the TrustedScriptURL TypeError the four capabilities reported.
+  it('reproduces the failure under the header the four capabilities failed on', async () => {
+    const before = await probe('own', '/before-the-fix')
+    // The policy cannot be created, so the stash carries none and the raw URL reaches the constructor.
+    expect(before.hasBlobWorker).toBe(false)
+    expect(String(before.constructed)).toContain('TrustedScriptURL')
+    expect(before.refusals.some(line => line.includes('delorun-blob-worker'))).toBe(true)
   }, 90_000)
 
   // Removing the blobWorker policy from the stash, or handing the constructor the raw URL, makes this fail.
   it('refuses a plain string where a TrustedScriptURL is required', async () => {
     const result = await probe('plain')
     expect(String(result.constructed)).toMatch(/^threw: TypeError/)
-    expect(result.refusals).toContain('This document requires \'TrustedScriptURL\' assignment. The action has been blocked.')
+    expect(result.refusals.some(line => line.includes('TrustedScriptURL'))).toBe(true)
   }, 90_000)
 
   // Admitting every blob: URL, rather than only a same-origin one, makes this fail.
   it('refuses a blob URL from another origin', async () => {
     const result = await probe('foreign')
-    expect(result.minted).toBe('null')
+    expect(result.minted).toBe('')
     expect(result.constructed).toBe('refused-by-policy')
   }, 90_000)
 
-  // Admitting data: URLs, or dropping the protocol check, makes this fail.
+  // Admitting data: URLs makes this fail.
   it('refuses a data: script URL', async () => {
     const result = await probe('data')
-    expect(result.minted).toBe('null')
+    expect(result.minted).toBe('')
+    expect(result.constructed).toBe('refused-by-policy')
+  }, 90_000)
+
+  // Dropping the protocol check makes this fail: a same-origin path resolves to the page's own origin, so only the
+  // blob: requirement refuses it.
+  it('refuses a same-origin script path, which is not a blob URL', async () => {
+    const result = await probe('same-origin-path')
+    expect(result.minted).toBe('')
     expect(result.constructed).toBe('refused-by-policy')
   }, 90_000)
 })

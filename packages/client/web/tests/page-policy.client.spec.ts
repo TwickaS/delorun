@@ -152,9 +152,11 @@ it('the blob Worker rule admits a blob: URL of this page\'s own origin and nothi
     .toBe(`blob:${origin}/0b7c1f6e-0000-4000-8000-000000000000`)
   // Another origin's blob URL: a blob URL inherits the origin of the page that made it, so this one is not ours.
   expect(blobWorkerScriptUrl('blob:https://evil.test/0b7c1f6e-0000-4000-8000-000000000000')).toBeNull()
-  // A different scheme, a same-origin path, and a string that is not a URL at all.
+  // A different scheme, a same-origin path, and a string that is not a URL at all. The same-origin path is the one
+  // the protocol check alone refuses: it resolves to the page's own origin, so only the blob: requirement stops it.
   expect(blobWorkerScriptUrl('data:text/javascript,self.postMessage(1)')).toBeNull()
   expect(blobWorkerScriptUrl('/plugins/a/client.js')).toBeNull()
+  expect(blobWorkerScriptUrl(`${origin}/plugins/a/client.js`)).toBeNull()
   expect(blobWorkerScriptUrl('not a url')).toBeNull()
   // A blob URL with no origin part has an opaque origin, which is never the page's.
   expect(blobWorkerScriptUrl('blob:0b7c1f6e-0000-4000-8000-000000000000')).toBeNull()

@@ -189,7 +189,7 @@ export const REACH_CSP_DIRECTIVES = [
   "media-src 'self' data:",
   "font-src 'self' data:",
   "connect-src 'self'",
-  "worker-src 'self'",
+  "worker-src 'self' blob:",
   "manifest-src 'self'",
   "frame-src 'self'",
   "frame-ancestors 'none'",
@@ -197,7 +197,7 @@ export const REACH_CSP_DIRECTIVES = [
   "base-uri 'self'",
   "form-action 'self'",
   "require-trusted-types-for 'script'",
-  'trusted-types default delorun-plugin-loader',
+  'trusted-types default delorun-plugin-loader delorun-blob-worker',
 ] as const
 
 const HOUR_MS = 60 * 60 * 1000

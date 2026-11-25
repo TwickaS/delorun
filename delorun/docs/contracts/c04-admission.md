@@ -198,7 +198,7 @@ Every response from a reach listener carries these headers. The loopback listene
 
 | Header | Value |
 | --- | --- |
-| `Content-Security-Policy` | `default-src 'self'; script-src 'self' 'nonce-<nonce>'; style-src-elem 'self' 'nonce-<nonce>'; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data:; font-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; frame-src 'self' blob:; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; require-trusted-types-for 'script'; trusted-types default delorun-plugin-loader` |
+| `Content-Security-Policy` | `default-src 'self'; script-src 'self' 'nonce-<nonce>'; style-src-elem 'self' 'nonce-<nonce>'; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' data:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; manifest-src 'self'; frame-src 'self' blob:; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; require-trusted-types-for 'script'; trusted-types default delorun-plugin-loader delorun-blob-worker` |
 | `Strict-Transport-Security` | `max-age=31536000` |
 | `X-Content-Type-Options` | `nosniff` |
 | `Referrer-Policy` | `no-referrer` |
@@ -215,10 +215,11 @@ Every response from a reach listener carries these headers. The loopback listene
 <a id="trusted-types"></a>
 ### Trusted Types
 
-Trusted Types are enforced on reach listeners by the `require-trusted-types-for 'script'` directive above, with two policies.
+Trusted Types are enforced on reach listeners by the `require-trusted-types-for 'script'` directive above, with three policies. The `trusted-types` directive names each of them, because a policy whose name that directive omits cannot be created at all.
 
 - **`default`.** Its `createHTML` passes the input through the studio's HTML sanitiser, which removes `<script>` elements, event-handler attributes, `javascript:` URLs and `<iframe srcdoc>`, and returns the result, so upstream components and community client plugins that assign `innerHTML` keep working. Its `createScriptURL` returns a URL only when it is same-origin, its path begins with `/plugins/` and that path without its query is a bundle listed in the client module registry's current boot manifest; otherwise it returns `null`, and the assignment fails. Its `createScript` always returns `null`.
 - **`delorun-plugin-loader`.** Upstream's client module loader assigns `script.src` through this named policy, which applies the same URL rule as the default policy's `createScriptURL`.
+- **`delorun-blob-worker`.** Its `createScriptURL` returns a URL only when it is a `blob:` URL whose origin is the page's own; otherwise it returns `null`. A blob URL inherits the origin of the page that created it, so this admits a Worker source the page itself built and refuses one another origin built. A page with an opaque origin is refused every URL, because every opaque origin has the same string form. The four features that run their work in a Worker built from a Blob — file and image upload, and the spreadsheet, PDF and Office previews — mint their Worker URL through this policy. The `worker-src` directive admits `blob:` for the same reason: the constructor accepting the URL is not enough, because the Worker is refused afterwards if the directive does not admit its source.
 
 <a id="refusals"></a>
 ### Refusals
