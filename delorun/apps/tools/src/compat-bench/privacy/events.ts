@@ -24,6 +24,8 @@ export function parseEvents(text: string): ReadonlyArray<HookEvent> {
 }
 
 /**
+ * Whether the bench itself started a program, rather than the plugin under test. The bench's own scripts live under
+ * `/opt/bench/`, and the container runtime's `runc` starts every container, so neither is the plugin's behaviour.
  * @param command - a started program: the file and its arguments, or a whole command line.
  * @returns whether the bench's own scripts or the container runtime started it, so it is not the plugin's behaviour.
  */
