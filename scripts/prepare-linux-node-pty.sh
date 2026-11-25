@@ -12,8 +12,10 @@ pnpm_setup_root="$(realpath "$(dirname "$(dirname "$PNPM_HOME")")")"
 (cd "$addon_dir" && npm_config_build_from_source=true pnpm run install)
 addon="$addon_dir/build/Release/pty.node"
 test -f "$addon_dir/build/Makefile"
+# shellcheck source=scripts/rootless-builder-user.sh
+source "$(dirname -- "${BASH_SOURCE[0]}")/rootless-builder-user.sh"
 docker run --rm \
-  --user "$(id -u):$(id -g)" \
+  --user "$(builder_user)" \
   -v "$PWD:$PWD" \
   -v "$HOME/.cache/node-gyp:$HOME/.cache/node-gyp:ro" \
   -v "$pnpm_setup_root:$pnpm_setup_root:ro" \

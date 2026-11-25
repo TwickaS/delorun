@@ -3709,6 +3709,18 @@
       "class": "delorun-feature",
       "feature": "live-agents",
       "reason": "Adds the agents list's fold copy: `fold.more` states how many inactive and done agents the control at the bottom holds, and `fold.less` returns them to the fold, in every dictionary the package ships."
+    },
+    {
+      "path": "scripts/prepare-linux-node-pty.sh",
+      "class": "delorun-feature",
+      "feature": "release-cut",
+      "reason": "Runs the node-pty builder container as uid 0 on a rootless engine, whose container uid 0 is the caller's uid in the rootless namespace and so owns the mounted source, and as the caller's uid and gid on a rootful one; the rootful command is unchanged. The test is the supervisor's: a rootless engine lists `name=rootless` among its `SecurityOptions`."
+    },
+    {
+      "path": "scripts/rootless-builder-user.sh",
+      "class": "generic-fix",
+      "feature": "rootless-builder",
+      "reason": "The native-addon builder container ran as the caller uid, which cannot write to the mounted source on a rootless engine: there the container uid 0 is the caller uid in the rootless namespace and owns the mount. The helper prints the --user value to use, asking for 0:0 when the engine reports name=rootless among its SecurityOptions, which is the test the supervisor already uses, and the caller uid and gid otherwise. Offered upstream."
     }
   ],
   "retired": []

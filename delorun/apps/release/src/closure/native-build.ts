@@ -7,7 +7,8 @@
  * compiling, the recipe checks that the image's installed versions are the pinned ones. It then runs upstream's own
  * `native/system/scripts/build.ts` with the pinned Node distribution of the platform, whose headers the addon compiles
  * against, in that image under the platform's OCI architecture (emulated on a host of the other one) with no network, a
- * read-only root, the builder's user, UTC, the C locale and `SOURCE_DATE_EPOCH`. The binaries land in the platform
+ * read-only root, the builder's user (uid 0 on a rootless engine, whose container uid 0 is the caller's uid in the
+ * rootless namespace and so owns the mounted source), UTC, the C locale and `SOURCE_DATE_EPOCH`. The binaries land in the platform
  * package's `bin/`, which the closure's deploy then carries, and `prebuilt-pins.json` pins their digests, so a build that
  * differs anywhere stops before archiving (contract C2, rebuild before signing).
  *
@@ -56,6 +57,31 @@ export const runDocker: Docker = (args, inherit) => {
   const result = spawnSync('docker', args, { encoding: 'utf8', stdio: inherit ? ['ignore', 'inherit', 'inherit'] : 'pipe', maxBuffer: 64 * 1024 * 1024 })
   if (result.error !== undefined) throw new Error(`docker did not start: ${result.error.message}`)
   return { status: result.status, stdout: result.stdout ?? '', stderr: result.stderr ?? '' }
+}
+
+/**
+ * The user and group the builder container runs as: `0:0` on a rootless engine, whose container uid 0 is the caller's
+ * uid in the rootless namespace and so owns the mounted source, and the caller's own uid and gid on a rootful one.
+ * @param rootless - whether the engine is rootless.
+ * @returns the user and group, as `docker run --user` takes them.
+ */
+export function builderUser(rootless: boolean): string {
+  if (rootless) return '0:0'
+  return `${String(process.getuid?.())}:${String(process.getgid?.())}`
+}
+
+/**
+ * Whether the engine is rootless: it lists `name=rootless` among its `SecurityOptions`, the test the supervisor's
+ * capability inspection applies.
+ * @param docker - the Docker command.
+ * @returns true when the engine is rootless.
+ * @throws Error when the engine does not answer.
+ */
+export function engineIsRootless(docker: Docker): boolean {
+  const info = docker(['info', '--format', '{{json .SecurityOptions}}'], false)
+  if (info.status !== 0) throw new Error(`docker info failed with ${String(info.status)}${info.stderr.trim() === '' ? '' : `: ${info.stderr.trim()}`}`)
+  const options = JSON.parse(info.stdout) as readonly string[] | null
+  return (options ?? []).some(option => option.includes('name=rootless'))
 }
 
 /**
@@ -114,7 +140,7 @@ export interface NativeBuildRequest {
   readonly cache: string
   /** The commit's committer time. */
   readonly epoch: number
-  /** The user and group the compiler runs as, so the binaries belong to the builder. */
+  /** The user and group the compiler runs as, so the binaries belong to the builder: {@link builderUser}'s value. */
   readonly user: string
   /** The Docker command; {@link runDocker} by default. */
   readonly docker?: Docker
