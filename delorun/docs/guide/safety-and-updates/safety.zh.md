@@ -134,7 +134,7 @@ setup 的提示问题决定 Delorun 在有风险的更改之前如何询问。`d
 | --- | --- | --- |
 | 工作区切换为完全访问 | 每个工作区询问一次，如[完全访问](#full-access)所述 | 在 studio 确认之后切换 |
 | 模型用它的文件工具写入 `AGENTS.md`、skill 或预设 | 先询问，说明该文字将作为指令加载到它之后触及的每个 chat 中，并显示差异。在你允许之前不会写入任何东西 | 像任何文件一样写入 |
-| An [MCP server](../../reference/glossary.zh.md#mcp-server) that runs a command and comes from a plugin, your editor or an unknown place | Held until you allow it at your computer, as [MCP servers](#mcp-servers) explains | Runs, as in DeepSeek Harness |
+| 一个运行命令、且来自插件、你的编辑器或未知位置的 [MCP 服务器](../../reference/glossary.zh.md#mcp-server) | 在你于自己的电脑上允许它之前保持停止，如 [MCP 服务器](#mcp-servers)所述 | 像在 DeepSeek Harness 中那样运行 |
 | 模型创建或编辑计划任务 | 询问，并显示任务的提示、它的计划、它运行所在的 chat 以及该 chat 的[权限预设](../../reference/glossary.zh.md#permission-preset) | 与 DeepSeek Harness 一样创建 |
 
 **Never ask (dangerous)** 是第三个答案。它像 Ask less 一样关闭这三项同意，并让任何 chat 无需询问就能切换为完全访问，无论是来自 studio、手机、计划任务还是脚本。setup 会打印一条警告，要求你确认两次并输入 `full access everywhere`；对 root 用户它会拒绝这个答案，`--yes` 也从不选择它。用 `delorun setup prompts` 选择另一个答案即可再次关闭它。
@@ -175,11 +175,11 @@ setup 的提示问题决定 Delorun 在有风险的更改之前如何询问。`d
 
 ### MCP 服务器
 
-An MCP server is a helper program that gives the model extra tools. One that runs a command runs it on your computer with your access, outside the sandbox. With Ask me first, Delorun judges a server by where its definition lives, not by its name or command. Servers you set up yourself (your own configuration or Settings) and servers Delorun's packs install start without asking. A server that comes from another plugin, from a bundle someone else made (even one named like a pack), from your editor or from a place Delorun could not identify is held stopped, and a card above the message box says "<server> wants to start" and where it comes from. Choose **Allow**, or **Details** for the full review, or **Not now** to hide the card for this studio session; the server stays waiting in Settings, Safety, Permissions, where you can also allow it, and `delorun mcp accept <server>` allows it too. A studio on a phone shows no Allow. When it worked, the server shows as Allowed and running.
+MCP 服务器是一个给模型额外工具的程序。运行命令的那种服务器以你的访问权限在你的电脑上运行，在沙箱之外。使用 Ask me first 时，Delorun 依据服务器的定义所在的位置来判断它，而不是依据它的名称或命令。你自己设置的服务器（你自己的配置或“设置”）以及 Delorun 的包所安装的服务器无需询问即可启动。来自另一个插件、来自别人制作的组合包（即使名称像某个包）、来自你的编辑器，或来自 Delorun 无法识别的位置的服务器会被保持停止，消息框上方的一张卡片会说明 “<server> wants to start” 以及它来自哪里。选择 **Allow**，或选择 **Details** 查看完整审查，或选择 **Not now** 在本次 studio 会话中隐藏该卡片；服务器仍会在“设置”→“安全”→“权限”中等待，你也可以在那里允许它，而 `delorun mcp accept <server>` 同样可以允许它。手机上的 studio 不显示 Allow。成功之后，该服务器显示为 Allowed and running。
 
 在你回答之前，你会看到它的命令、参数、文件夹、环境变量的名称，以及将要运行的确切文件。这其中任何一项发生变化时，包括同一条命令现在找到了不同的文件，Delorun 都会再次询问。服务器可以在参数或普通环境变量中用 `${credential:NAME}` 从你存储的凭据中取用密钥。审阅界面显示的是这段文字，而不是密钥本身，并注明它在服务器启动时才填入。要停止你已允许的服务器，请在“设置”→“安全”→“权限”中选择 Revoke，或运行 `delorun mcp revoke <server>`。
 
-An allowed server starts at once, and the chat you have open gets its tools with your next message; nothing restarts. Your allowance covers the server's name from the place it came from, so a server of the same name from another place asks again. Settings, Safety, Permissions also chooses which servers ask: **Ask for project servers**, the default, as above; **Always ask**, which also asks for your own and your packs' servers; or **Never ask**. Changing the choice needs you at your computer, and a server the new choice no longer asks for starts at once, while one it still asks for stays listed. [How each place is judged](../../../packages/plugin-mcp-consent/README.zh.md#origins-and-the-ask-mode) is in the package's README.
+被允许的服务器会立即启动，而你打开的 chat 会在下一条消息时得到它的工具；不会有任何东西重启。你的允许涵盖该服务器来自那个位置的名称，因此来自另一个位置的同名服务器会再次询问。“设置”→“安全”→“权限”还选择哪些服务器会询问：**Ask for project servers**（默认值，如上所述）；**Always ask**（它也会询问你自己的服务器和你那些包的服务器）；或 **Never ask**。更改该选择需要你在自己的电脑上，而新选择不再询问的服务器会立即启动，仍会询问的则继续列出。[每个位置如何判定](../../../packages/plugin-mcp-consent/README.zh.md#origins-and-the-ask-mode)在该包的 README 中。
 
 <details>
 <summary>边界情况</summary>

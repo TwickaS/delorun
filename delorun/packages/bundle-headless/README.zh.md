@@ -46,7 +46,7 @@ kind: "package-bundle"
 | `delorun-tool-failure-guard` | [`@delorun/plugin-tool-failure-guard`](../plugin-tool-failure-guard/README.zh.md)，带 `stderrNotice` | 工具调用接连失败（连续 6 次，或最近 12 次中有 8 次）的轮次会在下一次模型请求前停止，并在标准错误输出一行说明原因 |
 | `delorun-plugin-changes` | [`@delorun/plugin-changes`](../plugin-changes/README.zh.md) | agent 通过 `plugin_manager` 进行的安装或移除不会执行；它作为等待本人在自己电脑上审阅的变更，记录在 profile 的变更日志中（[C21](../../docs/contracts/c21-changes.zh.md#the-agent-and-plugins)）；该 profile 不提供 studio，因此插件不注册「变更」路由 |
 | `delorun-update-gate` | `@delorun/bundle-local/update-gate`，带 `holdUntilChecked` | 每个轮次的第一步都会等到 `delorun headless` 检查完已启动 Host 的行和服务；任何更新或停止都不会等待 headless 运行中的 chat；等待超过 `checkWaitSeconds`（默认 60）的轮次，以 `START_CHECK_PENDING` 结束，而不是无提示地一直等待 |
-| `delorun-prompt-wording` | `@delorun/bundle-local/prompt-wording` | Delorun's wording in the system prompt (C16 switch `model_prompt`), as in the CLI profile |
+| `delorun-prompt-wording` | `@delorun/bundle-local/prompt-wording` | 系统提示词中 Delorun 的措辞（C16 开关 `model_prompt`），与 CLI profile 中相同 |
 | `plugin-manager` | 上游的插件管理，`protectedPlugins` | 上面的守卫行和沙箱行不能通过 `plugin_manager` 工具被禁用、重新配置或移除；完全访问模式下，该工具不经提示即运行，这与 [`@delorun/bundle-local`](../bundle-local/README.zh.md) 中相同 |
 
 <a id="refusals"></a>
