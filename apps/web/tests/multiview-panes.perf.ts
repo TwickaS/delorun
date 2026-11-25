@@ -130,41 +130,6 @@ function printProfile(profile: CpuProfile): void {
   console.log(`CPU PROFILE (self ms)\n${top.map(([key, ms]) => `${ms.toFixed(0).padStart(6)}  ${key}`).join('\n')}`)
 }
 
-/** One trace event, as this harness reads it. */
-interface TraceEvent {
-  name: string
-  dur?: number
-  args?: Record<string, unknown>
-}
-
-/** The JavaScript frames that forced a layout, innermost first, from a trace event's stack. */
-function forcedBy(event: TraceEvent): string[] {
-  const stack = (event.args?.['beginData'] as { stackTrace?: Array<{ functionName?: string; url?: string; lineNumber?: number }> } | undefined)?.stackTrace
-  return (stack ?? []).slice(0, 10).map(frame => [frame.functionName ?? '(anonymous)', (frame.url ?? '').split('/').slice(-2).join('/') + ':' + String(frame.lineNumber ?? -1)].join(' '))
-}
-
-/** Print the events of one trace name that a script forced, grouped by the JavaScript that forced them. */
-function printForced(traced: readonly TraceEvent[], name: string): void {
-  const events = traced.filter(event => event.name === name && event.dur !== undefined)
-  const groups = new Map<string, { count: number; ms: number }>()
-  let forcedCount = 0
-  let forcedMs = 0
-  for (const event of events) {
-    const frames = forcedBy(event)
-    if (frames.length === 0) continue
-    forcedCount += 1
-    forcedMs += (event.dur ?? 0) / 1000
-    const key = frames.slice(0, 8).join(' <- ')
-    const group = groups.get(key) ?? { count: 0, ms: 0 }
-    group.count += 1
-    group.ms += (event.dur ?? 0) / 1000
-    groups.set(key, group)
-  }
-  const lines = [...groups.entries()].sort((left, right) => right[1].ms - left[1].ms).slice(0, 10)
-    .map(([key, group]) => group.ms.toFixed(1).padStart(8) + ' ms ' + String(group.count).padStart(5) + 'x  ' + key)
-  console.log('FORCED ' + name + ': ' + String(forcedCount) + ' of ' + String(events.length) + ', ' + forcedMs.toFixed(1) + ' ms forced by script\n' + lines.join('\n'))
-}
-
 async function measure<T>(cdp: CDPSession, action: () => Promise<T>): Promise<{ measurement: Measurement; value: T }> {
   const before = await chromiumMetrics(cdp)
   const started = performance.now()
@@ -380,6 +345,38 @@ async function mountedTurns(page: Page, scope: string): Promise<number> {
   throw new Error(`mounted turn count of ${scope} did not stabilize; last ${String(previous)}`)
 }
 
+/**
+ * Print what a trace says about style recalculation: how many passes, how long, how wide, and what
+ * invalidated the widest ones.
+ * @param label - the stream the trace covers.
+ * @param traced - the collected trace events.
+ */
+function reportTrace(label: string, traced: readonly { name: string; ts?: number; dur?: number; args?: Record<string, unknown> }[]): void {
+  const widthOf = (event: { args?: Record<string, unknown> }): number =>
+    Number((event.args as { elementCount?: number } | undefined)?.elementCount ?? 0)
+  const recalcs = traced.filter(event => event.name === 'UpdateLayoutTree' && event.dur !== undefined)
+  const totalMs = recalcs.reduce((sum, event) => sum + (event.dur ?? 0), 0) / 1000
+  const widths = recalcs.map(widthOf).sort((left, right) => left - right)
+  const wide = recalcs.filter(event => widthOf(event) > 2000)
+  const wideMs = wide.reduce((sum, event) => sum + (event.dur ?? 0), 0) / 1000
+  console.log(`RECALC ${label}: passes=${String(recalcs.length)} totalMs=${totalMs.toFixed(0)} medianElements=${String(widths[Math.floor(widths.length / 2)] ?? 0)} maxElements=${String(widths.at(-1) ?? 0)} widePasses=${String(wide.length)} wideMs=${wideMs.toFixed(0)}`)
+  const invalidations = traced.filter(event => event.name === 'StyleRecalcInvalidationTracking')
+  const keyOf = (event: { args?: Record<string, unknown> }): string => {
+    const data = (event.args as { data?: Record<string, unknown> }).data ?? {}
+    return `${String(data.reason)} <${String(data.nodeName ?? '')}> ${String(data.extraData ?? '')}`
+  }
+  const reasons = new Map<string, number>()
+  for (const event of invalidations) reasons.set(keyOf(event), (reasons.get(keyOf(event)) ?? 0) + 1)
+  console.log(`INVALIDATION REASONS ${label}\n${[...reasons.entries()].sort((left, right) => right[1] - left[1]).slice(0, 12).map(([key, count]) => `${String(count).padStart(6)} ${key}`).join('\n')}`)
+  for (const pass of wide.slice(0, 3)) {
+    const from = (pass.ts ?? 0) - 30_000
+    const near = invalidations.filter(event => (event.ts ?? 0) >= from && (event.ts ?? 0) <= (pass.ts ?? 0))
+    const nearReasons = new Map<string, number>()
+    for (const event of near) nearReasons.set(keyOf(event), (nearReasons.get(keyOf(event)) ?? 0) + 1)
+    console.log(`WIDE PASS ${String((pass.dur ?? 0) / 1000)}ms elements=${String(widthOf(pass))} preceded by\n${[...nearReasons.entries()].sort((left, right) => right[1] - left[1]).slice(0, 8).map(([key, count]) => `${String(count).padStart(6)} ${key}`).join('\n')}`)
+  }
+}
+
 describe('manual web performance: Multiview panes', () => {
   let browser: Browser
 
@@ -430,7 +427,19 @@ describe('manual web performance: Multiview panes', () => {
       const closedState = await retainedState(cdp, page)
       const profileClosed = process.env.MV_PROFILE === 'closed'
       if (profileClosed) { await cdp.send('Profiler.enable'); await cdp.send('Profiler.setSamplingInterval', { interval: 200 }); await cdp.send('Profiler.start') }
+      const closedTraced: Array<{ name: string; ts?: number; dur?: number; args?: Record<string, unknown> }> = []
+      const closedTracing = process.env.MV_PROFILE === 'trace'
+      if (closedTracing) {
+        cdp.on('Tracing.dataCollected', (payload) => { closedTraced.push(...(payload.value as typeof closedTraced)) })
+        await cdp.send('Tracing.start', { traceConfig: { includedCategories: ['devtools.timeline', 'disabled-by-default-devtools.timeline.invalidationTracking'] } } as never)
+      }
       const closedStream = await measure(cdp, () => streamOnce(scaffold, page, 'MV_STREAM_CLOSED'))
+      if (closedTracing) {
+        const closedDone = new Promise<void>((resolve) => { cdp.once('Tracing.tracingComplete', () => { resolve() }) })
+        await cdp.send('Tracing.end')
+        await closedDone
+        reportTrace('closed', closedTraced)
+      }
       if (profileClosed) printProfile((await cdp.send('Profiler.stop')).profile)
 
       await page.getByRole('button', { name: `${String(AGENT_COUNT)} subagents` }).click()
@@ -459,10 +468,10 @@ describe('manual web performance: Multiview panes', () => {
       // the same for the closed stream, and MV_PROFILE=trace prints the largest style recalculations and what invalidated them.
       const profiling = process.env.MV_PROFILE === '1'
       const tracing = process.env.MV_PROFILE === 'trace'
-      const traced: Array<{ name: string; dur?: number; args?: Record<string, unknown> }> = []
+      const traced: Array<{ name: string; ts?: number; dur?: number; args?: Record<string, unknown> }> = []
       if (tracing) {
         cdp.on('Tracing.dataCollected', (payload) => { traced.push(...(payload.value as typeof traced)) })
-        await cdp.send('Tracing.start', { traceConfig: { includedCategories: ['devtools.timeline', 'disabled-by-default-devtools.timeline.invalidationTracking', 'disabled-by-default-devtools.timeline.stack'] } } as never)
+        await cdp.send('Tracing.start', { traceConfig: { includedCategories: ['devtools.timeline', 'disabled-by-default-devtools.timeline.invalidationTracking'] } } as never)
       }
       if (profiling) { await cdp.send('Profiler.enable'); await cdp.send('Profiler.setSamplingInterval', { interval: 200 }); await cdp.send('Profiler.start') }
       const openStream = await measure(cdp, () => streamOnce(scaffold, page, 'MV_STREAM_OPEN'))
@@ -471,18 +480,7 @@ describe('manual web performance: Multiview panes', () => {
         const done = new Promise<void>((resolve) => { cdp.once('Tracing.tracingComplete', () => { resolve() }) })
         await cdp.send('Tracing.end')
         await done
-        const recalcs = traced.filter(event => event.name === 'UpdateLayoutTree' && event.dur !== undefined).sort((left, right) => (right.dur ?? 0) - (left.dur ?? 0)).slice(0, 8)
-        console.log(`BIGGEST UpdateLayoutTree (ms, elements)\n${recalcs.map(event => `${((event.dur ?? 0) / 1000).toFixed(0)} ${JSON.stringify(event.args)}`).join('\n')}`)
-        printForced(traced, 'Layout')
-        printForced(traced, 'UpdateLayoutTree')
-        const reasons = new Map<string, number>()
-        for (const event of traced) {
-          if (event.name !== 'StyleRecalcInvalidationTracking') continue
-          const data = (event.args as { data?: Record<string, unknown> }).data ?? {}
-          const key = `${String(data.reason)} ${String(data.invalidationSet ?? '')} ${String(data.changedAttribute ?? data.changedClass ?? data.changedId ?? '')} <${String(data.nodeName ?? '')}> ${String(data.extraData ?? '')}`
-          reasons.set(key, (reasons.get(key) ?? 0) + 1)
-        }
-        console.log(`INVALIDATIONS\n${[...reasons.entries()].sort((left, right) => right[1] - left[1]).slice(0, 15).map(([key, count]) => `${String(count).padStart(6)} ${key}`).join('\n')}`)
+        reportTrace('six panes', traced)
       }
 
       // Structure: six panes, and each pane mounts only the newest part of its chat.
