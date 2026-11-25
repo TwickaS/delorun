@@ -121,7 +121,19 @@ describe('Subagent model selection fields', () => {
   })
 
   it('states the shipped rule: any configured provider, and the list narrows it', () => {
-    renderSubagentModelSelection({ enabled: true, catalogStatus: 'ready' })
+    renderSubagentModelSelection({
+      enabled: true,
+      catalogStatus: 'ready',
+      candidates: [{
+        key: 'alpha\0fast',
+        provider: 'alpha',
+        model: 'fast',
+        providerName: 'Alpha API',
+        modelName: 'Fast',
+        available: true,
+        selected: false,
+      }],
+    })
     // The switch lets agents choose at all; the copy names cross-provider reach.
     expect(screen.getByText(en.subagentModelSelectionChoose)).toBeTruthy()
     expect(en.subagentModelSelectionChoose).toContain('any provider and model you have configured')
@@ -129,7 +141,7 @@ describe('Subagent model selection fields', () => {
     // The list is a narrowing, and ticking nothing allows every configured model.
     expect(screen.getByText(en.subagentModelSelectionNarrowing)).toBeTruthy()
     expect(en.subagentModelSelectionNarrowing).toContain('Leave every model unticked to allow any model you have configured')
-    expect(screen.getByText(en.subagentModelSelectionAllowed)).toBe(en.subagentModelSelectionAllowed)
+    expect(screen.getByText(en.subagentModelSelectionAllowed)).toBeTruthy()
     expect(en.subagentModelSelectionAllowed).toContain('Limit the models')
   })
 
