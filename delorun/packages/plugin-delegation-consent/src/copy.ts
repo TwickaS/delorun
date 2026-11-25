@@ -5,7 +5,8 @@
  * approval card and the guide repeat: an external agent runs as its own
  * program, outside Delorun's sandbox and approval prompts, can read and change
  * files in the workspace and wherever its own settings allow, Delorun's home
- * included, and uses its own sign-in and account.
+ * included, reads the workspace's own project settings under its own rules
+ * rather than Delorun's MCP consent, and uses its own sign-in and account.
  *
  * @module @delorun/plugin-delegation-consent/copy
  */
@@ -65,6 +66,7 @@ export function askText(facts: AskFacts): string {
   const task = facts.label === undefined ? '' : ` Task: "${facts.label}".`
   return `Start ${name} in ${where}?${task} ${name} runs as its own program, outside Delorun's sandbox and approval prompts. `
     + `It can read and change files in this workspace and anywhere else its own settings allow, including Delorun's home folder with its keys and tokens. `
+    + `It reads this workspace's own project settings, including any MCP servers the project declares, under its own rules rather than Delorun's MCP consent. `
     + `It uses your own ${name} sign-in and account, so any cost goes to that account. `
     + `Allow once starts this run only. To let ${name} start here without asking, allow it for this workspace; revoke that in Settings → Safety → External agents, or with ${CLI_COMMAND}.`
 }
@@ -80,6 +82,7 @@ export function askTextZh(facts: AskFacts): string {
   const task = facts.label === undefined ? '' : `任务：“${facts.label}”。`
   return `要在 ${where} 中启动 ${name} 吗？${task}${name} 作为独立程序运行，不受 Delorun 的沙箱和审批提示约束。`
     + '它可以读取和修改此工作区中的文件，以及其自身设置允许的任何其他位置，包括存放密钥和令牌的 Delorun 主目录。'
+    + '它会读取此工作区自己的项目设置，包括项目声明的任何 MCP 服务器，并按其自身的规则处理，而不是 Delorun 的 MCP 同意。'
     + `它使用你自己的 ${name} 登录和账户，所有费用都计入该账户。`
     + `“允许一次”只启动这一次运行。要让 ${name} 在此处无需询问即可启动，请为此工作区允许；可在“设置 → 外部智能体”中或通过 ${CLI_COMMAND} 撤销。`
 }

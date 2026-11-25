@@ -1,13 +1,13 @@
 /**
  * The "How Delorun runs" settings section: how much Delorun asks, running in the background, the studio's port and phone
- * access, each changed here with the terminal command that makes the same change shown beneath it. Dangerous mode, the
- * port and phone access are changed at the home's own computer; any other studio shows what it may change and a line that
- * says where the rest is answered. The home refuses what the studio did not check, so the page's own checks are for the
- * person, not the defence.
+ * access, each changed here, with a copy button beside the control that copies the terminal command making the same
+ * change and names that command in its tooltip. Dangerous mode, the port and phone access are changed at the home's own
+ * computer; any other studio shows what it may change and a line that says where the rest is answered. The home refuses
+ * what the studio did not check, so the page's own checks are for the person, not the defence.
  */
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Input, Switch } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconCheckOutlineRegular, IconCopyOutlineRegular, Input, Switch, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import { Button } from '@delorun/brand'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { RadioList, SettingsCard, type RadioRow } from '@delorun/settings-controls'
@@ -30,6 +30,22 @@ export const SETUP_COMMANDS = {
 
 /** The rows in screen order. */
 const ROWS = ['prompts', 'background', 'profile', 'reach'] as const
+
+/** The profile every command acts on unless it names another, which the CLI leaves out of its own commands too. */
+const DEFAULT_PROFILE = 'default'
+
+/**
+ * The command a row copies, naming the profile when it is not the default one.
+ * @param row - the row.
+ * @param profile - the profile this studio runs.
+ * @returns the command, as the CLI spells it.
+ */
+export function setupCommand(row: keyof typeof SETUP_COMMANDS, profile: string): string {
+  return profile === DEFAULT_PROFILE ? SETUP_COMMANDS[row] : `${SETUP_COMMANDS[row]} --profile ${profile}`
+}
+
+/** How long the copy button shows its answer before it returns to its resting state, in milliseconds. */
+const COPY_ANSWER_MS = 2000
 
 /** The request function and what the section opens. */
 export interface SetupCommandsSectionInjected {
@@ -55,6 +71,48 @@ const PORT = /^\d{4,5}$/u
 export function isUsablePort(text: string): boolean {
   const port = Number(text.trim())
   return PORT.test(text.trim()) && port >= 1024 && port <= 65_535
+}
+
+/** What a copy button says it is doing. */
+type CopyAnswer = 'idle' | 'copied' | 'failed'
+
+/**
+ * The copy button of one row: it copies the terminal command that makes the row's change, and its tooltip names that
+ * command and what pressing it does. The answer shows in place for {@link COPY_ANSWER_MS}, and a polite live region
+ * repeats it to a screen reader on every press.
+ * @param props - the row's copy and the command to copy.
+ * @returns the button.
+ */
+function CommandCopy({ t, command }: { readonly t: RunTranslate, readonly command: string }): ReactNode {
+  const [answer, setAnswer] = useState<CopyAnswer>('idle')
+  const [presses, setPresses] = useState(0)
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  useEffect(() => () => { clearTimeout(timer.current) }, [])
+  const copy = async (): Promise<void> => {
+    let copied = true
+    try {
+      await navigator.clipboard.writeText(command)
+    } catch (error) {
+      // The API is absent (an insecure context or an old browser) or the page lacks permission; the button says so.
+      void error
+      copied = false
+    }
+    setAnswer(copied ? 'copied' : 'failed')
+    setPresses(count => count + 1)
+    clearTimeout(timer.current)
+    timer.current = setTimeout(() => { setAnswer('idle') }, COPY_ANSWER_MS)
+  }
+  const said = answer === 'copied' ? t('copy.done') : answer === 'failed' ? t('copy.failed') : ''
+  return <span className={commandCss.copy}>
+    <Tooltip label={t('copy.tooltip', { command })} side="top" align="end" portal delayMs={300}>
+      <Button variant="secondary" size="sm" aria-label={t('copy.label', { command })} data-copy-answer={answer}
+        icon={answer === 'copied' ? <IconCheckOutlineRegular size={14} /> : <IconCopyOutlineRegular size={14} />} onClick={() => { void copy() }}>
+        {answer === 'copied' ? t('copy.done') : answer === 'failed' ? t('copy.failed') : t('copy.action')}
+      </Button>
+    </Tooltip>
+    {/* A new key per press replaces the text, so a second copy is announced again. */}
+    <span role="status" aria-live="polite" className={commandCss.announce}><span key={presses}>{said}</span></span>
+  </span>
 }
 
 /**
@@ -88,8 +146,8 @@ export function SetupCommandsSection({ t, fetch, atComputer, openPin }: SetupCom
           <div className={rowCss.description}>{t(`${row}.body`)}</div>
           {loaded === undefined ? null : <Controls row={row} t={t} fetch={fetch} state={loaded} computer={computer} openPin={openPin}
             onChanged={() => { void refresh() }} onRestart={() => { setRestart(true) }} />}
-          <code className={commandCss.command} aria-label={t('command')}>{SETUP_COMMANDS[row]}</code>
         </div>
+        <CommandCopy t={t} command={setupCommand(row, loaded?.profile ?? DEFAULT_PROFILE)} />
       </div>)}
     </SettingsCard>
     {restart ? <RestartNote t={t} fetch={fetch} /> : null}

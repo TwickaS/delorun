@@ -42,6 +42,8 @@ export type DangerousKind = 'off' | 'on' | 'inactive'
 
 /** What `GET /api/delorunRun.state` answers. */
 export interface RunState {
+  /** The profile this studio runs, which the rows' terminal commands name when it is not `default`. */
+  readonly profile: string
   /** Whether the profile has an answers record; without one the controls cannot change an answer, because setup has not run. */
   readonly recorded: boolean
   readonly prompts: PromptsChoice
@@ -130,6 +132,7 @@ const isRestart = fields({ restartNeeded: isBoolean })
 const all = (...checks: readonly Check[]): Check => value => checks.every(check => check(value))
 
 const isRunState: Check = fields({
+  profile: isString,
   recorded: isBoolean,
   prompts: isPrompts,
   dangerous: isDangerousKind,
