@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /** The studio plugins' line on the bundle's card: the switch it draws, the write it makes, and where it renders. */
-import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
+import { bindSnapshotSelector, makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { en, zh } from '../src/client/plugin-list-locales.ts'
@@ -26,11 +26,10 @@ function source(state: StudioRowsState) {
 
 /** Render the entry for one subject, with the store's state and the write it records. */
 function open(state: StudioRowsState, row = subject('delorun-cost-meter', false), setEnabled = vi.fn()) {
-  const rows = source(state)
   const props: StudioRowsProps = {
     subject: row,
     t: makeTranslate(en),
-    useRows: (selector: (value: StudioRowsState) => unknown) => selector(state),
+    useRows: bindSnapshotSelector(source(state)),
     setEnabled,
   }
   render(<StudioRows {...props} />)
@@ -77,10 +76,10 @@ describe('the studio plugins\' line on the bundle\'s card', () => {
   })
 
   it('renders nothing for a row it does not list, or for another bundle\'s card', () => {
-    const unlisted = render(<StudioRows subject={subject('delorun-theme', true)} t={makeTranslate(en)} useRows={selector => selector(READY)} setEnabled={vi.fn()} />)
+    const unlisted = render(<StudioRows subject={subject('delorun-theme', true)} t={makeTranslate(en)} useRows={bindSnapshotSelector(source(READY))} setEnabled={vi.fn()} />)
     expect(unlisted.container.firstChild).toBeNull()
     cleanup()
-    const other = render(<StudioRows subject={subject('delorun-cost-meter', false, '@deepseek-ai/dsh-experimental-voice-input-bundle')} t={makeTranslate(en)} useRows={selector => selector(READY)} setEnabled={vi.fn()} />)
+    const other = render(<StudioRows subject={subject('delorun-cost-meter', false, '@deepseek-ai/dsh-experimental-voice-input-bundle')} t={makeTranslate(en)} useRows={bindSnapshotSelector(source(READY))} setEnabled={vi.fn()} />)
     expect(other.container.firstChild).toBeNull()
   })
 
