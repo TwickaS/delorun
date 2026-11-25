@@ -3617,14 +3617,14 @@
     {
       "path": "packages/api/remote-access/src/peer-admission.ts",
       "class": "delorun-feature",
-      "feature": "TODO",
-      "reason": "TODO"
+      "feature": "reach-route-admission",
+      "reason": "Reach route admission: builds a route's `admitPeer` from the reach policy for the action the route serves, so a device reaches an exact route only when the policy already allows that action. Before this, an exact route reached a non-owner peer only through the Gateway, which decides by path rather than by action, so a capability the policy allowed was refused. Fail-closed three ways: no action named, no resource named, or no remote access mounted all admit only the owner. No upstream action, parameter or export is removed or renamed. Lead verdict: kept; it adds the admission check the routes were missing and leaves the policy the single place an action is decided."
     },
     {
       "path": "packages/client/ui-deliverables/src/present-open.ts",
       "class": "delorun-feature",
-      "feature": "TODO",
-      "reason": "TODO"
+      "feature": "reach-route-admission",
+      "reason": "Reach route admission: the present route declares the action it serves so `peerAdmission` can decide a device against the reach policy, instead of the route being reachable only through the Gateway's path check. The route's own behaviour is unchanged; only the admission declaration is added. Lead verdict: kept; it is a declaration, not a behaviour change, and the policy still refuses the action it names where the action is denied."
     },
     {
       "path": "packages/session-query/session-log-export/src/index.ts",
