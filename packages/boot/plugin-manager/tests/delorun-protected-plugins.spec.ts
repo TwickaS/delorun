@@ -269,7 +269,7 @@ describe('plugin_manager in danger-full-access with @delorun/bundle-local\'s pro
   it('names the consent and guard plugins, the live-agent gate and its two drivers, the update gate, the update check, the trust bill, the install check, sign-in and reach, and the sandbox rows', () => {
     expect([...PROTECTED].sort()).toEqual([
       '@deepseek-ai/dsh-sandbox-local', '@deepseek-ai/dsh-sandbox-policy', '@delorun/agent-claude-code', '@delorun/agent-codex', '@delorun/bundle-local/trust', '@delorun/bundle-local/update-check', '@delorun/bundle-local/update-gate',
-      '@delorun/external-agents', '@delorun/home-auth', '@delorun/plugin-changes', '@delorun/plugin-delegation-consent', '@delorun/plugin-fetch-guard', '@delorun/plugin-install-check',
+      '@delorun/external-agents', '@delorun/home-auth', '@delorun/plugin-agent-seats', '@delorun/plugin-changes', '@delorun/plugin-delegation-consent', '@delorun/plugin-fetch-guard', '@delorun/plugin-install-check',
       '@delorun/plugin-instruction-consent', '@delorun/plugin-mcp-consent', '@delorun/plugin-permission-defaults', '@delorun/plugin-schedule-consent', '@delorun/plugin-tool-failure-guard', '@delorun/reach',
     ])
   })
