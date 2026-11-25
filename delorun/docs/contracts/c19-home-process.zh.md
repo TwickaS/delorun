@@ -175,7 +175,7 @@ Host 的启动环境是上游的 `.env` 层（工作目录的与 harness home �
 4. **`snapshot`。** 保存一个以该更新命名的 profile 历史版本，包括 home patch（[C3](c03-update-report.zh.md)）；更新记录把其 id 保存为 `snapshot`。
 5. **`waiting`。** 运行中的 chat 是指本 Host 中有活动轮次或运行中后台作业的会话。从本阶段开始，新的轮次以 `UPDATE_PENDING` 被拒绝，studio 会连同取消操作一起显示它；计划投递被暂缓到更新结束。使用 `drain` 时，本阶段等待运行中的 chat 数量降为零，最多 `drainTimeoutS`，之后更新以 `DRAIN_TIMEOUT` 结束为 `aborted`。使用 `abort-if-busy` 时，若本阶段开始时有任何 chat 在运行，更新以 `CHATS_RUNNING` 结束为 `aborted`。使用 `cancel` 时，通过上游的取消机制取消运行中的轮次与作业，待它们结束后本阶段继续。
 6. **`switching`。** 在没有 chat 运行且新轮次被拒绝的情况下，前任进程先像启动器在启动某个版本之前那样检查 `to`（[C2](c02-release-manifest.zh.md) 对锚定根目录下每个文件的启动检查，然后是 [C18](c18-release-log.zh.md) 的发布日志启动检查）；未通过的版本使更新在任何改变之前以 `VERIFY_FAILED` 结束为 `aborted`，回滚的目标也会在任何步骤之前以同样方式检查。然后它再次检查没有其他 chat 数据使用方注册（[其他 profile](#the-home-process)）；若有，则在任何改变之前以 `CHATS_RUNNING` 拒绝该更新，其记录按在 `switching` 之前结束的更新处理。然后它停止其 Host 与它启动的监管器，写入本人所选的会话数据副本，把本人已批准的 harness 文件带到 `to`（[C21](c21-changes.zh.md#harness-edits)），当其合并结果与 `update.apply` 所指定的报告不同时以 `HARNESS_REPORT_STALE` 拒绝，并在持有 harness 的锁期间写入 [C1](c01-home-layout.zh.md) 的 `previous` 与 `current` 指针；在指针写入之前失败的带入会使更新以 `aborted` 结束，并移除它为 `to` 写入的内容，前任重新启动其 Host。然后它写入日志文件，并从 `to` 以 `standby` 启动后继进程。前任通过作为文件描述符 3 继承的管道传递交接，从不通过命令行或环境变量传递。为切换而停止 Host 不结束任何进程：前任最多等待 `drainTimeoutS` 让 Host 完成拆除；拆除失败或超时时，不切换任何内容，也不写入副本，更新以 `HOST_STOP_FAILED` 结束为 `aborted`，其记录按在 `switching` 之前结束的更新处理，前任重新启动其 Host；该启动失败时，前任停止，下次启动运行 `from`。Host 未能停止的回滚也以同样方式在任何步骤之前结束，并保留其记录。
-7. **`health-check`。** 后继进程启动其 Host。满足以下条件即通过：Host 在 120 秒内完成启动，它在启动时禁用的插件是报告所列插件的子集，且 studio 监听器回答其健康请求。 A successor whose Host is not healthy within `SUCCESSOR_DEADLINE_MS` (100 seconds) has its Host runner undo what the boot changed in the profile and sends `failed` itself, before the predecessor's 120 seconds end.
+7. **`health-check`。** 后继进程启动其 Host。满足以下条件即通过：Host 在 120 秒内完成启动，它在启动时禁用的插件是报告所列插件的子集，且 studio 监听器回答其健康请求。 如果后继进程的 Host 在 `SUCCESSOR_DEADLINE_MS`（100 秒）内不健康，其 Host 运行器会撤销这次启动在 profile 中所做的改动，并在前任进程的 120 秒结束之前自己发送 `failed`。
 8. **`committed`。** 后继进程通过管道报告 `ready`。前任以原子方式把锁改写为后继的进程 id 与 `startId`，然后关闭其更新通道。后继写入新的启动令牌，在更新通道上监听，启动监管器，进入 `running`，并把更新记录标记为 `committed`；然后它只保留本次更新的会话数据副本，删除暂存记录，并删除 `current` 与 `previous` 所指版本之外的每个已安装运行时（[C1](c01-home-layout.zh.md) 的保留规则），删除失败的由下一次更新重试。前任退出。
 
 **会话数据副本。** 当本人选择了副本（[C3](c03-update-report.zh.md#data-formats)）时，`update.apply` 在 `snapshot` 之前检查它是否放得下（否则为 `DATA_COPY_NO_SPACE`，不改变任何内容），并在 `switching` 中、Host 停止之后、指针改变之前写入它。更新记录的 `targetStarted` 在后继进程被创建之前写入并同步。
@@ -265,7 +265,7 @@ studio 的 Restart（[C21](c21-changes.zh.md#harness-edits)）让 CLI 的 Host �
 | `delorun stop --now` 在 `SIGKILL` 之后的等待 | 5 秒 |
 | 启动失败时 Host 的拆除 | 5 秒 |
 | 后继的 `ready` 与健康检查 | 120 秒 |
-| Successor's own deadline to report `failed` | 100 seconds (`SUCCESSOR_DEADLINE_MS`) |
+| 后继进程自行报告 `failed` 的期限 | 100 秒（`SUCCESSOR_DEADLINE_MS`） |
 | 登录项重启 | 300 秒内最多 3 次 |
 | 每个 profile 同时进行的更新或回滚 | 1 |
 | 协议版本 `v` | 1 |
