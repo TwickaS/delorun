@@ -443,6 +443,10 @@
 }
 
 .folderPath {
+  /* The path yields to the name: capped at a share of the row, it is cut with an ellipsis before the name is squeezed
+     to a letter or two on a phone. */
+  flex: 0 1 auto;
+  max-width: 45%;
   margin-inline-start: auto;
   min-width: 0;
   overflow: hidden;
