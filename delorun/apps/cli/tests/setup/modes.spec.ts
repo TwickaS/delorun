@@ -256,6 +256,7 @@ describe('sections', { timeout: TIMEOUT_MS }, () => {
       '  key                 Model provider and key',
       '  prompts             Prompts',
       '  background          Background',
+      '  autostart           Start at login',
       '  profile             Profile name and port',
       '',
     ].join('\n'))

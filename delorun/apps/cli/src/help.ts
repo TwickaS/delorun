@@ -47,7 +47,7 @@ export const COMMAND_HELP: Readonly<Record<string, CommandHelp>> = {
     about: [
       'Sets up Delorun with a few questions: whether to use it from your other devices too, whether to copy your DeepSeek Harness chats (only when you have some), and the studio port when 3080 is busy. You add your model key in the studio.',
       'Without a terminal, delorun setup takes the safe defaults and asks nothing, as --yes does.',
-      'Name a section (key, prompts, background, privacy, reach, changes-protection, profile) to answer one question again. delorun setup --list shows the sections.',
+      'Name a section (key, prompts, background, autostart, privacy, reach, changes-protection, profile) to answer one question again. delorun setup --list shows the sections.',
     ],
     options: [
       PROFILE,

@@ -95,6 +95,8 @@ const reach = z.strictObject({
 const answerFields = {
   prompts: z.enum(PROMPTS_OPTIONS),
   background: z.boolean(),
+  // An absent answer reads as no: a document written before the question existed installs no unit.
+  autostart: z.boolean().default(SETUP_DEFAULTS.autostart),
   profile: z.strictObject({ name: z.string().min(1).nullable(), port: z.number().int().min(MIN_PORT).max(MAX_PORT).nullable() }),
   reach,
   importStockHome: z.boolean(),

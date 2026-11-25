@@ -24,6 +24,7 @@ import { parseOptions, type CliCommand } from './command.ts'
 import { profileDirectory, selectProfile } from './profile.ts'
 import { readInspectorRecord, type InspectorRecord } from './inspector.ts'
 import { dangerousModeLine } from './setup/dangerous.ts'
+import { autostartStatusLine } from './setup/autostart-section.ts'
 import { notRunningText } from './messages.ts'
 import { readableTime } from './output.ts'
 import { commandRows, styleOf, type Style } from './style.ts'
@@ -113,6 +114,7 @@ export const statusCommand: CliCommand = {
       }
       context.stdout(await workSessionLine(home.path, profile))
       context.stdout(await changesNotice(home.path, profile))
+      context.stdout(await autostartStatusLine(context.env))
     }
     const record = readHomeLock(runDirectory(home.path, profile))
     if (record === undefined || !holderAlive(record)) {
