@@ -50,6 +50,7 @@ describe('the next steps', () => {
       THIS_COMPUTER_ONLY,
       '',
       'Change an answer later: delorun setup <section> (delorun setup --list shows the sections).',
+      'To start Delorun by itself when you log in: delorun setup autostart.',
       'If something looks wrong: delorun doctor.',
       '',
     ].join('\n'))
@@ -114,6 +115,7 @@ describe('the ending of a run that started Delorun', () => {
       'To keep it running after you close the terminal: delorun start --background',
       '(or Settings → General → How Delorun runs).',
       'Change an answer later: delorun setup <section> (delorun setup --list)',
+      'To start Delorun by itself when you log in: delorun setup autostart',
       'If something looks wrong: delorun doctor',
       '',
     ].join('\n'))

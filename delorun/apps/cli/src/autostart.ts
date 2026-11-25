@@ -10,6 +10,9 @@
  * A user unit needs no administrator rights. Starting it without a login session needs `loginctl enable-linger`, which
  * this module asks for and then reads back, because a machine may refuse it; the setup section says plainly when it did.
  *
+ * {@link autostartSupport} answers from the filesystem alone, so the setup question costs no command; only installing,
+ * removing and reading the state back run `systemctl` and `loginctl`.
+ *
  * @module @delorun/cli/autostart
  */
 import { execFile } from 'node:child_process'
@@ -21,6 +24,9 @@ import { writeProtectedFile } from '@delorun/home'
 
 /** The unit's name under the user manager, without its `.service` suffix. */
 export const AUTOSTART_UNIT = 'delorun'
+
+/** The directory a systemd-booted machine has and a container or another init does not. */
+export const SYSTEMD_RUNTIME_DIRECTORY = '/run/systemd/system'
 
 /** How long a `systemctl` or `loginctl` call may take before it is given up on, in milliseconds. */
 const COMMAND_TIMEOUT_MS = 15_000
@@ -50,7 +56,7 @@ export function runCommand(file: string, args: readonly string[]): Promise<Comma
 
 /** What this computer offers for an autostart hook. */
 export type AutostartSupport =
-  /** A systemd user manager answers, so a unit can be installed. */
+  /** A systemd user manager runs here, so a unit can be installed. */
   | { readonly kind: 'systemd' }
   /** This computer has no systemd user manager, so no unit can be installed. */
   | { readonly kind: 'unsupported', readonly why: string }
@@ -58,40 +64,36 @@ export type AutostartSupport =
 /**
  * Whether this computer can run a systemd user unit.
  *
- * The check is the user manager's own answer rather than the presence of a file: a container or a machine without
- * systemd has `systemctl` on `PATH` and no manager behind it, and installing a unit there would leave a file that
- * never starts anything.
- * @param run - runs a command; {@link runCommand} by default.
+ * The answer comes from the filesystem, so the setup question costs no command: a machine booted by systemd has
+ * {@link SYSTEMD_RUNTIME_DIRECTORY}, and a container or a machine with another init does not. Installing a unit
+ * anywhere else would leave a file that never starts anything.
+ * @param platform - the platform; this process's by default.
+ * @param hasRuntimeDirectory - whether the systemd runtime directory exists; the real filesystem by default.
  * @returns the support, with the reason when there is none.
  */
-export async function autostartSupport(run: typeof runCommand = runCommand): Promise<AutostartSupport> {
-  if (process.platform !== 'linux') return { kind: 'unsupported', why: `autostart uses a systemd user unit, and this is ${process.platform}` }
-  const answer = await run('systemctl', ['--user', 'is-system-running'])
-  // `is-system-running` exits non-zero for a degraded manager, which still runs units; only a manager that does not
-  // answer at all, or answers `offline`, cannot start one.
-  if (answer.text === '' || answer.text === 'offline') return { kind: 'unsupported', why: 'no systemd user manager answers on this computer' }
+export function autostartSupport(platform: string = process.platform, hasRuntimeDirectory: () => boolean = () => existsSync(SYSTEMD_RUNTIME_DIRECTORY)): AutostartSupport {
+  if (platform !== 'linux') return { kind: 'unsupported', why: `autostart uses a systemd user unit, and this is ${platform}` }
+  if (!hasRuntimeDirectory()) return { kind: 'unsupported', why: 'this computer is not running systemd, so it has no user manager to start Delorun' }
   return { kind: 'systemd' }
 }
 
 /**
- * The directory the user manager reads units from.
- *
- * The manager reads `XDG_CONFIG_HOME` from its own environment, which is the environment of the session that started
- * it, not the environment of the command that writes the unit. A unit written to the caller's `XDG_CONFIG_HOME` when
- * the two differ is a file systemd never reads, so the manager is asked for its own value.
- * @param env - the environment, read for `XDG_CONFIG_HOME` when the manager names none.
- * @param run - runs a command; {@link runCommand} by default.
+ * The directory the person's own configuration names for user units.
+ * @param env - the environment, read for `XDG_CONFIG_HOME`.
  * @returns the directory, which may not exist yet.
  */
-export async function unitDirectory(env: Readonly<Record<string, string | undefined>>, run: typeof runCommand = runCommand): Promise<string> {
-  const manager = await managerConfigHome(run)
-  const configured = manager ?? env['XDG_CONFIG_HOME']
+export function unitDirectory(env: Readonly<Record<string, string | undefined>>): string {
+  const configured = env['XDG_CONFIG_HOME']
   const base = configured !== undefined && configured.trim().length > 0 ? configured : join(homedir(), '.config')
   return join(base, 'systemd', 'user')
 }
 
 /**
  * The `XDG_CONFIG_HOME` the user manager itself runs with.
+ *
+ * The manager reads its own environment, which is the environment of the session that started it, not the environment
+ * of the command that writes the unit. A unit written to the caller's `XDG_CONFIG_HOME` when the two differ is a file
+ * systemd never reads, so the manager is asked for its own value.
  * @param run - runs a command.
  * @returns the value, or `undefined` when the manager names none or does not answer.
  */
@@ -103,13 +105,29 @@ async function managerConfigHome(run: typeof runCommand): Promise<string | undef
 }
 
 /**
+ * The directory the user manager reads units from.
+ * @param run - runs a command; {@link runCommand} by default.
+ * @returns the directory, which may not exist yet.
+ */
+export async function managerUnitDirectory(run: typeof runCommand = runCommand): Promise<string> {
+  const configured = await managerConfigHome(run)
+  const base = configured !== undefined && configured.trim().length > 0 ? configured : join(homedir(), '.config')
+  return join(base, 'systemd', 'user')
+}
+
+/**
  * The unit file's path.
- * @param env - the environment, read for `XDG_CONFIG_HOME` when the manager names none.
+ *
+ * A unit the person's own configuration already holds is named first, so reading and removing find it without asking
+ * the manager; otherwise the manager's own directory is the answer, which is where a new unit goes.
+ * @param env - the environment, read for `XDG_CONFIG_HOME`.
  * @param run - runs a command; {@link runCommand} by default.
  * @returns the path of `delorun.service`.
  */
 export async function unitPath(env: Readonly<Record<string, string | undefined>>, run: typeof runCommand = runCommand): Promise<string> {
-  return join(await unitDirectory(env, run), `${AUTOSTART_UNIT}.service`)
+  const own = join(unitDirectory(env), `${AUTOSTART_UNIT}.service`)
+  if (existsSync(own)) return own
+  return join(await managerUnitDirectory(run), `${AUTOSTART_UNIT}.service`)
 }
 
 /** What the unit runs, and for which home. */
@@ -122,7 +140,7 @@ export interface UnitRequest {
   readonly entry: string
   /** The Node executable that runs the entry file. */
   readonly node: string
-  /** The environment the unit is written with, read for `PATH` and `XDG_CONFIG_HOME`. */
+  /** The environment the unit is written with, read for `PATH`. */
   readonly env: Readonly<Record<string, string | undefined>>
 }
 
@@ -168,6 +186,10 @@ export interface UnitOutcome {
   readonly linger?: boolean
 }
 
+/** How many times {@link enableLinger} reads linger back, and how long it waits between reads, in milliseconds. */
+const LINGER_READS = 10
+const LINGER_READ_MS = 200
+
 /**
  * Write the unit, enable it, and ask for linger.
  *
@@ -179,11 +201,12 @@ export interface UnitOutcome {
  * @param sleep - waits between linger reads; a real timer by default.
  * @returns what happened.
  */
-export async function installUnit(request: UnitRequest, run: typeof runCommand = runCommand, sleep?: (ms: number) => Promise<void>): Promise<UnitOutcome> {
-  const path = await unitPath(request.env, run)
+export async function installUnit(request: UnitRequest, run: typeof runCommand = runCommand, sleep: (ms: number) => Promise<void> = ms => new Promise(resolve => setTimeout(resolve, ms))): Promise<UnitOutcome> {
+  const directory = await managerUnitDirectory(run)
+  const path = join(directory, `${AUTOSTART_UNIT}.service`)
   try {
     // systemd reads a user unit from this directory, which a fresh account does not have.
-    mkdirSync(await unitDirectory(request.env, run), { recursive: true, mode: 0o700 })
+    mkdirSync(directory, { recursive: true, mode: 0o700 })
     await writeProtectedFile(path, unitText(request))
   } catch (error) {
     return { ok: false, detail: `Delorun could not write ${path}: ${error instanceof Error ? error.message : String(error)}` }
@@ -202,10 +225,6 @@ export async function installUnit(request: UnitRequest, run: typeof runCommand =
   }
 }
 
-/** How many times {@link enableLinger} reads linger back, and how long it waits between reads, in milliseconds. */
-const LINGER_READS = 10
-const LINGER_READ_MS = 200
-
 /**
  * Ask for linger and read back whether it took.
  *
@@ -213,10 +232,10 @@ const LINGER_READ_MS = 200
  * the request reports a refusal that did not happen. The read is repeated for a short while, and only then is the
  * answer taken as the machine's.
  * @param run - runs a command.
- * @param sleep - waits; a real timer by default.
+ * @param sleep - waits between reads.
  * @returns whether the account now lingers.
  */
-async function enableLinger(run: typeof runCommand, sleep: (ms: number) => Promise<void> = ms => new Promise(resolve => setTimeout(resolve, ms))): Promise<boolean> {
+async function enableLinger(run: typeof runCommand, sleep: (ms: number) => Promise<void>): Promise<boolean> {
   await run('loginctl', ['enable-linger', '--no-ask-password'])
   for (let read = 0; read < LINGER_READS; read++) {
     if (await lingerEnabled(run)) return true
@@ -299,7 +318,7 @@ export function launcherCommand(env: Readonly<Record<string, string | undefined>
 
 /**
  * The unit file's text as it is on disk, for a report.
- * @param env - the environment, read for `XDG_CONFIG_HOME` when the manager names none.
+ * @param env - the environment, read for `XDG_CONFIG_HOME`.
  * @param run - runs a command; {@link runCommand} by default.
  * @returns the text, or `undefined` when there is no unit.
  */

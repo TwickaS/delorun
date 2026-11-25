@@ -27,16 +27,21 @@ export const AUTOSTART_QUESTION = 'Start Delorun by itself when you log in?'
  * What the two choices mean.
  *
  * The lines name the difference between starting at login and starting at boot, because that is the part a person
- * cannot see: a unit without linger waits for a login, and a machine that reboots unattended then runs no Delorun.
- * @param linger - whether this account already lingers, which decides whether the boot line is a promise or a request.
+ * cannot see: a unit without linger waits for a login, and a machine that reboots unattended then runs no Delorun. The
+ * boot line is a request rather than a promise, because the machine may refuse linger; `apply` reports which of the
+ * two the person got.
  * @returns the two choices.
  */
-export function autostartText(linger: boolean): readonly ChoiceText[] {
-  const boot = linger
-    ? 'It also starts when the machine boots, with nobody logged in.'
-    : 'It starts when you log in. Starting at boot with nobody logged in needs linger, which Delorun asks for and this computer may refuse.'
+export function autostartText(): readonly ChoiceText[] {
   return [
-    { label: `Yes${RECOMMENDED}`, lines: ['Delorun starts by itself when you log in, so the studio is there without a terminal.', boot, 'Change later: delorun setup autostart.'] },
+    {
+      label: `Yes${RECOMMENDED}`,
+      lines: [
+        'Delorun starts by itself when you log in, so the studio is there without a terminal.',
+        'Starting at boot with nobody logged in needs linger, which Delorun asks for and this computer may refuse.',
+        'Change later: delorun setup autostart.',
+      ],
+    },
     { label: 'No', lines: ['You start Delorun yourself with delorun start.', 'Change later: delorun setup autostart.'] },
   ]
 }
@@ -50,20 +55,21 @@ export function autostartSection(run?: typeof runCommand): SetupSection {
   return {
     id: 'autostart',
     title: 'Start at login',
-    // A unit that starts a home process the person stops at every login helps nobody, so the question follows the
-    // background answer: it is asked only when Delorun is to keep running after the terminal closes.
-    inMainFlow: draft => draft.answers.background ? 'asked' : 'never',
+    // The main flow asks few questions (A519), and `background` is not one of them: this section sits beside it, asked
+    // by `delorun setup autostart`, so a first run gains no question and the answer still defaults to no.
+    inMainFlow: 'never',
     asks: () => true,
     appliesTo: () => true,
     async ask(io, draft) {
-      const support = await autostartSupport(run)
+      // The support check reads the filesystem, so the question costs no command; linger is asked about only when the
+      // person is about to install a unit, in `apply`.
+      const support = autostartSupport()
       if (support.kind === 'unsupported') {
         // A computer that cannot run a unit is told so once, and the question is not asked.
         io.note(`Delorun cannot start itself on this computer: ${support.why}. Start it with delorun start.`, 'Start at login')
         return { answers: { autostart: false }, status: 'seen' }
       }
-      const linger = await lingerEnabled(run)
-      io.note(choiceNote(autostartText(linger)), 'Starting by itself')
+      io.note(choiceNote(autostartText()), 'Starting by itself')
       const start = await io.confirm(AUTOSTART_QUESTION, draft.answers.autostart)
       return start === BACK ? BACK : { answers: { autostart: start }, status: 'answered' }
     },
@@ -73,7 +79,7 @@ export function autostartSection(run?: typeof runCommand): SetupSection {
         const removed = await removeUnit(context.env, run)
         return removed.ok ? undefined : removed.detail
       }
-      const support = await autostartSupport(run)
+      const support = autostartSupport()
       if (support.kind === 'unsupported') return `Delorun does not start by itself: ${support.why}.`
       const launcher = launcherCommand(context.env, fileURLToPath(import.meta.url))
       if (launcher === undefined) return 'Delorun does not start by itself: the delorun command that installed it was not found, so there is nothing for the unit to run. Install it with npm install -g delorun, then run delorun setup autostart.'

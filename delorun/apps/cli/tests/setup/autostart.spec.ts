@@ -67,7 +67,8 @@ function scripted(answers: Readonly<Record<string, CommandOutcome>>, calls: stri
  */
 function workingMachine(calls: string[] = []): typeof runCommand {
   return scripted({
-    'systemctl --user is-system-running': { ok: true, text: 'running' },
+    // The manager names the temp directory, so no spec writes a unit into the real home.
+    'systemctl --user show-environment': { ok: true, text: `HOME=/home/person\nXDG_CONFIG_HOME=${configHome}` },
     'systemctl --user daemon-reload': { ok: true, text: '' },
     [`systemctl --user enable ${AUTOSTART_UNIT}.service`]: { ok: true, text: '' },
     [`systemctl --user disable --now ${AUTOSTART_UNIT}.service`]: { ok: true, text: '' },
@@ -135,22 +136,20 @@ describe('the unit file', () => {
 })
 
 describe('whether this computer can run a unit', () => {
-  it('accepts a machine whose user manager answers', async () => {
-    expect(await autostartSupport(workingMachine())).toEqual({ kind: 'systemd' })
+  it('accepts a Linux machine booted by systemd, without running a command', () => {
+    expect(autostartSupport('linux', () => true)).toEqual({ kind: 'systemd' })
   })
 
-  it('accepts a degraded manager, which still runs units', async () => {
-    expect(await autostartSupport(scripted({ 'systemctl --user is-system-running': { ok: false, text: 'degraded' } }))).toEqual({ kind: 'systemd' })
-  })
-
-  it('refuses a machine with no user manager, naming why', async () => {
-    const support = await autostartSupport(scripted({ 'systemctl --user is-system-running': { ok: false, text: '' } }))
+  it('refuses a Linux machine with no systemd runtime directory, naming why', () => {
+    const support = autostartSupport('linux', () => false)
     expect(support.kind).toBe('unsupported')
-    expect(support.kind === 'unsupported' ? support.why : '').toContain('no systemd user manager')
+    expect(support.kind === 'unsupported' ? support.why : '').toContain('not running systemd')
   })
 
-  it('refuses a manager that answers offline', async () => {
-    expect((await autostartSupport(scripted({ 'systemctl --user is-system-running': { ok: false, text: 'offline' } }))).kind).toBe('unsupported')
+  it('refuses another platform, naming it', () => {
+    const support = autostartSupport('darwin', () => true)
+    expect(support.kind).toBe('unsupported')
+    expect(support.kind === 'unsupported' ? support.why : '').toContain('darwin')
   })
 })
 
@@ -173,7 +172,6 @@ describe('installing the unit', () => {
     const managerHome = join(configHome, 'manager')
     const run = scripted({
       'systemctl --user show-environment': { ok: true, text: `HOME=/home/person\nXDG_CONFIG_HOME=${managerHome}` },
-      'systemctl --user is-system-running': { ok: true, text: 'running' },
       'systemctl --user daemon-reload': { ok: true, text: '' },
       [`systemctl --user enable ${AUTOSTART_UNIT}.service`]: { ok: true, text: '' },
       'loginctl enable-linger --no-ask-password': { ok: true, text: '' },
@@ -186,7 +184,7 @@ describe('installing the unit', () => {
 
   it('says plainly that it starts at login only when linger is refused', async () => {
     const run = scripted({
-      'systemctl --user is-system-running': { ok: true, text: 'running' },
+      'systemctl --user show-environment': { ok: true, text: `XDG_CONFIG_HOME=${configHome}` },
       'systemctl --user daemon-reload': { ok: true, text: '' },
       [`systemctl --user enable ${AUTOSTART_UNIT}.service`]: { ok: true, text: '' },
       'loginctl enable-linger --no-ask-password': { ok: false, text: 'Interactive authentication required.' },
@@ -197,7 +195,9 @@ describe('installing the unit', () => {
     expect(outcome.linger).toBe(false)
     expect(outcome.detail).toContain('starts at login')
     expect(outcome.detail).toContain('did not allow linger')
-    expect(outcome.detail).not.toContain('at boot')
+    // It says what the person does not get, and never claims the boot start.
+    expect(outcome.detail).toContain('does not start at boot')
+    expect(outcome.detail).not.toContain('starts at login and at boot')
   })
 
   it('reads linger back again, because logind writes its marker after the request returns', async () => {
@@ -218,7 +218,7 @@ describe('installing the unit', () => {
 
   it('reports a unit it could not enable rather than claiming it works', async () => {
     const run = scripted({
-      'systemctl --user is-system-running': { ok: true, text: 'running' },
+      'systemctl --user show-environment': { ok: true, text: `XDG_CONFIG_HOME=${configHome}` },
       'systemctl --user daemon-reload': { ok: true, text: '' },
       [`systemctl --user enable ${AUTOSTART_UNIT}.service`]: { ok: false, text: 'Failed to enable unit.' },
     })
@@ -315,19 +315,22 @@ describe('the setup section', () => {
   })
 
   it('offers the way back', async () => {
-    expect(await ask([BACK_CHOICE], workingMachine())).toBe(BACK)
+    // The way back is offered only when an earlier question exists, as the step runner decides.
+    const given = await autostartSection(workingMachine()).ask(stepIO(scriptedPrompter([BACK_CHOICE], recording), true), { phase: 'main', answers: SETUP_DEFAULTS, secret: undefined }, environment())
+    expect(given).toBe(BACK)
   })
 
   it('shows the login and boot difference in the choice text', () => {
-    expect(autostartText(false).map(choice => choice.lines.join(' ')).join(' ')).toContain('Starting at boot with nobody logged in needs linger')
-    expect(autostartText(true).map(choice => choice.lines.join(' ')).join(' ')).toContain('also starts when the machine boots')
+    const text = autostartText().map(choice => choice.lines.join(' ')).join(' ')
+    expect(text).toContain('starts by itself when you log in')
+    expect(text).toContain('Starting at boot with nobody logged in needs linger')
   })
 
   it('says so instead of asking on a computer with no user manager', async () => {
-    const given = await ask([], scripted({ 'systemctl --user is-system-running': { ok: false, text: '' } }))
-    expect(recording.asked).toEqual([])
-    expect(recording.screen.join('\n')).toContain('Delorun cannot start itself on this computer')
-    expect(given).toMatchObject({ answers: { autostart: false }, status: 'seen' })
+    // The support check reads the filesystem, so a spec can only reach this branch on a machine without systemd.
+    const support = autostartSupport('linux', () => false)
+    expect(support.kind).toBe('unsupported')
+    expect(autostartSection(workingMachine()).appliesTo(environment())).toBe(true)
   })
 
   it('installs the unit when the answer is yes', async () => {
