@@ -23,7 +23,8 @@
  * reload (`prepareReload` of `@delorun/changes`): with protection off, `delorun plugin --profile <name> add link:<folder>`
  * links the plugin to its active directory holding the folder's content, approved and logged as loaded without review;
  * with protection on, to its empty active directory with the folder's content waiting for review. Either is said on
- * standard error. A profile whose first
+ * standard error. A removal that succeeded also forgets each plugin the profile no longer depends on: its load copy
+ * under Changes is removed and every record of what the plugin changed stays, so undo still works. A profile whose first
  * start under Changes has not run is left to that start. The command exits 0 when upstream's operation succeeded and
  * the profile is what Changes keeps, and 1 otherwise.
  *
@@ -38,7 +39,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { runDirectory } from '@delorun/home'
-import { isChangesError, prepareReload, readChangeLog, startNotice } from '@delorun/changes'
+import { forgetPlugin, isChangesError, prepareReload, readChangeLog, startNotice } from '@delorun/changes'
 import { isCarriedPackage, runningRelease } from './changes/start.ts'
 import { prepareHome, type CliCommand, type CommandContext, type CommandResult } from './command.ts'
 import { CliError, EXIT, type ExitCode } from './exit.ts'
@@ -146,6 +147,22 @@ function hasNoPlugins(profileDir: string): boolean {
   return Object.keys(dependencies).length === 0
 }
 
+/**
+ * The package names a profile's manifest depends on.
+ * @param profileDir - the profile directory.
+ * @returns the names; none when the profile has no manifest, or has one that does not read, which names no dependency
+ *   this command could have removed.
+ */
+function dependencyNames(profileDir: string): readonly string[] {
+  try {
+    const { dependencies = {} } = JSON.parse(readFileSync(join(profileDir, 'package.json'), 'utf8')) as { readonly dependencies?: Readonly<Record<string, unknown>> }
+    return Object.keys(dependencies)
+  } catch {
+    // A profile whose manifest pnpm cannot read either names no dependency, so the removal infers none.
+    return []
+  }
+}
+
 /** The profile files a refused installation puts back. */
 const RESTORED_FILES = ['package.json', 'pnpm-lock.yaml'] as const
 
@@ -210,6 +227,27 @@ async function decideRefusedBuilds(profileDir: string, output: string, allowed: 
 }
 
 /**
+ * Forget the load copy of each plugin the profile no longer depends on, once a removal has succeeded. What Changes
+ * recorded of the plugin stays, so a change made while it was installed can still be undone
+ * ([forgetPlugin](../../../packages/changes/src/forget.ts)).
+ * @param home - the Delorun home.
+ * @param profile - the profile the removal changed.
+ * @param profileDir - its directory, whose manifest now names its dependencies.
+ * @param depended - the plugins it depended on before the removal.
+ * @param context - the command's output, where a copy that could not be removed is named.
+ */
+async function forgetRemovedCopies(home: string, profile: string, profileDir: string, depended: readonly string[], context: Pick<CommandContext, 'stderr'>): Promise<void> {
+  const after = new Set(dependencyNames(profileDir))
+  for (const plugin of depended.filter(name => !after.has(name))) {
+    try {
+      await forgetPlugin({ home, profile, profileDir }, plugin)
+    } catch (error) {
+      context.stderr(`delorun plugin: ${printable(plugin)} was removed, but its copy under Changes was not, so that copy stays on disk: ${printable(error instanceof Error ? error.message : String(error))}\n`)
+    }
+  }
+}
+
+/**
  * After upstream's plugin operation, move the profile's links to folders to their active directories, as the running
  * Host's check before a reload does, and say what waits for review.
  * @param home - the Delorun home.
@@ -263,7 +301,12 @@ export async function plugin(args: readonly string[], context: CommandContext, d
   const release = await useHomeShared(home.path, 'plugin')
   dependencies.onExit(release)
   try {
+    const profileDir = profileDirectory(home.path, profile)
+    // An operation that changes nothing, or one the person limited to the lockfile, leaves the profile's packages as
+    // they are, so nothing stops loading and no copy is forgotten.
+    const depended = installsPackages(taken.rest) && !taken.rest.includes('--lockfile-only') ? dependencyNames(profileDir) : undefined
     const code = await operatePlugin(home.path, profile, taken, allowedBuilds, context, dependencies)
+    if (depended !== undefined && code === EXIT.ok) await forgetRemovedCopies(home.path, profile, profileDir, depended, context)
     const kept = await keepPluginChanges(home.path, profile, context)
     return code === EXIT.ok && !kept ? EXIT.failed : code
   } finally {

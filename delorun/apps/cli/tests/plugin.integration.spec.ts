@@ -94,11 +94,60 @@ function dependencies(runs: Run[], check: ProfileCheckSettings = { settings: set
 /** The plugin the stand-in upstream command installs. */
 const GOOD = { name: 'good-plugin', version: '1.0.0', direct: true } as const
 
+/** A second plugin, for a profile that keeps one plugin while it removes another. */
+const OTHER = { name: 'other-plugin', version: '1.0.0', direct: true } as const
+
 /** Write a set-up profile with nothing installed yet. */
 function writeEmptyProfile(): void {
   mkdirSync(profileDir, { recursive: true })
   writeFileSync(join(profileDir, 'package.json'), '{"name":"profile","private":true}\n')
   writeFileSync(join(profileDir, 'pnpm-workspace.yaml'), '# the profile\'s pnpm settings\npackages:\n  - .\n\nnodeLinker: hoisted\n')
+}
+
+/** A content version, as the store names one. */
+const VERSION = 'a'.repeat(64)
+
+/**
+ * @param name - a package name.
+ * @returns the load copy Changes keeps for it under the default profile.
+ */
+function copyOf(name: string): string {
+  return join(delorunHome, 'changes', 'profiles', 'default', 'active', name)
+}
+
+/**
+ * Plant what a start leaves for the plugins a profile loads from copies: each one's active directory, the `active.json`
+ * naming them and an empty change log beside them.
+ * @param names - the plugins the profile has a copy of.
+ */
+function plantCopies(names: readonly string[]): void {
+  const profileChanges = join(delorunHome, 'changes', 'profiles', 'default')
+  mkdirSync(join(profileChanges, 'active'), { recursive: true, mode: 0o700 })
+  const plugins: Record<string, { readonly version: string, readonly kind: string }> = {}
+  for (const name of names) {
+    mkdirSync(copyOf(name), { recursive: true, mode: 0o755 })
+    writeFileSync(join(copyOf(name), 'index.js'), `export default ${JSON.stringify(name)}\n`)
+    plugins[name] = { version: VERSION, kind: 'approved' }
+  }
+  writeFileSync(join(profileChanges, 'active.json'), `${JSON.stringify({ schema: 'delorun.changes-active/1', plugins }, null, 2)}\n`, { mode: 0o600 })
+  writeFileSync(join(profileChanges, 'log.json'), `${JSON.stringify({ schema: 'delorun.changes-log/1', entries: [] }, null, 2)}\n`, { mode: 0o600 })
+}
+
+/**
+ * @returns the plugins the planted `active.json` names.
+ */
+function activeRecord(): Record<string, unknown> {
+  const record = JSON.parse(readFileSync(join(delorunHome, 'changes', 'profiles', 'default', 'active.json'), 'utf8')) as { plugins: Record<string, unknown> }
+  return record.plugins
+}
+
+/**
+ * Dependencies whose upstream command succeeds and leaves the profile depending on `kept` alone, with no install check.
+ * @param kept - the packages the profile still depends on after the removal.
+ * @returns the dependencies.
+ */
+function removing(kept: Parameters<typeof writeProfileFiles>[1]): PluginDependencies {
+  return { ...dependencies([]), checkSettings: () => Promise.resolve(undefined), runUpstream: () => { writeProfileFiles(profileDir, kept); return Promise.resolve(0) } }
 }
 
 describe('delorun plugin', () => {
@@ -297,6 +346,52 @@ describe('delorun plugin', () => {
       ['plugin', '--profile', 'default', 'install', '--frozen-lockfile'],
     ])
     expect(existsSync(recordPath(profileDir, 'good-plugin'))).toBe(false)
+  })
+
+  it('forgets the load copy of a removed plugin, keeping the changes it was part of', async () => {
+    await prepareHome(context, undefined, true)
+    writeEmptyProfile()
+    await plugin(['add', 'good-plugin'], context, dependencies([]))
+    plantCopies(['good-plugin'])
+    const changes = join(delorunHome, 'changes', 'profiles', 'default')
+    const log = readFileSync(join(changes, 'log.json'), 'utf8')
+    const removing: PluginDependencies = { ...dependencies([]), runUpstream: () => { writeProfileFiles(profileDir, []); return Promise.resolve(0) } }
+    expect(await plugin(['remove', 'good-plugin'], context, removing)).toBe(0)
+    expect(existsSync(copyOf('good-plugin'))).toBe(false)
+    expect(activeRecord()).toEqual({})
+    expect(readFileSync(join(changes, 'log.json'), 'utf8')).toBe(log)
+  })
+
+  it('leaves the load copy as it was when the removal fails', async () => {
+    await prepareHome(context, undefined, true)
+    writeEmptyProfile()
+    writeProfileFiles(profileDir, [GOOD])
+    plantCopies(['good-plugin'])
+    const failing: PluginDependencies = { ...dependencies([]), checkSettings: () => Promise.resolve(undefined), runUpstream: () => Promise.resolve(7) }
+    expect(await plugin(['remove', 'good-plugin'], context, failing)).toBe(7)
+    expect(readFileSync(join(copyOf('good-plugin'), 'index.js'), 'utf8')).toBe('export default "good-plugin"\n')
+    expect(activeRecord()).toHaveProperty('good-plugin')
+  })
+
+  it('keeps the copy of a plugin the profile still depends on', async () => {
+    await prepareHome(context, undefined, true)
+    writeEmptyProfile()
+    writeProfileFiles(profileDir, [GOOD, OTHER])
+    plantCopies(['good-plugin', 'other-plugin'])
+    expect(await plugin(['remove', 'good-plugin'], context, removing([OTHER]))).toBe(0)
+    expect(existsSync(copyOf('good-plugin'))).toBe(false)
+    expect(readFileSync(join(copyOf('other-plugin'), 'index.js'), 'utf8')).toBe('export default "other-plugin"\n')
+    expect(activeRecord()).toEqual({ 'other-plugin': { version: VERSION, kind: 'approved' } })
+  })
+
+  it('keeps the load copy when the person limited the removal to the lockfile', async () => {
+    await prepareHome(context, undefined, true)
+    writeEmptyProfile()
+    writeProfileFiles(profileDir, [GOOD])
+    plantCopies(['good-plugin'])
+    expect(await plugin(['remove', 'good-plugin', '--lockfile-only'], context, removing([]))).toBe(0)
+    expect(readFileSync(join(copyOf('good-plugin'), 'index.js'), 'utf8')).toBe('export default "good-plugin"\n')
+    expect(activeRecord()).toHaveProperty('good-plugin')
   })
 
   it('checks an installation the person limited to the lockfile, and installs nothing', async () => {

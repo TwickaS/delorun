@@ -6,7 +6,8 @@
  * ([risk](./risk.ts), [review](./review.ts)), the record files ([records](./records.ts)), carrying approved harness files
  * across an update ([harness merge](./harness-merge.ts)), the profile's `link:`
  * dependencies ([link](./link.ts)), what a start loads ([enforce](./enforce.ts)) and the invariants a booted profile keeps
- * ([invariants](./invariants.ts)), leaving a change out after a failed start ([left out](./left-out.ts)), collecting the store ([collect](./collect.ts)), what a person does with a change ([actions](./actions.ts)), what the studio's state reads of the records ([state](./state.ts)), and the Host's side of a work
+ * ([invariants](./invariants.ts)), leaving a change out after a failed start ([left out](./left-out.ts)), collecting the store ([collect](./collect.ts)), what a person does with a change ([actions](./actions.ts)) and forgetting the plugin a profile no
+ * longer installs ([forget](./forget.ts)), what the studio's state reads of the records ([state](./state.ts)), and the Host's side of a work
  * session ([work](./work.ts), [work record](./work-record.ts)), and the agent's plugin requests and applying them
  * ([install actions](./install-actions.ts), also the entry `@delorun/changes/install`), the agent's plugin actions that ran with protection off ([agent actions](./agent-actions.ts)), reloading the running Host
  * ([reload](./reload.ts)), and the person's changes to the harness itself with the composed tree a start runs
@@ -38,6 +39,7 @@ export * from './boot-record.ts'
 export * from './status.ts'
 export * from './state.ts'
 export * from './actions.ts'
+export * from './forget.ts'
 export {
   loadWorkSession,
   reviewWork,
