@@ -10,7 +10,7 @@ import { join } from 'node:path'
 import { create as createTar } from 'tar'
 import { describe, expect, it } from 'vitest'
 import { readRecipe, type Toolchain } from '../../src/closure/config.ts'
-import { buildNativeAddons, builderTag, installedPackageProblems, NATIVE_SOURCE, runDocker, unbuiltPlatformProblems, type Docker, type DockerResult } from '../../src/closure/native-build.ts'
+import { builderUser, buildNativeAddons, builderTag, engineIsRootless, installedPackageProblems, NATIVE_SOURCE, runDocker, unbuiltPlatformProblems, type Docker, type DockerResult } from '../../src/closure/native-build.ts'
 import { scratch } from '../support.ts'
 
 const BASE = 'docker.io/library/debian:bookworm-slim@sha256:734a72b3d6142a71993b4bc580ca01d8ca687f77a2c422d96a961d3376b179bc'
@@ -104,6 +104,14 @@ describe('the native step', () => {
     expect(readdirSync(cache).filter(name => name.startsWith('.native-node-'))).toEqual([])
   })
 
+  it('starts the compile container as the user the request names, which is uid 0 on a rootless engine', async (test) => {
+    const { toolchain, source, cache } = await fixture(scratch(test))
+    const { docker, calls } = standIn(args => (args.includes('dpkg-query') ? ok(listed(toolchain)) : ok()))
+    await buildNativeAddons({ toolchain, base: BASE, source, platforms: ['linux-x64'], cache, epoch: EPOCH, user: builderUser(true), docker })
+    const compile = calls.find(call => call.args[0] === 'run' && call.args.includes('scripts/build.ts'))!.args
+    expect(compile[compile.indexOf('--user') + 1]).toBe('0:0')
+  })
+
   it('reuses an existing image, and refuses one whose packages are not the pinned ones', async (test) => {
     const { toolchain, source, cache } = await fixture(scratch(test))
     const drifted = listed(toolchain).replace('binutils=2.40-2', 'binutils=2.40-3').replace(/^musl-tools=.*\n/mu, '')
@@ -126,6 +134,23 @@ describe('the native step', () => {
     await expect(buildNativeAddons({ toolchain, base: BASE, source, platforms: ['linux-x64'], cache, epoch: EPOCH, user: '1000:1000', docker: failing('run', '') }))
       .rejects.toThrow(/^compiling native\/system for linux-x64 failed with 2$/u)
     expect(readdirSync(cache).filter(name => name.startsWith('.native-node-'))).toEqual([])
+  })
+
+  it('runs the builder as uid 0 on a rootless engine and as the caller on a rootful one', () => {
+    expect(builderUser(true)).toBe('0:0')
+    expect(builderUser(false)).toBe(`${String(process.getuid?.())}:${String(process.getgid?.())}`)
+  })
+
+  it('reads rootless from the engine\'s security options', () => {
+    const answering = (stdout: string, status = 0): Docker => (args, inherit) => {
+      expect(args).toEqual(['info', '--format', '{{json .SecurityOptions}}'])
+      expect(inherit).toBe(false)
+      return { status, stdout, stderr: status === 0 ? '' : 'Cannot connect to the Docker daemon\n' }
+    }
+    expect(engineIsRootless(answering('["name=apparmor,profile=default","name=rootless"]'))).toBe(true)
+    expect(engineIsRootless(answering('["name=apparmor,profile=default","name=seccomp,profile=builtin","name=cgroupns"]'))).toBe(false)
+    expect(engineIsRootless(answering('null'))).toBe(false)
+    expect(() => engineIsRootless(answering('', 1))).toThrow('docker info failed with 1: Cannot connect to the Docker daemon')
   })
 
   it('names the builder image after every input', () => {

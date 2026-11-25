@@ -55,7 +55,7 @@ import { claimBuildRoot } from './closure/build-root.ts'
 import { writeDataFormats } from './closure/data-formats.ts'
 import { RECIPE_DIR, readRecipe, type Recipe } from './closure/config.ts'
 import { declareAnchorBundles, stampDelorunVersion, transpileDelorunPackages } from './closure/delorun.ts'
-import { buildNativeAddons } from './closure/native-build.ts'
+import { builderUser, buildNativeAddons, engineIsRootless, runDocker } from './closure/native-build.ts'
 import { stageNode, stagePnpm } from './closure/sources.ts'
 import { attestationText, readAttestationKey } from './rebuild/attestation.ts'
 import { isWithin, outputRefs } from './rebuild/record.ts'
@@ -191,7 +191,7 @@ async function buildIn(buildRoot: string, repository: string, recipe: Recipe, re
     run('pnpm', ['run', 'build:artifacts'], source, env)
   }
   run('pnpm', ['--filter', './delorun/packages/*', 'run', 'build'], source, env)
-  await buildNativeAddons({ toolchain: recipe.toolchain, base: readImagesRecipe().base, source, platforms: request.platforms, cache: request.cache, epoch, user: `${String(process.getuid?.())}:${String(process.getgid?.())}` })
+  await buildNativeAddons({ toolchain: recipe.toolchain, base: readImagesRecipe().base, source, platforms: request.platforms, cache: request.cache, epoch, user: builderUser(engineIsRootless(runDocker)) })
   const results = new Map<RuntimePlatform, ClosureFiles>()
   for (const platform of request.platforms) {
     const stage = join(buildRoot, 'stage', platform)
