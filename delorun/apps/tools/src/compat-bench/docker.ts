@@ -25,8 +25,11 @@ export const MEMORY_LIMIT_BYTES = 4 * 1024 ** 3
 /** The most processes a plugin container may hold. */
 export const PIDS_LIMIT = 1024
 
+/** The environment names a bench image sets for itself, fixed at build time by `docker/Dockerfile`; a change there adds its name here. */
+export const IMAGE_ENV: readonly string[] = ['DEBIAN_FRONTEND', 'CI', 'COREPACK_ENABLE_DOWNLOAD_PROMPT', 'DSH_BUILD_SOURCE_COMMIT', 'DSH_BUILD_SOURCE_TREE', 'DSH_CLIENT_COMMIT_HASH', 'DSH_CLIENT_TITLE', 'BENCH_HOST_KIND', 'BENCH_COMMIT', 'BENCH_DSH_VERSION']
+
 /** The environment names a plugin container is started with; anything else is a secret or a leak to the denial test. */
-export const ENV_ALLOWLIST: readonly string[] = ['PATH', 'HOME', 'LANG', 'NODE_VERSION', 'YARN_VERSION', 'PLAYWRIGHT_BROWSERS_PATH', 'DELORUN_HOME', 'DSH_HOME', 'BENCH_HOST', 'BENCH_RUN_ID', 'BENCH_OUT', 'NODE_ENV', 'NODE_OPTIONS', 'NODE_EXTRA_CA_CERTS', 'COREPACK_HOME', 'PNPM_HOME']
+export const ENV_ALLOWLIST: readonly string[] = ['PATH', 'HOME', 'LANG', 'NODE_VERSION', 'YARN_VERSION', 'PLAYWRIGHT_BROWSERS_PATH', 'DELORUN_HOME', 'DSH_HOME', 'BENCH_HOST', 'BENCH_RUN_ID', 'BENCH_OUT', 'NODE_ENV', 'NODE_OPTIONS', 'NODE_EXTRA_CA_CERTS', 'COREPACK_HOME', 'PNPM_HOME', ...IMAGE_ENV]
 
 /** Names that mean a secret whatever their value. */
 const SECRET_NAME = /KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|AUTH/i

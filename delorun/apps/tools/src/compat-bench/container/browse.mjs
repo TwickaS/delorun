@@ -68,6 +68,23 @@ async function ensureWorkspace(page, origin) {
   await dismissDialogs(page)
 }
 
+/**
+ * Wait for the switch to satisfy a test, up to 20 s.
+ * @param page - the page.
+ * @param read - reads the switch's state.
+ * @param test - what the state has to become.
+ * @returns the state it reached, or undefined when it did not change.
+ */
+async function settle(page, read, test, ms = 20_000) {
+  const deadline = Date.now() + ms
+  while (Date.now() < deadline) {
+    const value = await read()
+    if (test(value)) return value
+    await page.waitForTimeout(500)
+  }
+  return undefined
+}
+
 async function shot(page, name) {
   await page.waitForTimeout(800)
   const file = join(OUT, `${name}.png`)
@@ -186,18 +203,28 @@ const tasks = {
 
   async toggle() {
     const { browser, page, origin } = await session()
+    const selector = `[data-plugin-package="${flags.package}"] [role="switch"]`
     try {
       await openStudio(page, origin)
       await page.getByRole('button', { name: 'Plugins', exact: true }).first().click()
       const row = page.locator(`[data-plugin-package="${flags.package}"]`).first()
       await row.waitFor({ timeout: 30_000 }).catch(() => { throw new Error(`the Plugins panel does not list ${flags.package}`) })
       const toggle = row.locator('[role="switch"]').first()
-      const before = await toggle.getAttribute('aria-checked')
+      const read = async () => await page.evaluate(sel => document.querySelector(sel)?.getAttribute('aria-checked') ?? 'absent', selector).catch(() => 'unreadable')
+      /** The studio's own words when it refused the change, taken from the notice it shows. */
+      const refusal = async () => (await page.evaluate(() => [...document.querySelectorAll('[role="alert"],[role="status"]')].map(el => (el.textContent ?? '').trim()).filter(text => text !== '' && !/applying/i.test(text)).join('; ')).catch(() => '')).slice(0, 400)
+      const before = await read()
       await toggle.click()
-      await page.waitForFunction(([selector, was]) => document.querySelector(selector)?.getAttribute('aria-checked') !== was, [`[data-plugin-package="${flags.package}"] [role="switch"]`, before], { timeout: 30_000 })
+      const off = await settle(page, read, value => value !== before)
+      if (off === undefined) {
+        await shot(page, 'toggle-failed').catch(() => undefined)
+        print({ ok: false, error: `the switch stayed ${before}: ${await refusal()}`, consoleErrors, shots })
+        return
+      }
       await toggle.click()
-      await page.waitForFunction(([selector, was]) => document.querySelector(selector)?.getAttribute('aria-checked') === was, [`[data-plugin-package="${flags.package}"] [role="switch"]`, before], { timeout: 30_000 })
-      print({ ok: true, consoleErrors })
+      const back = await settle(page, read, value => value === before)
+      if (back === undefined) await shot(page, 'toggle-failed').catch(() => undefined)
+      print({ ok: true, applied: true, restored: back !== undefined, ...(back === undefined ? { refusal: await refusal() } : {}), consoleErrors, shots })
     } catch (error) {
       await shot(page, 'toggle-failed').catch(() => undefined)
       print({ ok: false, error: String(error.message).slice(0, 600), consoleErrors, shots })

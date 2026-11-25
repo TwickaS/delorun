@@ -179,11 +179,17 @@ const handlers = {
     if (KIND !== 'delorun') return print({ ok: true, skipped: 'stock has no doctor' })
     const d = run([...cli, 'doctor'], { log: 'doctor.log', timeout: 120_000 })
     const v = run([...cli, 'verify', '--offline'], { log: 'verify.log', timeout: 120_000 })
-    return print({ ok: d.code === 0 && v.code === 0, doctor: d.code, verify: v.code, doctorOutput: d.stdout.slice(-2000), verifyOutput: v.stdout.slice(-2000) })
+    // The problems of both go to standard error, so the card reads the two streams together.
+    return print({ ok: d.code === 0 && v.code === 0, doctor: d.code, verify: v.code, doctorOutput: (d.stdout + d.stderr).slice(-4000), verifyOutput: (v.stdout + v.stderr).slice(-4000) })
   },
   async version() {
+    // The host prints its own version first and the DSH version under it; the card needs both, and the first one.
     const r = run([...cli, '--version'], { timeout: 60_000 })
-    return print({ ok: r.code === 0, version: r.stdout.trim().split('\n').pop() })
+    const lines = r.stdout.trim().split('\n').map(line => line.trim()).filter(line => line !== '')
+    const own = lines.find(line => /^Delorun /i.test(line)) ?? (KIND === 'stock' ? lines.find(line => /^DSH /i.test(line)) : undefined) ?? lines[lines.length - 1] ?? ''
+    const version = own.replace(/^[A-Za-z][\w ]*?\s+/, '').trim()
+    const dsh = lines.find(line => /^DSH /i.test(line))?.replace(/^DSH\s+/, '').trim()
+    return print({ ok: r.code === 0 && version !== '', version, dsh, own })
   },
   async tree() {
     // The files under the home, for the leftovers comparison.

@@ -175,7 +175,7 @@ async function startRunBox(image: string, name: string, runId: string, outDir: s
  * @returns the state.
  */
 function freshState(box: Box, host: 'delorun' | 'stock', source: PluginSource, exercise: string | undefined, log: (line: string) => void, run: { readonly runId: string, readonly outDir: string, readonly image: string, readonly testChatMarker?: string }): RunState {
-  return { box, host, source, packageName: packageNameOf(source), installSpec: source.spec, installed: false, started: false, pluginLabel: undefined, exercise, baseline: undefined, homeBefore: [], notes: [], log, runId: run.runId, outDir: run.outDir, image: run.image, prevImage: imageTag('delorun-prev', PREVIOUS_RELEASE_TAG), testChatMarker: run.testChatMarker }
+  return { box, host, source, packageName: packageNameOf(source), installSpec: source.spec, installed: false, started: false, pluginOn: true, pluginLabel: undefined, exercise, baseline: undefined, homeBefore: [], notes: [], log, runId: run.runId, outDir: run.outDir, image: run.image, prevImage: imageTag('delorun-prev', PREVIOUS_RELEASE_TAG), testChatMarker: run.testChatMarker }
 }
 
 /** A baseline and where it was written. */
@@ -252,7 +252,9 @@ export async function runBench(request: RunRequest): Promise<RunResult> {
     const marker = additions.map(add => add.testChatMarker).find(each => each !== undefined)
     const state = freshState(box, request.host, request.source, request.exercise ?? (existsSync(exercisePath(name)) ? exercisePath(name) : undefined), log, { runId, outDir: dir, image, ...(marker === undefined ? {} : { testChatMarker: marker }) })
     state.baseline = baseline
-    const hostVersion = String((await box.script('ctl', ['version'])).version ?? 'unknown')
+    const hostInfo = await box.script('ctl', ['version'])
+    const hostVersion = String(hostInfo.version ?? 'unknown')
+    notes.push(`the host reported ${String(hostInfo.own ?? hostVersion)}${typeof hostInfo.dsh === 'string' ? `, built on DSH ${hostInfo.dsh}` : ''}`)
     for (const stage of request.stages ?? DEFAULT_STAGES) {
       const unmet = unmetNeed(stage, state)
       if (unmet !== undefined) {
