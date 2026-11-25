@@ -108,7 +108,9 @@ beforeAll(async () => {
     build: { write: false, minify: false, target: 'es2022', lib: { entry: POLICY_ENTRY, formats: ['iife'], name: 'DshPagePolicy', fileName: 'page-policy' } },
   })
   const outputs = Array.isArray(result) ? result : [result]
-  const chunk = outputs.flatMap(output => output.output).find(entry => entry.type === 'chunk')
+  const chunk = outputs
+    .flatMap(output => ('output' in output ? output.output : []))
+    .find(entry => entry.type === 'chunk')
   if (chunk === undefined || chunk.type !== 'chunk') throw new Error('the policy module did not bundle')
   policyScript = chunk.code
   server = createServer((request, response) => {
@@ -134,20 +136,36 @@ afterAll(async () => {
   await new Promise<void>(resolve => { server?.close(() => { resolve() }) })
 })
 
+/** What one probe saw in the page. */
+interface ProbeResult {
+  /** Whether the page boot left a Trusted Types stash. */
+  readonly hasStash: boolean
+  /** Whether the stash carries the `delorun-blob-worker` policy. */
+  readonly hasBlobWorker: boolean
+  /** The string form of the URL the policy minted, empty when it refused. */
+  readonly minted?: string
+  /** What the `Worker` constructor did. */
+  readonly constructed: string
+  /** The Worker's reply, when it ran. */
+  readonly reply?: string
+  /** The console refusals the browser reported. */
+  readonly refusals: string[]
+}
+
 /**
  * Load the served page and run one probe in it.
  * @param kind - which probe to run.
  * @param path - the served path, which selects the policy.
  * @returns what the probe saw, and the console refusals the browser reported.
  */
-async function probe(kind: 'own' | 'plain' | 'foreign' | 'data' | 'same-origin-path', path = '/'): Promise<Record<string, unknown>> {
+async function probe(kind: 'own' | 'plain' | 'foreign' | 'data' | 'same-origin-path', path = '/'): Promise<ProbeResult> {
   const context = await browser.newContext()
   try {
     const page = await context.newPage()
     const refusals: string[] = []
     page.on('console', (message) => { if (message.type() === 'error') refusals.push(message.text()) })
     await page.goto(`${origin}${path}`)
-    const result = await page.evaluate(k => (globalThis as unknown as { __probe: (kind: string) => Promise<Record<string, unknown>> }).__probe(k), kind)
+    const result = await page.evaluate(k => (globalThis as { __probe: (kind: string) => Promise<ProbeResult> }).__probe(k), kind)
     return { ...result, refusals }
   } finally {
     await context.close()
