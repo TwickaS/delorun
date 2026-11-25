@@ -716,7 +716,7 @@ export async function main(argv: readonly string[], env: NodeJS.ProcessEnv = pro
   const inherited = grantFromEnv(env[GRANT_ENV])
   let grant: SlotGrant | undefined = inherited
   if (!light && !preflight && inherited === undefined && running.length > 0 && !isLightPlan(running)) {
-    const demand = runDemand(running, slotBudget.slots, gatePriority(env, pushInput !== undefined && pushesTrunk(pushInput)), `${relative(dirname(root), root)}: ${running.map(check => check.id).slice(0, 6).join(', ')}${running.length > 6 ? ', ...' : ''}`)
+    const demand = runDemand(running, slotBudget, gatePriority(env, pushInput !== undefined && pushesTrunk(pushInput)), `${relative(dirname(root), root)}: ${running.map(check => check.id).slice(0, 6).join(', ')}${running.length > 6 ? ', ...' : ''}`)
     grant = await takeSlots(nodeSlotHost(line => process.stderr.write(line)), privateSlotPaths(tmpdir(), process.getuid?.() ?? -1), slotBudget, { ...demand, cwd: process.cwd() })
   }
   if (!light && !preflight && !values['no-scope'] && env[IN_SCOPE] === undefined && canScope()) {

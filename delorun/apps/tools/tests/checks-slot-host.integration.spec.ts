@@ -7,15 +7,17 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import type { PassCache } from '../src/checks/cache.ts'
-import { checksToRun, diskHeavy, fitToGrant, MIN_RUN_SLOTS, runDemand, withoutIdleNeeds } from '../src/checks/demand.ts'
+import { checksToRun, concurrencyWithin, diskHeavy, fitToGrant, MIN_RUN_SLOTS, runDemand, withoutIdleNeeds } from '../src/checks/demand.ts'
 import { ioPressure } from '../src/checks/machine.ts'
 import type { Planned } from '../src/checks/plan.ts'
 import { diskRotational, diskRunsFor, machineBudget, nodeSlotHost, privateSlotPaths, processAlive, processIsThread, processStart, processStartedAt, slotPaths } from '../src/checks/slot-host.ts'
-import { takeSlots } from '../src/checks/slots.ts'
+import { takeSlots, type SlotBudget } from '../src/checks/slots.ts'
 import type { Unit } from '../src/checks/units.ts'
 import { runInherited, withSlots, type WrapperHost } from '../src/with-slots.ts'
 
 const GIB = 1024 ** 3
+/** The incident's machine: 64 slots and 20.5 GiB, so a slot is worth 0.32 GiB. */
+const budget: SlotBudget = { slots: 64, memoryBytes: Math.round(20.5 * GIB), diskRuns: 4 }
 const temporary: string[] = []
 afterEach(() => {
   for (const dir of temporary.splice(0)) rmSync(dir, { recursive: true, force: true })
@@ -180,8 +182,31 @@ describe('what a run asks for', () => {
 
   it('asks for the slots its checks keep busy, at least four of them when it can use them, its largest check\'s memory and a disk place when it needs one', () => {
     const running = [check('tests:fork', { cpus: 20, memoryBytes: 10 * GIB, budget: { memoryGiB: 0.5, perWorker: true } }), check('typecheck:upstream', { cpus: 2, memoryBytes: 2.5 * GIB, budget: { memoryGiB: 2.5 } })]
-    expect(runDemand(running, 22, 1, 'lane')).toEqual({ want: 22, min: MIN_RUN_SLOTS, memoryBytes: 2.5 * GIB, disk: true, priority: 1, label: 'lane' })
-    expect(runDemand([check('gates:docs', { cpus: 1 })], 22, 0, 'trunk')).toEqual({ want: 1, min: 1, memoryBytes: GIB, disk: false, priority: 0, label: 'trunk' })
+    // The ceiling is the typecheck's 2.5 GiB, which holds the fork suite at its four-worker figure (2 GiB) and not the
+    // typecheck beside it, so the run asks for the fork suite's 20 CPUs rather than the 22 the two sum to.
+    expect(runDemand(running, budget, 1, 'lane')).toEqual({ want: 20, min: MIN_RUN_SLOTS, memoryBytes: 2.5 * GIB, disk: true, priority: 1, label: 'lane' })
+    expect(runDemand([check('gates:docs', { cpus: 1 })], budget, 0, 'trunk')).toEqual({ want: 1, min: 1, memoryBytes: GIB, disk: false, priority: 0, label: 'trunk' })
+  })
+
+  it('asks for no more slots than its own memory ceiling keeps busy, so a plan of many small checks does not reserve the machine', () => {
+    // The incident: a merge tier of 96 checks summing 99 CPUs, whose largest check needs 10.5 GiB. The runner starts a check
+    // only while the memory it holds stays inside the ceiling, so the ceiling, not the sum, is what the run can use.
+    const gates = Array.from({ length: 90 }, (_, index) => check(`gates:g${String(index)}`, { cpus: 1, memoryBytes: 0.5 * GIB }))
+    const trunk = [check('gates:lint', { cpus: 1, memoryBytes: 10.5 * GIB }), check('build:artifacts', { cpus: 4, memoryBytes: 4 * GIB }), ...gates]
+    expect(trunk.reduce((sum, each) => sum + each.cpus, 0)).toBe(95)
+    // 10.5 GiB of ceiling buys 21 CPUs of half-gigabyte checks, not 94.
+    expect(runDemand(trunk, budget, 0, 'trunk')).toMatchObject({ want: 21, min: MIN_RUN_SLOTS, memoryBytes: 10.5 * GIB })
+    // A lane tier whose largest check is 1.5 GiB keeps three CPUs busy, so it asks for three slots and not its 76 checks' worth.
+    const lane = [check('gates:big', { cpus: 1, memoryBytes: 1.5 * GIB }), ...Array.from({ length: 75 }, (_, index) => check(`gates:l${String(index)}`, { cpus: 1, memoryBytes: 0.5 * GIB }))]
+    expect(runDemand(lane, budget, 1, 'lane')).toMatchObject({ want: 3, min: 3, memoryBytes: 1.5 * GIB })
+    // A check too large for the ceiling is passed over, and the smaller ones behind it still count.
+    expect(concurrencyWithin([check('huge', { cpus: 8, memoryBytes: 40 * GIB }), check('small', { cpus: 2, memoryBytes: GIB })], 4 * GIB)).toBe(2)
+    // The machine's slots still cap the answer: a ceiling that keeps ten CPUs busy asks for five on a five-slot machine.
+    const ten = [check('gates:big', { cpus: 1, memoryBytes: 5 * GIB }), ...Array.from({ length: 9 }, (_, index) => check(`gates:t${String(index)}`, { cpus: 1, memoryBytes: 0.5 * GIB }))]
+    expect(concurrencyWithin(ten, 10 * GIB)).toBe(10)
+    expect(runDemand(ten, { ...budget, slots: 5 }, 1, 'lane')).toMatchObject({ want: 5, min: MIN_RUN_SLOTS })
+    // A run always asks for at least one slot, and its minimum never exceeds what it asks for.
+    expect(runDemand([check('one', { cpus: 1, memoryBytes: GIB })], budget, 1, 'lane')).toMatchObject({ want: 1, min: 1 })
   })
 
   it('fits the test runners to the grant and leaves every other check as it is', () => {
