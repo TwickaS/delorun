@@ -2,6 +2,21 @@
   "$comment": "Documented exceptions to the infrastructure gate. Each entry names a repository-relative path, the exact identifier it may hold, and the reason it is not a deployment's identifier.",
   "entries": [
     {
+      "path": "delorun/packages/home-auth/tests/tailnet-peer-trust.spec.ts",
+      "value": "100.64.0.1",
+      "reason": "The first address of the tailnet range, used as a stand-in peer address in the corroborated-peer cache's tests; it names no deployment."
+    },
+    {
+      "path": "delorun/packages/reach/tests/tailnet-peer.spec.ts",
+      "value": "100.101.102.103",
+      "reason": "A stand-in tailnet peer address in the local API check's tests; it names no deployment."
+    },
+    {
+      "path": "delorun/packages/reach/tests/tailnet-peer.spec.ts",
+      "value": "100.64.0.1",
+      "reason": "The first address of the tailnet range, asserted to be inside it by the address test; it names no deployment."
+    },
+    {
       "path": "scripts/test-non-loopback-address.spec.ts",
       "value": "169.254.83.107",
       "reason": "A mocked link-local interface address in the probe's test; the probe must skip it."
