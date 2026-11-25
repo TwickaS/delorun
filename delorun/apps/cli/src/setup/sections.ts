@@ -36,6 +36,7 @@ import { readPatchRow, readReachRowAt, setPatchRow, STUDIO_ROW_ID, studioPortPro
 import { homeRuns } from '../reach/command.ts'
 import { REACH_SECTION_ORDER, reachSection } from '../reach/setup-section.ts'
 import { CHANGES_PROTECTION_SECTION_ORDER, changesProtectionSection } from '../changes/setup-section.ts'
+import { AUTOSTART_SECTION_ORDER, autostartSection } from './autostart-section.ts'
 
 /** Where a section's question is asked: `main` is the flow of `delorun setup`, and `single` a section run again with `delorun setup <section>`. */
 export type SetupPhase = 'main' | 'single'
@@ -524,7 +525,7 @@ function once(load: () => Promise<ProviderCatalog>): () => Promise<ProviderCatal
 /**
  * The registry of the sections this build ships. Later packages register theirs into it.
  * @param catalog - the installed catalogs the provider section lists models from; the adapters' own by default.
- * @returns a registry holding privacy, the stock-home import, the model provider and key, prompts, background, remote access and profile.
+ * @returns a registry holding privacy, the stock-home import, the model provider and key, prompts, background, autostart, remote access and profile.
  */
 export function defaultRegistry(catalog: () => Promise<ProviderCatalog> = installedCatalog): SectionRegistry {
   const registry = new SectionRegistry()
@@ -534,6 +535,7 @@ export function defaultRegistry(catalog: () => Promise<ProviderCatalog> = instal
   registry.register(providerSection(once(catalog)), { order: 20 })
   registry.register(promptsSection, { order: 30 })
   registry.register(backgroundSection, { order: 40 })
+  registry.register(autostartSection(), { order: AUTOSTART_SECTION_ORDER })
   registry.register(changesProtectionSection(process), { order: CHANGES_PROTECTION_SECTION_ORDER })
   registry.register(profileSection, { order: 50 })
   return registry

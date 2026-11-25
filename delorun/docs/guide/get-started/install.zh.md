@@ -151,7 +151,7 @@ Delorun sends nothing about you. Details: https://delorun.com/privacy
 3. **studio 端口。** Delorun 使用 3080 端口，当另一个程序占用它时使用下一个空闲端口，并说明它选了哪一个。
 4. **PIN 与命令。**（两个问题，在启动之后提出。）设置随后在这个终端里启动 Delorun，并在你的浏览器中打开 studio。如果你选择了设备访问，它会在 Delorun 运行之后问一次 `Set a PIN for your other devices now?`，因为 PIN 由运行中的 home 保存。它以 `Keep the delorun command?` 结束：选 **Yes** 会替你运行 `npm install -g delorun@<version>`，选 **No, keep using npx** 则让你继续使用 `npx delorun`。
 
-设置不会要求你的模型密钥，studio 的欢迎屏幕会（见[studio 与你的第一个 chat](#the-studio-and-your-first-chat)）。设置也不会问 Delorun 询问多少、是否在后台运行，或该把 profile 叫什么：它采用安全的默认值。对于[提示](../../reference/glossary.zh.md#prompts-answer)，默认是 **Ask me first**，因此 Delorun 会在 chat 获得某个文件夹的完全访问、添加工具服务器、编辑自己的指令或安排工作之前询问（见[Delorun 保护什么](../safety-and-updates/safety.zh.md#consents)）。你可以在 studio 的“设置”→“通用”→“How Delorun runs”中更改其中任何一项（它会显示每一项的命令），或用 `delorun setup <section>` 更改。
+设置不会要求你的模型密钥，studio 的欢迎屏幕会（见[studio 与你的第一个 chat](#the-studio-and-your-first-chat)）。设置也不会问 Delorun 询问多少、是否在后台运行、是否在登录时自行启动，或该把 profile 叫什么：它采用安全的默认值。对于[提示](../../reference/glossary.zh.md#prompts-answer)，默认是 **Ask me first**，因此 Delorun 会在 chat 获得某个文件夹的完全访问、添加工具服务器、编辑自己的指令或安排工作之前询问（见[Delorun 保护什么](../safety-and-updates/safety.zh.md#consents)）。你可以在 studio 的“设置”→“通用”→“How Delorun runs”中更改其中任何一项（它会显示每一项的命令），或用 `delorun setup <section>` 更改。
 
 随后 Delorun 在这个终端里运行。最后几行会说明这一点。开启设备访问时，它们如下所示：studio 的 Tailscale 地址（你可以从任何登录到你的 Tailscale 的设备完成设置），以及新设备如何配对。没有设备访问时，它们会说明 studio 只在这台电脑上打开，以及之后在哪里开启它（“设置”→“通用”→“How Delorun runs”，或 `delorun setup reach`）。`my-pc.example.ts.net` 代表你自己电脑的 Tailscale 名称：
 
@@ -215,7 +215,7 @@ If something looks wrong: delorun doctor.
 <summary>更多</summary>
 
 - 要改变主意，请再次运行 `delorun setup`。在终端里对已完成的设置运行时，它会说明这次运行做什么，然后带着你当前的选择重新提问。带 `--yes` 或 `--config` 时，已完成的设置保持不变。
-- 用 `delorun setup <section>` 更改某一项答案。`delorun setup --list` 列出各节：`privacy`、`import`、`key`、`prompts`、`background`、`reach`、`changes-protection` 与 `profile`。`delorun setup key` 从终端设置模型提供方和密钥（见[模型提供方](providers.zh.md)），`delorun setup privacy` 设置发布检查，`delorun setup changes-protection` 设置对你的插件和 Delorun 的更改是否等待你的审查。
+- 用 `delorun setup <section>` 更改某一项答案。`delorun setup --list` 列出各节：`privacy`、`import`、`key`、`prompts`、`background`、`autostart`、`reach`、`changes-protection` 与 `profile`。`delorun setup key` 从终端设置模型提供方和密钥（见[模型提供方](providers.zh.md)），`delorun setup privacy` 设置发布检查，`delorun setup changes-protection` 设置对你的插件和 Delorun 的更改是否等待你的审查。
 - 用另一个 profile 名称运行设置，以便并排进行多次设置（见[你的 Delorun home](../customising/home.zh.md#profiles)）。
 - 对于脚本，`delorun setup --yes --provider deepseek-official` 从 `DEEPSEEK_API_KEY` 读取密钥。`delorun setup --config <file>` 从一个持有完整答案文档的 JSON 文件读取每一项答案。只有 `useCase` 的文件会被拒绝。这两种形式都不会自行开启远程访问或导入 `~/.dsh`，也都不会启动 Delorun：之后请运行 `delorun`。`--check-key` 检查来自环境的密钥（见[模型提供方](providers.zh.md#set-up-without-questions)）。
 - 一份从 `DEEPSEEK_API_KEY` 读取密钥的完整答案文档如下所示。[答案 schema](../../contracts/c11-setup-answers.zh.md#answer-schema) 定义了每个字段。

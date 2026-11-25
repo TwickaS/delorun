@@ -117,7 +117,7 @@ describe('a fresh home', { timeout: TIMEOUT_MS }, () => {
     expect(recordOf()).toMatchObject({ useCase: 'local', modelProvider: null, prompts: 'safer', background: true, updateCheck: true, importStockHome: false, reach: { option: 'none' }, profile: { name: null, port: null } })
     expect(recordOf().sections).toEqual([
       { id: 'privacy', status: 'seen' }, { id: 'reach', status: 'answered' }, { id: 'changes-protection', status: 'skipped' }, { id: 'import', status: 'skipped' },
-      { id: 'key', status: 'skipped' }, { id: 'prompts', status: 'skipped' }, { id: 'background', status: 'skipped' }, { id: 'profile', status: 'skipped' },
+      { id: 'key', status: 'skipped' }, { id: 'prompts', status: 'skipped' }, { id: 'background', status: 'skipped' }, { id: 'autostart', status: 'skipped' }, { id: 'profile', status: 'skipped' },
     ])
     expect(screen()).toContain('Add your model key in the studio (the welcome screen asks for it), or run delorun setup key.')
   })

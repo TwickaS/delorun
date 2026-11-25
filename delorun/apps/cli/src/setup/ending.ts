@@ -182,6 +182,7 @@ export function nextSteps(request: NextStepsRequest): string {
     ...sandboxLines(request.sandbox),
     '',
     `Change an answer later: delorun setup <section>${flag} (delorun setup --list shows the sections).`,
+    `To start Delorun by itself when you log in: delorun setup autostart${flag}.`,
     `If something looks wrong: delorun doctor${flag}.`,
   ].join('\n')}\n`
 }
@@ -204,6 +205,7 @@ export function foregroundEnding(profile: string, sandbox: CheckResult | undefin
     `To keep it running after you close the terminal: delorun start${flag} --background`,
     '(or Settings → General → How Delorun runs).',
     `Change an answer later: delorun setup <section>${flag} (delorun setup --list)`,
+    `To start Delorun by itself when you log in: delorun setup autostart${flag}`,
     `If something looks wrong: delorun doctor${flag}`,
   ].join('\n')}\n`
 }

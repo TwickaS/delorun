@@ -37,6 +37,7 @@ const ENDING_LINES = [
   'To keep it running after you close the terminal: delorun start --background',
   '(or Settings → General → How Delorun runs).',
   'Change an answer later: delorun setup <section> (delorun setup --list)',
+  'To start Delorun by itself when you log in: delorun setup autostart',
   'If something looks wrong: delorun doctor',
 ]
 

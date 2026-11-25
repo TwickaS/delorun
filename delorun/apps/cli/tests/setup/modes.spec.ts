@@ -256,6 +256,7 @@ describe('sections', { timeout: TIMEOUT_MS }, () => {
       '  key                 Model provider and key',
       '  prompts             Prompts',
       '  background          Background',
+      '  autostart           Start at login',
       '  profile             Profile name and port',
       '',
     ].join('\n'))
@@ -369,7 +370,7 @@ describe('the section registry', () => {
     }, { order: 16 })
     expect(await interactive(['no', 'yes'], { registry })).toBe(EXIT.ok)
     expect(recording.asked).toEqual(['select: Use Delorun from your other devices too? (phone, tablet, another computer, over Tailscale)', 'select: Example question?'])
-    expect(recordOf().sections.map(record => record.id)).toEqual(['privacy', 'reach', 'changes-protection', 'import', 'example', 'key', 'prompts', 'background', 'profile'])
+    expect(recordOf().sections.map(record => record.id)).toEqual(['privacy', 'reach', 'changes-protection', 'import', 'example', 'key', 'prompts', 'background', 'autostart', 'profile'])
     expect(recordOf().background).toBe(true)
   })
 })
@@ -403,6 +404,7 @@ describe('unattended forms', { timeout: TIMEOUT_MS }, () => {
       { id: 'key', status: 'skipped' },
       { id: 'prompts', status: 'skipped' },
       { id: 'background', status: 'skipped' },
+      { id: 'autostart', status: 'skipped' },
       { id: 'profile', status: 'skipped' },
     ])
     expect(screen()).toContain('Delorun is set up. Nothing is running yet.')

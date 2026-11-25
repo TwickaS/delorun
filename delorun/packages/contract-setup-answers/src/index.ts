@@ -151,6 +151,11 @@ export interface SetupAnswers {
   readonly modelProvider: ModelProviderAnswer | null
   readonly prompts: PromptsAnswer
   readonly background: boolean
+  /**
+   * Whether setup installs a systemd user unit that starts Delorun at login. A document may leave it out, which means
+   * `false`: a service that installs itself without being asked is the kind of thing that surprises a person.
+   */
+  readonly autostart: boolean
   readonly profile: ProfileAnswer
   readonly reach: ReachAnswer
   /** Whether setup imports the stock DeepSeek Harness home after showing its preview; never true in a `--config` document. */
@@ -173,6 +178,7 @@ export const SETUP_DEFAULTS = {
   modelProvider: { id: SETUP_DEFAULT_PROVIDER_ID, credential: { source: 'prompt' }, baseURL: null, model: null },
   prompts: 'safer',
   background: true,
+  autostart: false,
   profile: { name: null, port: null },
   reach: { option: 'none', identityFactor: null },
   importStockHome: false,

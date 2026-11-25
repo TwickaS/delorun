@@ -18,7 +18,7 @@ setup 回答是 `delorun setup` 所问的内容、存储每个回答的 schema�
 
 `delorun setup` 及其使用场景流程、`--yes` 与 `--config` 形式以及下文的 profile 写入均已构建；stock home 的 `import` 一节以及针对本人自己 tailnet 上 Tailscale 的 `reach` 一节也已构建；其他远程访问方式、通行密钥与 OIDC 身份因子以及运行时一节尚未构建，并且选择加入项只在 CLI profile 中保持关闭。
 
-- **已构建并已使用：** `privacy`、`import`、`key`、`prompts`、`background`、`reach`、`changes-protection` 和 `profile` 各节，其中 `reach` 只提供 `none` 或带 `tailnet-membership` 因子的 `tailscale-private`；[模型提供方](#model-providers)中的十一家模型提供方，各带其实时密钥检查和 profile 行；schema 及其对已移除键、setup 不提供的提供方、提供方已安装目录未列出的模型、文档中 `none` 以外的远程访问方式以及未知字段的拒绝；向提供方的源发出、拒绝重定向的实时密钥检查；使上游的两项选择加入项在 CLI profile 中保持关闭的写入；`updateCheck` 回答（More settings 询问它，`delorun setup privacy` 更改它），在首次启动之前写为 `delorun-update-check` 行的开关。
+- **已构建并已使用：** `privacy`、`import`、`key`、`prompts`、`background`、`autostart`、`reach`、`changes-protection` 和 `profile` 各节，其中 `reach` 只提供 `none` 或带 `tailnet-membership` 因子的 `tailscale-private`；[模型提供方](#model-providers)中的十一家模型提供方，各带其实时密钥检查和 profile 行；schema 及其对已移除键、setup 不提供的提供方、提供方已安装目录未列出的模型、文档中 `none` 以外的远程访问方式以及未知字段的拒绝；向提供方的源发出、拒绝重定向的实时密钥检查；使上游的两项选择加入项在 CLI profile 中保持关闭的写入；`updateCheck` 回答（More settings 询问它，`delorun setup privacy` 更改它），在首次启动之前写为 `delorun-update-check` 行的开关。
 - **尚未构建：** 远程访问方式 `tailscale-funnel` 和 `self-hosted-relay`，`passkey`、`oidc` 和 `tailnet` 身份因子以及注册请求；运行时一节；反馈对话框及其发送，因为 CLI profile 禁用了上游的反馈行，而 setup 的隐私说明仍会打印反馈说明；密钥检查失败的原因不被打印这一规则，因为 setup 会打印它（该原因写明源和 HTTP 状态，不含密钥的任何部分）。
 - **Delorun 的写入未涉及：** `delorun headless` 运行上游的 headless profile，它不带这些写入，因此 DeepSeek 的会话日志上传在那里按上游默认值开启，选择加入项处于关闭状态的要求对它不成立。
 
@@ -61,6 +61,7 @@ setup 回答是 `delorun setup` 所问的内容、存储每个回答的 schema�
 | `key` | `never` | 询问模型提供方（DeepSeek、More providers 或 Choose later）、它的密钥来自哪里（已知时附上该提供方的密钥页面，并用一行说明什么是环境变量），以及新 chat 从哪个模型开始（见[模型提供方](#model-providers)）。输入的密钥在存储之前会用一次实时请求检查。终端中未设置的密钥变量会立即产生一条带修复办法的警告。studio 的 Models 步骤在首次打开时接收密钥。 |
 | `prompts` | `never` | Ask me first（`safer`）、Ask less（`stock`）或 Never ask（dangerous），后者总是列在最后、打印一条警告、提出一个以 No 开始的是否问题，然后要求输入确切的短语 `full access everywhere`；其他任何输入都保留先前的答案。从确认处按 “← Back” 会回到提示词问题。 |
 | `background` | `never` | Whether Delorun keeps running after the terminal closes. |
+| `autostart` | 后台回答为是时 `asked`，否则 `never` | 是否通过 systemd 用户单元让 Delorun 在登录时自行启动。答案默认为否，因此 `--yes` 和 `--config` 文档都不安装单元。选项文字说明“登录时启动”与“无人登录时随机器启动”的区别，后者需要 linger。回答为是时写入并启用该单元；回答为否时移除它。在没有 systemd 用户管理器的电脑上，该节显示一行说明，并把回答记为 seen。 |
 | `profile` | `asked`，但只在端口被占用时 | profile 的名称与 studio 的端口。3080 空闲时主流程什么也不问，被占用时则问 “Port 3080 is in use. Use 3081?”，带有 Yes 和 “Enter another port”。对于已设置的 profile（它自己的 studio 可能占用该端口），它从不询问。`delorun setup profile` 完整地询问名称和端口。 |
 
 第一个问题之后的每个问题都可以回到最近一个被询问过的前面的问题：选择题或是否题提供 “← Back”，文本或密钥问题把空输入当作“返回”。在最后一个问题得到回答之前，什么也不写入。
@@ -83,6 +84,7 @@ setup 按此顺序询问这些问题。本人接受默认值时，默认值生�
 | Model | `key` | 提供方已安装目录中的一个模型。为除 DeepSeek 之外的每家提供方询问，DeepSeek 的默认值是 profile 的，由 `delorun setup key` 询问。 | setup 的提供方表中提供方的推荐模型，即其目录列出的当前通用 chat 模型；对于 DeepSeek，为 profile 的默认值。 |
 | Prompts | `prompts` | Ask me first（`safer`）、Ask less（`stock`），或 Never ask（dangerous）；`--yes` 从不选择 dangerous。 | Ask me first |
 | Keep running in the background | `background` | 是或否。 | 是；`automation` 为否，且不询问。 |
+| Start Delorun by itself when you log in? | `autostart` | 是或否，在后台问题回答为是之后询问，也由 `delorun setup autostart` 询问。 | 否 |
 | Open Delorun from your phone or another device over Tailscale? | `reach` | 是或否。 | 否；对于 `remote`，该问题起始为是。 |
 | Hold changes to your plugins and to Delorun itself for your review before they load? | `changes-protection` | 是或否。否保持 home 的设置不变，setup 从不关闭保护。 | 否；保护已开启时为是。 |
 | Profile name and port | `profile` | profile 名称和 1024 至 65535 中的一个空闲端口。 | 所选的 profile 和 3080。 |
@@ -128,6 +130,7 @@ setup 提供下列提供方，按名称排列，不让任何一家排在另一�
   "modelProvider": { "id": "anthropic", "credential": { "source": "environment", "name": "ANTHROPIC_API_KEY" }, "baseURL": null, "model": "claude-sonnet-5" },
   "prompts": "safer",
   "background": true,
+  "autostart": false,
   "profile": { "name": null, "port": null },
   "reach": { "option": "none", "identityFactor": null },
   "importStockHome": false,
@@ -148,6 +151,7 @@ setup 提供下列提供方，按名称排列，不让任何一家排在另一�
 | `modelProvider.model` | 模型 id，或 `null`。 | `null` | 只有 `deepseek-official` 为 `null`，此时保留 profile 的默认模型。其他每家提供方都要写明一个模型，除非提供方是 `openai-compatible`，否则该模型必须在提供方已安装的目录中。不是模型 id 或不在目录中的模型会被拒绝，拒绝信息写明字段而不是它的值。 |
 | `prompts` | `safer`、`stock` 或 `dangerous`；`dangerous` 要求文档中有 `acceptDangerousMode: true`（使用 `--yes` 时为 `--prompts dangerous --accept-dangerous-mode`），对 root 用户被拒绝，并且 `acceptDangerousMode` 被读取而从不存储。 | `safer` | 设置对等注册表的提示开关。 |
 | `background` | 布尔值。 | `true` | 由启动命令读回。 |
+| `autostart` | 布尔值；可选。 | `false` | 由 `autostart` 节设置；缺失的字段读作 `false`，因此在该问题存在之前写成的文档不安装任何单元。回答为是时写入并启用一个 systemd 用户单元，为 profile 运行 `delorun start --foreground`，并请求 linger；回答为否时移除该单元。该单元不是 profile 文件，因此忽略该字段的旧读取方写出的 profile 相同。 |
 | `profile.name` | profile 名称，或表示命令行所选 profile 的 `null`。 | `null` | 上游的 profile 名称规则；`desktop` 被拒绝。 |
 | `profile.port` | 1024 至 65535 的整数，或表示 3080 的 `null`。 | `null` | 交互形式检查该端口是否空闲。 |
 | `reach.option` | `none`、`tailscale-private`、`tailscale-funnel` 或 `self-hosted-relay`。 | `none` | `none` 以外的任何值只在交互形式中被接受。 |
@@ -172,6 +176,7 @@ setup 提供下列提供方，按名称排列，不让任何一家排在另一�
 | `modelProvider` | 采用 Settings → Agent → Models 和模型选择器保存它们的形式的行：带 `DEEPSEEK_API_KEY` 和 profile 默认模型的 DeepSeek 不写入任何行，因为 stock DeepSeek Harness 就是这样组合 profile 的；另一个变量会在 `llm-deepseek` 上设置 `apiKeyEnv`。pi-ai 提供方在 `llm-pi-ai` 的 `providers` 下设置其路由，保留已在那里的路由：目录路由设置 `apiKeyEnv`，`openai-compatible` 还设置 `displayName`、`api: openai-completions`、`baseURL` 以及 `models` 中的模型。指名的模型把 `agent-default-model` 设为该提供方和模型，不带推理强度。`null` 不写入这些行中的任何一行。 | profile 的 `cordis.patch.yml`。 |
 | `prompts` | 行 `delorun-permission-defaults`、`delorun-instruction-consent`、`delorun-mcp-consent` 和 `delorun-schedule-consent` 的 `config.enabled`，设为约定 C16 注册表中每个开关的 Delorun 默认值（`safer`，Ask me first）或对等值（`stock`，Ask less）。使用 `safer` 时，本人在 home 的电脑上允许工作区的完全访问和新的 stdio MCP 服务器：在 studio 的 Settings、Permissions 中，或使用 `delorun workspace full-access` 和 `delorun mcp`；使用 `stock` 时两种同意都不挂载，这些界面会说明该 profile 不询问。fetch 防护是拒绝而不是提示，没有任何回答会改变它；也没有任何回答会改变外部智能体同意（`delorun-delegation-consent`），本人在 Settings、Permissions 中切换它。使用 `dangerous` 时，三个同意行取其对等值，`delorun-permission-defaults` 保持开启，并且每个回答都把它的 `fullAccessEverywhere` 设为该回答是否为 `dangerous`；`dangerous` 还在这些行之后、在权限存储的锁之下写入授权文件 `<home>/secrets/permission-defaults/full-access-everywhere.json`（模式 0600，`{ "v": 1, "grantedAt", "warning": 1 }`），而 `safer` 和 `stock` 会移除它。只有行设置和有效的授权文件同时成立时，完全访问才在每处可用。 | profile 的 `cordis.patch.yml`，授权文件则是 home 的 `secrets/permission-defaults/`。 |
 | `background` | 记录在回答记录 `setup-answers.json` 中；启动命令读取它。 | profile 目录。 |
+| `autostart` | `$XDG_CONFIG_HOME/systemd/user/delorun.service`（或 `~/.config/systemd/user/delorun.service`）处的 systemd 用户单元，启用进 `default.target`，以及为该账户执行的 `loginctl enable-linger`。回答为否时禁用并移除该单元，linger 保持不变。 | home 之外，本人的 systemd 用户配置中。 |
 | `profile.name` | CLI profile 以此名称创建。 | home。 |
 | `profile.port` | 带端口的 `webserver` 行，重述 Web bundle 的其他键。默认端口不写入。 | profile 的 `cordis.patch.yml`。 |
 | `reach.option` | 远程访问约定的 reach 行。`none` 不写入任何行。 | profile。只在交互形式中写入。 |
@@ -264,7 +269,7 @@ setup 在每次终端运行开始时显示隐私说明，并在无人值守的�
 - `a DeepSeek Harness home adds the import question; Later and Show what stays behind copy nothing and ask again`.
 - `the port is asked only when 3080 is busy`.
 - `a run without a terminal, and --phone, --import-dsh and --port, take their answers without questions`.
-- `delorun setup <section> asks key, prompts, background, privacy, reach and profile in full`.
+- `delorun setup <section> asks key, prompts, background, autostart, privacy, reach and profile in full`.
 - `an interrupt at any question exits 130 and saves nothing`.
 - `a record with a Quick or Full mode and no use case still reads`.
 - `Ask less (like DeepSeek Harness) sets every prompt switch to its parity value`.
