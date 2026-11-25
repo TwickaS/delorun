@@ -92,17 +92,17 @@ description: "约定 C22：Delorun 版本对插件作出的承诺：该承诺涵
 
 当安装程序接纳该插件时它以 0 退出，当它拒绝该插件或无法读取其声明时以 1 退出。
 
-With `--json` it prints one JSON object on one line, and no other output, for tools that must not read English text. Its fields, all always present:
+带 `--json` 时，它在一行上打印一个 JSON 对象，不打印其他输出，供不得读取英文文本的工具使用。它的字段始终全部存在：
 
-| Field | Meaning |
+| 字段 | 含义 |
 | --- | --- |
-| `decidedBy` | `delorun` when `engines.delorun` is declared, else `dsh` when `engines.dsh` is, else `peer` when a `@deepseek-ai/dsh*` peer is, else `none`. |
-| `range` | The range that decided, with leading and trailing whitespace trimmed; `null` for `none`, and for an empty or whitespace-only `engines.delorun`. |
-| `checkedAgainst` | The version the range was checked against; `null` for `none`. |
-| `verdict` | `admitted` or `refused`. |
-| `readable` | `false` when a declaration is in a form Delorun cannot read. |
+| `decidedBy` | 声明了 `engines.delorun` 时为 `delorun`，否则声明了 `engines.dsh` 时为 `dsh`，否则存在 `@deepseek-ai/dsh*` 对等依赖时为 `peer`，否则为 `none`。 |
+| `range` | 作出决定的范围，去掉首尾空白；对于 `peer`，每个 DSH 对等依赖写作 `<name> <range>` 并以 `, ` 连接；`none` 时为 `null`，`engines.delorun` 或 `engines.dsh` 不是字符串时也为 `null`，空或只有空白的 `engines.delorun` 同样为 `null`，那是无法读取的。 |
+| `checkedAgainst` | 该范围所对照检查的版本：`delorun` 为运行中 Delorun 的版本，`dsh` 与 `peer` 为运行中 DSH 的版本；`none` 时为 `null`。 |
+| `verdict` | `admitted` 或 `refused`：安装程序对这个发布的决定。 |
+| `readable` | 当某个声明是 Delorun 无法读取的形式时为 `false`，该形式会被拒绝。 |
 
-A declaration Delorun cannot read is refused with `readable` false: a `peerDependencies` that is not an object gives `decidedBy` `none`, `range` `null`, `checkedAgainst` `null` and `verdict` `refused`; a DSH peer whose range is not a string gives `decidedBy` `peer`, `verdict` `refused`, and the peer as `<name> <value>` in `range`. The exit code is the same as without `--json`. The record is the return value of `decidePluginVersion` in `@delorun/update`, a pure function of a parsed manifest, a Delorun version and a DSH version.
+Delorun 无法读取的声明会以 `readable` 为 false 被拒绝：不是对象的 `peerDependencies` 给出 `decidedBy` 为 `none`、`range` 为 `null`、`checkedAgainst` 为 `null`、`verdict` 为 `refused`；范围不是字符串的 DSH 对等依赖给出 `decidedBy` 为 `peer`、`verdict` 为 `refused`，并在 `range` 中给出该对等依赖的 `<name> <value>`。退出码与不带 `--json` 时相同。该记录是 `@delorun/update` 中 `decidePluginVersion` 的返回值，它是已解析 manifest、Delorun 版本与 DSH 版本的纯函数：预发布参与范围比较，不适用任何豁免，也不读取任何文件或环境。工具最需要区分的四种形态判定如下：只有 `engines.delorun`（`decidedBy` 为 `delorun`）；只有 `engines.dsh`（`dsh`，只在 `engines.dsh` 缺失时才读取对等依赖）；两者都有时由 `engines.delorun` 决定，因此接受它的那个就是 `admitted`，无论 `engines.dsh` 说什么；两者都有而 `engines.delorun` 拒绝时就是 `refused`，无论 `engines.dsh` 说什么。
 
 <a id="the-patch-rule"></a>
 
