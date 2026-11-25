@@ -23,8 +23,8 @@ description: "你在 Delorun 预览版中可能遇到的毛边，每条都写明
 - [开放网络下命令被拒绝](#commands-refused-with-an-open-network)
 - [没有 bubblewrap 时命令被拒绝](#commands-refused-without-bubblewrap)
 - [doctor 中的 Docker 警告](#the-docker-warning-in-doctor)
-- [Face ID on phones](#face-id-on-phones)
-- [Several agents at once](#several-agents-at-once)
+- [手机上的 Face ID](#face-id-on-phones)
+- [同时关注多个智能体](#several-agents-at-once)
 - [安装插件](#installing-a-plugin)
 - [Yarn 的 Plug'n'Play 下启动](#starting-with-yarns-plugnplay)
 - [文档语言](#documentation-languages)
@@ -100,25 +100,27 @@ description: "你在 Delorun 预览版中可能遇到的毛边，每条都写明
 
 **该怎么做。** 什么都不用做。Docker 是可选的。
 
-## Face ID on phones
+<a id="face-id-on-phones"></a>
+## 手机上的 Face ID
 
-**What happens.** Face ID has three rough edges.
+**会发生什么。** Face ID 有三处粗糙的地方。
 
-- A browser that cannot make a platform passkey, such as some versions of Firefox, says "This browser cannot use Face ID here" and gets no passkey.
-- If you change your reach address, the passkeys made on the old address stop working. The phone says to set Face ID up again, and the old passkeys stay listed.
-- While no PIN is set and no passkey is enrolled, an approved phone can still save or remove a model key with no extra check.
+- 无法创建平台通行密钥的浏览器（例如某些版本的 Firefox）会提示 “This browser cannot use Face ID here”，并且拿不到通行密钥。
+- 如果你更改了 reach 地址，在旧地址上创建的通行密钥就会失效。手机会提示重新设置 Face ID，而旧的通行密钥仍留在列表中。
+- 在既没有设置 PIN、也没有登记通行密钥时，已批准的手机仍然可以在没有任何额外检查的情况下保存或移除模型密钥。
 
-**What to do.** In a browser without a platform passkey, confirm actions with the PIN or at your computer. After a change of address, set Face ID up again on each phone. To make a phone confirm model-key changes, set a PIN or enrol a passkey ([Confirm with Face ID](../everyday-use/reach.zh.md#confirm-with-face-id)).
+**该怎么做。** 在没有平台通行密钥的浏览器中，用 PIN 或在你的电脑上确认操作。更改地址之后，在每部手机上重新设置 Face ID。要让手机确认模型密钥的更改，请设置 PIN 或登记通行密钥（见[用 Face ID 确认](../everyday-use/reach.zh.md#confirm-with-face-id)）。
 
-## Several agents at once
+<a id="several-agents-at-once"></a>
+## 同时关注多个智能体
 
-**What happens.** Multiview has three rough edges.
+**会发生什么。** Multiview 有三处粗糙的地方。
 
-- With six busy panes, the main chat's first words can take up to about twice as long to appear.
-- A notice from an agent, such as a refused question, is recorded in the agent's log but not yet shown in the chat.
-- A Claude Code or Codex chat still shows upstream's own text for the hand-off, and a failure can appear as two red lines.
+- 六个窗格都在忙碌时，主对话最先出现的文字可能要等上大约两倍的时间。
+- 来自智能体的通知（例如被拒绝的提问）会记录在智能体的日志中，但还不会显示在对话里。
+- Claude Code 或 Codex 的对话仍会显示上游自己的交接文本，而一次失败可能显示为两行红字。
 
-**What to do.** Pin fewer agents if the main chat feels slow. The extra text and the doubled line change nothing about the run ([Watch several agents at once](../everyday-use/agents.zh.md#watch-several-agents-at-once)).
+**该怎么做。** 如果主对话感觉变慢，就少固定几个智能体。多出的文字和重复的那一行不会改变这次运行（见[同时关注多个智能体](../everyday-use/agents.zh.md#watch-several-agents-at-once)）。
 
 <a id="installing-a-plugin"></a>
 ## 安装插件
