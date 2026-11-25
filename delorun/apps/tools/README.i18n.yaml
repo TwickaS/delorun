@@ -6,8 +6,8 @@
   en: 9440b1d8dd202469
   zh: 88dfb36335ea365e
 /delorun-tools/modules:
-  en: 5fd762216e3c443d
-  zh: b68b913b3bcc3aa2
+  en: fca36147e8df3452
+  zh: a8efa206c67fffea
 /delorun-tools/the-divergence-ledger:
   en: 7a904e494ed95b7a
   zh: 63b2a9d772b229db
@@ -15,8 +15,8 @@
   en: 9ba64389e13739ca
   zh: bd1dc065003a34a0
 /delorun-tools/the-gates:
-  en: 0bd80cd4615f7fa8
-  zh: 587808a6885138b8
+  en: a8ea5f17ae5c0057
+  zh: 6c88adc083e006e8
 /delorun-tools/the-gates/gate-debt:
   en: aceb1135d48f5936
   zh: 87aeffbef88c2652
@@ -32,12 +32,15 @@
 /delorun-tools/studio-browser:
   en: b72d7e9689fcccee
   zh: fb6545486430c92c
+/delorun-tools/the-plugin-compatibility-bench:
+  en: 5fa3b37ec9bb4f89
+  zh: 81b08c02339a6189
 /delorun-tools/the-demonstration-home-and-the-pictures:
   en: e1774d430332f8c6
   zh: 68b26fc7dab64a11
 /delorun-tools/local-checks:
-  en: 94624bcae7f974b0
-  zh: dbba782494332416
+  en: 915149cf3d8a8db2
+  zh: 368bd00171af733c
 /delorun-tools/batch-integration:
   en: f69381fcfbaae243
   zh: 98d7e7c00610cfb1
