@@ -96,6 +96,35 @@ describe('PDF Worker lifecycle', () => {
     expect(revokeURL).toHaveBeenCalledExactlyOnceWith('blob:pdf-worker')
   })
 
+  it('mints the PDF Worker URL through the page\'s delorun-blob-worker policy', async () => {
+    const createScriptURL = vi.fn((url: string) => `trusted:${url}`)
+    ;(globalThis as { __DSH_TRUSTED_TYPES__?: unknown }).__DSH_TRUSTED_TYPES__ = { blobWorker: { createScriptURL } }
+    try {
+      const h = setup()
+      expect(createScriptURL).toHaveBeenCalledWith('blob:pdf-worker')
+      expect(workers[0]!.url).toBe('trusted:blob:pdf-worker')
+      workers[0]!.ready()
+      await h.entered.promise
+      await h.session.dispose()
+    } finally {
+      delete (globalThis as { __DSH_TRUSTED_TYPES__?: unknown }).__DSH_TRUSTED_TYPES__
+    }
+  })
+
+  // A page that enforces Trusted Types refuses a plain string at the constructor; the policy is the only way in.
+  it('reports a Worker failure when the policy refuses the blob URL, and releases the URL', async () => {
+    ;(globalThis as { __DSH_TRUSTED_TYPES__?: unknown }).__DSH_TRUSTED_TYPES__ = { blobWorker: { createScriptURL: () => null } }
+    try {
+      const h = setup()
+      await expect(h.session.document).rejects.toThrow('refused by the delorun-blob-worker policy')
+      expect(workers).toHaveLength(0)
+      expect(revokeURL).toHaveBeenCalledWith('blob:pdf-worker')
+      await h.session.dispose()
+    } finally {
+      delete (globalThis as { __DSH_TRUSTED_TYPES__?: unknown }).__DSH_TRUSTED_TYPES__
+    }
+  })
+
   it('cancels startup before the worker handshake without invoking PDF.js', async () => {
     const h = setup()
     h.controller.abort()

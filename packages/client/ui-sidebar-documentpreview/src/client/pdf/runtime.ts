@@ -1,5 +1,6 @@
 /** One real module Worker and PDF.js loading task per mounted binary document. */
 import { getDocument, PDFWorker } from 'pdfjs-dist'
+import { workerScriptUrl } from '../worker-script-url.ts'
 import { createPdfBinaryDataFactory, workerSource } from './assets.ts'
 import type { PdfSession } from './document.ts'
 import { PdfWorkerFailure } from './errors.ts'
@@ -73,7 +74,7 @@ export function openPdf(data: Uint8Array<ArrayBuffer>, signal: AbortSignal, repo
       workerSource,
       `\nself.postMessage({type:${JSON.stringify(WORKER_READY)}});\n`,
     ], { type: 'text/javascript' }))
-    worker = new Worker(url, { type: 'module', name: 'dsh-pdf' })
+    worker = new Worker(workerScriptUrl(url), { type: 'module', name: 'dsh-pdf' })
     worker.addEventListener('error', workerFailed)
     worker.addEventListener('messageerror', workerFailed)
     const started = Promise.withResolvers<undefined>()

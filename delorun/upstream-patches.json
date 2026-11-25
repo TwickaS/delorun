@@ -432,7 +432,7 @@
       "path": "packages/client/connection/src/reach.ts",
       "class": "security",
       "reason": "Admission seam (C4): reach listeners. `openReachListener` opens one only while an authenticator provider serves a valid reach policy for it, in a fiber that injects `authenticator`, so it closes before the provider is removed or replaced and never reopens by itself. Its dispatcher removes `tailscale-*` headers, refuses a foreign or loopback `Host`, a foreign SNI, a foreign or absent upgrade `Origin`, the launch token, `/connect` and `dsh-auth-*` cookies, then admits through the provider, sending a pre-login request only to its listed route. `builtinAdmission` exposes Connection's built-in loopback admission for providers to delegate to. The dispatcher also refuses a non-origin-form target (a second `Host` line is answered 400 by the web server before the dispatcher runs), removes identity headers from the parsed, distinct and raw header views, records each admitted connection's session and device for `closeReachConnections`, and applies a policy change announced while the listener binds. Every reach response, refusals included, carries C4's security headers and a Content Security Policy with a fresh nonce, which the pass decision hands to the index renderer; the policy allows no string evaluation, images only from the origin, `data:` and `blob:`, and `no-store` covers `/auth/` and `/api`. The dispatcher records each admitted Peer so Connection can tell reach Peers apart. Lead verdict: keep, after two independent review rounds (2026-11-07); the lead reviews this file line by line before it merges. One-time launch tokens (C4): the dispatcher consumes every one-time launch token a reach request presents before it refuses it. Lead verdict for this change: approved, after an independent review of the change and its fixes (2026-11-10). Lead verdict (2026-11-11): kept; the dispatcher no longer counts Host lines, since the web server refuses a repeated Host line with 400 before the reach gate runs on a reach listener's requests and upgrades; it still refuses a Host other than the rule's, a foreign SNI and an absolute or scheme-relative target. A refused admission that names a same-origin path (`SAME_ORIGIN_PATH`: one `/`, then no `/` or `\\`, no control character or space) answers a GET or HEAD request with 303 to it, with the security headers and `no-store`; upgrades, other methods and any other location keep the JSON refusal. Lead verdict (2026-11-13): approved after the lead review of the merged diff.",
-      "sha256": "aa4f38514ea0b82a77700948be1a02f5bfa2fcbaa2d553d046071762ad4366d0"
+      "sha256": "983da6926f49f208ab864d340bde634c5299dc56ec0b6e42f6c8acdf53520442"
     },
     {
       "path": "packages/client/connection/src/rpc-host.ts",
@@ -456,7 +456,7 @@
       "path": "packages/client/connection/tests/reach.host.spec.ts",
       "class": "security",
       "reason": "Admission seam (C4): proves the reach dispatcher's refusals and their order over a real web server, that every route, upgrade, `/api` and the fallback answer 401 before sign-in, that pre-login requests reach only their listed route, that a listener opens only with a provider serving a valid reach policy and closes and stays closed when its provider is removed or replaced, and that loopback admission keeps the fence before a loaded provider. It also proves identity-header removal from every view on requests and upgrades, the refusal of non-origin-form targets and duplicate `Host` lines, that a policy withdrawn while binding opens no listener, that `closeReachConnections` ends exactly the matching streams and upgraded sockets, and that loopback index and `/connect` requests consult a loaded provider and receive its `setCookie`. Covers the reach response headers, the full policy text and a fresh nonce per response, on admitted, pre-login and refused responses and refused upgrades. Lead verdict: keep, after two independent review rounds (2026-11-07); the lead reviews this file line by line before it merges. One-time launch tokens (C4): proves that a one-time token presented on a reach listener is refused there and no longer signs in on the loopback listener. Lead verdict for this change: approved, after an independent review of the change and its fixes (2026-11-10). Lead verdict (2026-11-11): kept; expects 400 for a repeated Host line ahead of the reach gate's own check. Covers the sign-in redirect: 303 for GET and HEAD to a same-origin path, the JSON refusal for upgrades, other methods and scheme-relative, backslash or control-character locations. Lead verdict (2026-11-13): approved after the lead review of the merged diff.",
-      "sha256": "025750a5f6bb9f207e184d55f2f537c9bef27fc40057416d6f189cf7eaf0c2ba"
+      "sha256": "d2c1a3ef3f30b8f1d4f27a34009436db9a88911e4ee18dcf7ca488915c942587"
     },
     {
       "path": "packages/client/locale/src/client/index.ts",
@@ -1080,13 +1080,13 @@
       "path": "packages/client/web/src/page-policy.ts",
       "class": "security",
       "reason": "Reach listener Content Security Policy (C4): new client-boot module. On a page with a nonced `<script>` it stamps that nonce on every `<style>` element `document.createElement` creates, so plugin and library styles apply under the policy, and puts zod in jitless mode, so zod never probes string evaluation. A page without a nonced script is unchanged. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end. Lead verdict (2026-11-10): kept after a re-entrancy guard; the sanitiser's own inert parse skips a second pass, and every string a plugin assigns to a sink is still sanitised.",
-      "sha256": "d287052909829374422fb2c94f9aea9b1be66bf7fc485b214be92ff64c86d554"
+      "sha256": "d0bab647160ba20d7f5d3cb00afab6de18e922ed637e6ee2aaabd293d574537d"
     },
     {
       "path": "packages/client/web/tests/page-policy.client.spec.ts",
       "class": "security",
       "reason": "Reach listener Content Security Policy (C4): covers the page policy module. Lead verdict: keep, after the independent review round of WP5.1 PR 2 (2026-11-07); the policy text, the nonce plumbing and the lazy evaluator were reviewed line by line, and the recorded real-model GIF run exercised the reach listener end to end. Lead verdict (2026-11-10): kept after a re-entrancy guard; the sanitiser's own inert parse skips a second pass, and every string a plugin assigns to a sink is still sanitised.",
-      "sha256": "c6bcc91be6787702413fee345905eb419c8985254e7b40c7b07436a5eb69c21d"
+      "sha256": "5c2230725663f144155aff9c06303547790f3d5f364623012d914b8eb9ede741"
     },
     {
       "path": "packages/client/web/tsdown.config.ts",
@@ -3589,6 +3589,30 @@
       "class": "delorun-feature",
       "feature": "subagent-model-selection",
       "reason": "Admission under A661: a recorded policy narrows explicit selection, and without one the live LLM adapter decides which configured routes are reachable."
+    },
+    {
+      "path": "packages/client/file-upload/src/client/runtime.ts",
+      "class": "delorun-feature",
+      "feature": "reach-trusted-types",
+      "reason": "Reach listener Content Security Policy (C4): the Worker is built from a Blob, and the reach listener enforces Trusted Types for script, so the Worker constructor refuses a plain string. The URL is minted through the page boot's `delorun-blob-worker` policy, which admits a `blob:` URL whose origin is the page's own. A page whose boot created no policy hands the constructor the raw URL, exactly as before."
+    },
+    {
+      "path": "packages/client/ui-sidebar-documentpreview/src/client/excel/parse.ts",
+      "class": "delorun-feature",
+      "feature": "reach-trusted-types",
+      "reason": "Reach listener Content Security Policy (C4): the Worker is built from a Blob, and the reach listener enforces Trusted Types for script, so the Worker constructor refuses a plain string. The URL is minted through the page boot's `delorun-blob-worker` policy, which admits a `blob:` URL whose origin is the page's own. A page whose boot created no policy hands the constructor the raw URL, exactly as before."
+    },
+    {
+      "path": "packages/client/ui-sidebar-documentpreview/src/client/pdf/runtime.ts",
+      "class": "delorun-feature",
+      "feature": "reach-trusted-types",
+      "reason": "Reach listener Content Security Policy (C4): the Worker is built from a Blob, and the reach listener enforces Trusted Types for script, so the Worker constructor refuses a plain string. The URL is minted through the page boot's `delorun-blob-worker` policy, which admits a `blob:` URL whose origin is the page's own. A page whose boot created no policy hands the constructor the raw URL, exactly as before."
+    },
+    {
+      "path": "packages/client/ui-sidebar-documentpreview/src/client/worker-script-url.ts",
+      "class": "delorun-feature",
+      "feature": "reach-trusted-types",
+      "reason": "Reach listener Content Security Policy (C4): the Worker is built from a Blob, and the reach listener enforces Trusted Types for script, so the Worker constructor refuses a plain string. The URL is minted through the page boot's `delorun-blob-worker` policy, which admits a `blob:` URL whose origin is the page's own. A page whose boot created no policy hands the constructor the raw URL, exactly as before."
     }
   ],
   "retired": []

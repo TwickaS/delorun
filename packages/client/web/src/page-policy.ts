@@ -9,18 +9,21 @@
  * mode, so it never tries string evaluation. A page without such a script is
  * left unchanged.
  *
- * The module also creates the two Trusted Types policies contract C4 names,
+ * The module also creates the three Trusted Types policies contract C4 names,
  * whenever the page's browser exposes `trustedTypes`: the `default` policy,
  * whose `createHTML` passes markup through the studio's HTML sanitiser so
  * upstream components and community client plugins that assign `innerHTML`
  * keep working, whose `createScriptURL` admits only the plugin bundle URLs the
  * client module registry's current boot manifest lists, and whose `createScript`
- * refuses every string; and the `delorun-plugin-loader` policy, which applies the
+ * refuses every string; the `delorun-plugin-loader` policy, which applies the
  * same URL rule and which the client module loader assigns `script.src`
- * through. Both are inert on a page whose Content Security Policy does not
- * enforce Trusted Types. The loader reads the `delorun-plugin-loader` policy from
- * the `__DSH_TRUSTED_TYPES__` page global and keeps the URL allowlist current
- * through the stash's `register`.
+ * through; and the `delorun-blob-worker` policy, which admits a `blob:` URL
+ * whose origin is the page's own, so a feature that runs its code in a Worker
+ * built from a Blob can construct it. All three are inert on a page whose
+ * Content Security Policy does not enforce Trusted Types. The loader reads the
+ * `delorun-plugin-loader` policy from the `__DSH_TRUSTED_TYPES__` page global
+ * and keeps the URL allowlist current through the stash's `register`; a feature
+ * bundle reads the `delorun-blob-worker` policy from the same global.
  *
  * The Web entry imports this module before any other module, so all of this is
  * in place before any module creates a style, parses a value or loads a bundle.
@@ -126,6 +129,29 @@ export function pluginScriptUrl(url: string): string | null {
   return listed ? url : null
 }
 
+/**
+ * The blob Worker URL rule: the URL is a `blob:` URL whose origin is the page's
+ * own. A blob URL inherits the origin of the page that created it, so this
+ * admits a Worker source this page built and refuses one another origin built.
+ * A page with an opaque origin (`null`) is refused every URL, because every
+ * opaque origin has the same string form, so a blob URL cannot be shown to be
+ * this page's.
+ * @param url - the URL a Worker constructor is being given.
+ * @param origin - the page's origin; the page's own unless a caller names one.
+ * @returns the URL, or `null` when the rule refuses it.
+ */
+export function blobWorkerScriptUrl(url: string, origin: string = pageOrigin()): string | null {
+  if (origin === 'null') return null
+  let target: URL
+  try {
+    target = new URL(url, origin)
+  } catch {
+    return null
+  }
+  if (target.protocol !== 'blob:') return null
+  return target.origin === origin ? url : null
+}
+
 /** One created Trusted Types policy: the browser wraps each callback's result. */
 interface TrustedScriptUrlPolicy {
   createScriptURL(input: string): string | null
@@ -148,6 +174,8 @@ interface TrustedTypePolicyFactory {
 export interface TrustedTypesStash {
   /** The `delorun-plugin-loader` policy, which applies the script URL rule. */
   readonly pluginLoader: TrustedScriptUrlPolicy
+  /** The `delorun-blob-worker` policy, which admits a same-origin `blob:` Worker URL; absent when the page's policy omits its name. */
+  readonly blobWorker?: TrustedScriptUrlPolicy
   /** Replace the allowlist with the client module registry's current boot manifest. */
   register(manifest: BootBundleRows): void
 }
@@ -193,10 +221,18 @@ function sanitiseParsed(html: string): string {
 }
 
 /**
- * Create the `default` and `delorun-plugin-loader` Trusted Types policies and
- * expose the latter, with the allowlist registry, to the client module loader.
- * Does nothing when the page's browser has no `trustedTypes`, and leaves the
- * page unchanged when a policy name is already taken.
+ * Create the `default`, `delorun-plugin-loader` and `delorun-blob-worker`
+ * Trusted Types policies and expose the last two, with the allowlist registry,
+ * to the client module loader and to the feature bundles that build a Worker
+ * from a Blob. Does nothing when the page's browser has no `trustedTypes`, and
+ * leaves the page unchanged when a policy name is already taken.
+ *
+ * A Content Security Policy's `trusted-types` directive names the policies a
+ * page may create, so a policy whose name that directive omits cannot exist.
+ * The blob Worker policy is therefore created on its own: a page whose policy
+ * omits it keeps the `default` and `delorun-plugin-loader` policies, and the
+ * stash carries no `blobWorker`, which leaves each Worker sink handing the
+ * constructor its raw URL exactly as before.
  * @param scope - the page's global scope.
  * @returns the stash the loader reads, or `undefined` without Trusted Types support.
  */
@@ -212,10 +248,32 @@ export function installTrustedTypes(scope: { trustedTypes?: TrustedTypePolicyFac
     const pluginLoader = factory.createPolicy<TrustedScriptUrlPolicy>('delorun-plugin-loader', {
       createScriptURL: pluginScriptUrl,
     })
-    const stash: TrustedTypesStash = { pluginLoader, register: registerPluginScriptBundles }
+    const blobWorker = createBlobWorkerPolicy(factory)
+    const stash: TrustedTypesStash = {
+      pluginLoader,
+      ...(blobWorker === undefined ? {} : { blobWorker }),
+      register: registerPluginScriptBundles,
+    }
     ;(globalThis as { __DSH_TRUSTED_TYPES__?: TrustedTypesStash })[TRUSTED_TYPES_STASH] = stash
     return stash
   } catch {
+    return undefined
+  }
+}
+
+/**
+ * Create the `delorun-blob-worker` policy, or report that the page's Content
+ * Security Policy does not name it.
+ * @param factory - the page's Trusted Types policy factory.
+ * @returns the policy, or `undefined` when the policy name is not admitted.
+ */
+function createBlobWorkerPolicy(factory: TrustedTypePolicyFactory): TrustedScriptUrlPolicy | undefined {
+  try {
+    return factory.createPolicy<TrustedScriptUrlPolicy>('delorun-blob-worker', {
+      createScriptURL: blobWorkerScriptUrl,
+    })
+  } catch {
+    // The `trusted-types` directive omits this policy's name, so the page may not create it.
     return undefined
   }
 }
