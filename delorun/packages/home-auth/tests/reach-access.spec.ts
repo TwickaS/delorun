@@ -776,7 +776,10 @@ describe('the tables', () => {
     for (const action of ['credentials/set', 'credentials/describe', 'credentials/unset', 'event:credentials/record-updated', 'event:credentials/reference-updated']) {
       expect(Object.hasOwn(REACH_KEY_ACTIONS, action), action).toBe(true)
     }
-    for (const action of ['account/startSignIn', 'event:deepseek-account/session-expired', 'settings/openSettingsDocument', 'session/openWorkspacePath', 'session/workspacePathApplications']) {
+    // A678 keeps the account rows classified: Delorun's own profiles disable the account service, so the methods never
+    // register there, but a composition that mounts it still has to name them. The three that act on the computer's own
+    // screen stay, and the rows that decide who can get in are refused at their own routes and guards.
+    for (const action of ['settings/openSettingsDocument', 'session/openWorkspacePath', 'session/workspacePathApplications', 'account/startSignIn', 'event:deepseek-account/session-expired']) {
       expect(Object.hasOwn(REACH_DENIED_ACTIONS, action), action).toBe(true)
     }
   })

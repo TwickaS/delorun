@@ -15,6 +15,7 @@ import {
   REACH_DENIED_ACTIONS,
   REACH_ELEVATED_ACTIONS,
   reachDevicePrincipal,
+  TAILNET_GATED_ACTIONS,
   type ReachAccessFacts,
 } from '../src/reach-access.ts'
 import { TailnetPeerCache, type TailnetPeerCheck } from '../src/tailnet-peers.ts'
@@ -59,7 +60,7 @@ function facts(overrides: Partial<ReachAccessFacts> = {}): ReachAccessFacts {
 }
 
 describe('a tailnet peer', () => {
-  it('takes every elevated action without an unlock', () => {
+  it('takes every elevated action without an unlock, except the ones A677 keeps gated', () => {
     // Removing the tailnet-peer branch in `unlocked` makes this fail: every action would need an unlock again.
     const condition = createCondition(facts(), TAILNET)
     const named: Partial<Record<string, Record<string, unknown>>> = {
@@ -67,8 +68,21 @@ describe('a tailnet peer', () => {
       'pluginManager/setPluginEnabled': { id: 'include:delorun-trash', enabled: false },
     }
     for (const action of Object.keys(REACH_ELEVATED_ACTIONS) as RemoteAccessAction[]) {
+      if (TAILNET_GATED_ACTIONS.has(action)) continue
       expect(condition({ action, resource: GLOBAL, args: named[action] ?? {} }), action).toEqual({ kind: 'allow' })
     }
+  })
+
+  it('still needs an unlock for a terminal and for the full-access answer, which A677 keeps gated', () => {
+    // Removing TAILNET_GATED_ACTIONS from the tailnet-peer branch makes this fail: a shell would be free to a device,
+    // and a shell is what reaches the rows that decide who can get in.
+    const condition = createCondition(facts(), TAILNET)
+    const terminals = (Object.keys(REACH_ELEVATED_ACTIONS) as RemoteAccessAction[]).filter(action => action.startsWith('terminal/'))
+    expect(terminals.length).toBeGreaterThan(0)
+    for (const action of terminals) {
+      expect(condition({ action, resource: GLOBAL, args: {} }), action).toEqual({ kind: 'deny', reason: `elevation-required: ${action}` })
+    }
+    expect(TAILNET_GATED_ACTIONS.has('answer:full-access')).toBe(true)
   })
 
   it('still needs an unlock when the connection was not corroborated', () => {
