@@ -1,5 +1,6 @@
 /* A labelled line at the sidebar's foot, above its icon buttons and aligned with them; on the rail, an icon with the count of
-   waiting steps under it, centred in the rail's icon column. */
+   waiting steps under it, centred in the rail's icon column. The line pads its own text by the sidebar's one inset, so the
+   label starts on the same edge as the foot's icons and the search field, and never touches the bar's edges. */
 .entry,
 .rail {
   display: inline-flex;
@@ -7,7 +8,7 @@
   gap: var(--delorun-space-4);
   min-height: 32px;
   box-sizing: border-box;
-  padding: var(--delorun-space-2) var(--delorun-space-4);
+  padding: var(--delorun-space-3) var(--sidebar-inset, var(--delorun-space-4));
   border: 0;
   border-radius: var(--delorun-radius-md, 8px);
   background: transparent;
@@ -16,6 +17,47 @@
   font-size: var(--dsw-font-xs-13-font-size);
   line-height: var(--dsw-font-xs-13-line-height);
   cursor: pointer;
+}
+
+/* The entry and its × on one line: the entry takes the free width, the × keeps its own target at the end. */
+.line {
+  display: flex;
+  align-items: center;
+  gap: var(--delorun-space-2);
+  width: 100%;
+  min-width: 0;
+}
+
+/* The × that dismisses the line: a quiet icon button, 44px on a touch screen like the foot's own. */
+.dismiss {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--delorun-radius-md, 8px);
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+}
+
+.dismiss svg {
+  width: 14px;
+  height: 14px;
+}
+
+@media (hover: hover) {
+  .dismiss:hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+    color: var(--dsw-alias-label-primary);
+  }
+}
+
+.dismiss:focus-visible {
+  outline: var(--dsw-focus-ring-width) solid var(--dsw-focus-ring-color, var(--dsw-alias-state-business-primary));
 }
 
 .rail {
@@ -36,8 +78,9 @@
 }
 
 .entry {
+  flex: 1;
   justify-content: flex-start;
-  width: 100%;
+  min-width: 0;
   color: var(--dsw-alias-label-primary);
 }
 
@@ -61,6 +104,11 @@
   .entry,
   .rail {
     min-height: 44px;
+  }
+
+  .dismiss {
+    width: 44px;
+    height: 44px;
   }
 }
 

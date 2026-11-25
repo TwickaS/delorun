@@ -99,6 +99,8 @@
     justify-content: center;
   }
 
+  /* The labelled foot line takes a full row. It is a wrapper holding the entry and its ×, so it stretches and the entry
+     inside it fills the row. */
   [class*='_footRow']:has(> [class*='_footerActionsInline']) [data-sidebar-foot-line] {
     grid-column: 1 / -1;
     justify-self: stretch;

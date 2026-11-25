@@ -9,6 +9,11 @@
  * modal each declare their own, and this controller reads the computed value of the surface at each edge rather than a
  * colour of its own. A page whose surfaces declare none keeps the theme's tokens. A desktop window with a fine pointer
  * has no such bars, so the strips are hidden there and the header art reaches the window's top edge.
+ *
+ * The controller also writes the shell's height. A pinned PWA on iOS reports a visual viewport that stops at the status
+ * bar and the home indicator, so sizing the shell to it leaves a band of the page above and below the studio; the shell
+ * takes the screen instead, and the surfaces pad their content by the insets. The on-screen keyboard is the one case the
+ * shell follows the visual viewport, because the composer must stay above it.
  * @module @delorun/plugin-theme/client/edges
  */
 import { compositeOver, edgeSurfaces, subscribeEdgeSurfaces } from '@deepseek-ai/dsh-client-ui-primitives'
@@ -33,8 +38,14 @@ export const EDGE_VARIABLES = { top: '--edge-top', bottom: '--edge-bottom' } as 
 /** The variables this controller writes with the resolved colours, which the strips and the page background read. */
 export const EDGE_RESOLVED = { top: '--edge-top-background', bottom: '--edge-bottom-background' } as const
 
-/** The variable carrying the height the on-screen keyboard leaves, which the shell sizes itself to. */
+/** The variable carrying the height the shell sizes itself to: the screen, or what the on-screen keyboard leaves. */
 export const VIEWPORT_HEIGHT_VARIABLE = '--dsh-viewport-height'
+
+/** The safe-area insets as `edges.css` publishes them, which tell a pinned PWA's short visual viewport from the keyboard's. */
+export const SAFE_AREA_VARIABLES = { top: '--delorun-safe-top', bottom: '--delorun-safe-bottom' } as const
+
+/** The most a shorter visual viewport may fall short of the layout viewport and still be the safe areas rather than the keyboard. */
+export const SAFE_AREA_SLACK = 8
 
 /** The attributes whose change can move a surface to the top or bottom edge of the screen. */
 const WATCHED_ATTRIBUTES = ['data-sidebar-collapsed', 'data-sidebar-drawer', 'data-phase', 'data-phone', 'data-ds-dark-theme', 'data-palette']
@@ -79,6 +90,24 @@ export function edgeColours(read: (token: string) => string, phone: boolean): Ed
   const page = read(PAGE_TOKEN)
   const sidebar = read(SIDEBAR_TOKEN)
   return { top: phone || sidebar === '' ? page : sidebar, bottom: page }
+}
+
+/**
+ * The height the shell takes: the screen, so the studio's surface reaches the physical top and bottom edges, except while
+ * the on-screen keyboard shortens the visual viewport, when it takes the visual viewport so the composer stays above the
+ * keyboard.
+ *
+ * A pinned PWA on iOS reports a visual viewport that stops at the status bar and the home indicator, so the shortfall is
+ * the safe areas and the shell still takes the screen; the keyboard shortens it by far more than the insets.
+ * @param layout - the layout viewport's height, which is the screen.
+ * @param visual - the visual viewport's height, which the keyboard and a pinned PWA's safe areas both shorten.
+ * @param insets - the safe-area insets the page resolves.
+ * @returns the height in pixels, or undefined when the layout viewport reports none.
+ */
+export function shellHeight(layout: number, visual: number | undefined, insets: { readonly top: number; readonly bottom: number }): number | undefined {
+  if (!Number.isFinite(layout) || layout <= 0) return undefined
+  if (visual === undefined || !Number.isFinite(visual) || visual <= 0) return layout
+  return layout - visual <= insets.top + insets.bottom + SAFE_AREA_SLACK ? layout : visual
 }
 
 /**
@@ -327,6 +356,19 @@ export class EdgeController {
     return `#${[red, green, blue].map(channel => channel.toString(16).padStart(2, '0')).join('')}`
   }
 
+  /**
+   * Read the safe-area insets the page resolves, which `edges.css` publishes as custom properties.
+   * @returns the top and bottom insets in pixels; zero where the page resolves none, as a desktop window does.
+   */
+  private safeAreaInsets(): { readonly top: number; readonly bottom: number } {
+    const style = this.win.getComputedStyle(this.doc.documentElement)
+    const read = (name: string): number => {
+      const value = Number.parseFloat(style.getPropertyValue(name))
+      return Number.isFinite(value) && value > 0 ? value : 0
+    }
+    return { top: read(SAFE_AREA_VARIABLES.top), bottom: read(SAFE_AREA_VARIABLES.bottom) }
+  }
+
   /** Read the surfaces' colours again and apply them everywhere; call it after a theme, accent, colour-scheme or view change. */
   refresh(): void {
     this.claimThemeColor()
@@ -355,9 +397,10 @@ export class EdgeController {
     html.style.background = colours.top
     this.doc.body.style.background = colours.top
     this.ownThemeColor.content = colours.top
-    // The on-screen keyboard shrinks the visual viewport without shrinking the layout viewport, so the shell sizes to this.
-    const height = this.win.visualViewport?.height
-    if (height !== undefined && height > 0) html.style.setProperty(VIEWPORT_HEIGHT_VARIABLE, `${String(Math.round(height))}px`)
+    // The shell takes the screen, so the surface reaches the physical edges; the keyboard's shorter visual viewport is
+    // the one case it follows, and a pinned PWA's safe areas are not.
+    const height = shellHeight(this.win.innerHeight, this.win.visualViewport?.height, this.safeAreaInsets())
+    if (height !== undefined) html.style.setProperty(VIEWPORT_HEIGHT_VARIABLE, `${String(Math.round(height))}px`)
     else html.style.removeProperty(VIEWPORT_HEIGHT_VARIABLE)
     // Strips draw a visible 5px band over the header art; they are for a touch device's bars, which a desktop window has none of.
     const coarse = typeof this.win.matchMedia === 'function' && this.win.matchMedia('(pointer: coarse)').matches

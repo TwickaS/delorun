@@ -3,8 +3,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { pushEdgeSurface } from '@deepseek-ai/dsh-client-ui-primitives'
 import {
-  EDGE_ATTRIBUTE, EDGE_SURFACE_ATTRIBUTE, EdgeController, VIEWPORT_HEIGHT_VARIABLE, edgeCandidates, edgeColours, edgeColoursAt, stackedEdgeColours,
-  type EdgeSurfaceBox,
+  EDGE_ATTRIBUTE, EDGE_SURFACE_ATTRIBUTE, EdgeController, SAFE_AREA_VARIABLES, VIEWPORT_HEIGHT_VARIABLE, edgeCandidates, edgeColours, edgeColoursAt, shellHeight,
+  stackedEdgeColours, type EdgeSurfaceBox,
 } from '../src/client/edges.ts'
 
 const PAGE = '--dsw-alias-bg-base'
@@ -233,6 +233,25 @@ describe('the edge controller', () => {
     Reflect.deleteProperty(window, 'visualViewport')
   })
 
+  it('sizes the shell to the screen in a pinned PWA, whose visual viewport stops at the safe areas', () => {
+    tokens('rgb(250 250 248)', 'rgb(240 240 238)')
+    // An iPhone 15 in a pinned PWA: 844px of screen, a visual viewport of 751px, and 59 + 34px of insets.
+    document.documentElement.style.setProperty(SAFE_AREA_VARIABLES.top, '59px')
+    document.documentElement.style.setProperty(SAFE_AREA_VARIABLES.bottom, '34px')
+    const viewport = Object.assign(new EventTarget(), { height: 751 })
+    Object.defineProperty(window, 'visualViewport', { configurable: true, value: viewport })
+    const edges = new EdgeController(document, window)
+    expect(document.documentElement.style.getPropertyValue(VIEWPORT_HEIGHT_VARIABLE)).toBe('844px')
+    // The keyboard is the one case the shell follows, because the composer must stay above it.
+    viewport.height = 512
+    viewport.dispatchEvent(new Event('resize'))
+    expect(document.documentElement.style.getPropertyValue(VIEWPORT_HEIGHT_VARIABLE)).toBe('512px')
+    edges.dispose()
+    document.documentElement.style.removeProperty(SAFE_AREA_VARIABLES.top)
+    document.documentElement.style.removeProperty(SAFE_AREA_VARIABLES.bottom)
+    Reflect.deleteProperty(window, 'visualViewport')
+  })
+
   it('restores the page on dispose: strips, tag, backgrounds, viewport and listeners', () => {
     tokens('rgb(250 250 248)', 'rgb(240 240 238)')
     const edges = new EdgeController(document, window)
@@ -248,6 +267,28 @@ describe('the edge controller', () => {
     tokens('rgb(1 1 1)', 'rgb(2 2 2)')
     window.dispatchEvent(new Event('resize'))
     expect(document.querySelectorAll(`[${EDGE_ATTRIBUTE}]`)).toHaveLength(0)
+  })
+})
+
+describe('shellHeight', () => {
+  it('takes the screen when the visual viewport falls short by the safe areas, and the visual viewport when the keyboard does', () => {
+    const insets = { top: 59, bottom: 34 }
+    // A pinned PWA: 844 - 751 = 93, which is the insets and no more.
+    expect(shellHeight(844, 751, insets)).toBe(844)
+    // The keyboard: far more than the insets.
+    expect(shellHeight(844, 512, insets)).toBe(512)
+    // A desktop window has no insets and no shortfall.
+    expect(shellHeight(900, 900, { top: 0, bottom: 0 })).toBe(900)
+    // A browser whose visual viewport is a few pixels short for its own reasons still takes the screen.
+    expect(shellHeight(844, 840, { top: 0, bottom: 0 })).toBe(844)
+  })
+
+  it('takes the layout viewport where the visual viewport reports nothing usable', () => {
+    expect(shellHeight(844, undefined, { top: 0, bottom: 0 })).toBe(844)
+    expect(shellHeight(844, 0, { top: 0, bottom: 0 })).toBe(844)
+    expect(shellHeight(844, Number.NaN, { top: 0, bottom: 0 })).toBe(844)
+    expect(shellHeight(0, 751, { top: 0, bottom: 0 })).toBeUndefined()
+    expect(shellHeight(Number.NaN, 751, { top: 0, bottom: 0 })).toBeUndefined()
   })
 })
 

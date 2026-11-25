@@ -48,10 +48,12 @@ export interface OnboardingSettings {
   browser: '' | 'on' | 'off'
   /** While `browser` is `off`: whether the Browser pack was last seen `enabled` or `disabled` (turned off or removed); empty until seen. A pack seen enabled after `disabled` was switched on again in Plugins. */
   browserPack: '' | 'enabled' | 'disabled'
+  /** The deferred steps the person dismissed the Finish setup entry for, by step id. The entry stays hidden while the waiting steps are a subset of these, so a step deferred later shows it again. */
+  dismissedSteps: string[]
 }
 
 /** The settings of a profile that has not started onboarding. */
-export const DEFAULT_SETTINGS: OnboardingSettings = { done: false, step: '', plugins: [], optionalRows: [], pausedStart: '', addWaitSeconds: 60, browser: '', browserPack: '' }
+export const DEFAULT_SETTINGS: OnboardingSettings = { done: false, step: '', plugins: [], optionalRows: [], pausedStart: '', addWaitSeconds: 60, browser: '', browserPack: '', dismissedSteps: [] }
 
 /** The host half's live configuration: one field per setting. */
 export interface Config {
@@ -63,6 +65,7 @@ export interface Config {
   addWaitSeconds: Volatile<number>
   browser: Volatile<'' | 'on' | 'off'>
   browserPack: Volatile<'' | 'enabled' | 'disabled'>
+  dismissedSteps: Volatile<string[]>
   registry: string
   registryTimeoutMs: number
   keyTestTimeoutMs: number
@@ -90,6 +93,9 @@ export const Config = z.object({
   browserPack: z.union(['', 'enabled', 'disabled'])
     .description('While Browser is off: whether the Browser plugin pack was last seen enabled or disabled, so Settings can tell a pack switched on again in Plugins from one still waiting for a restart to turn off. Empty until seen.')
     .default(DEFAULT_SETTINGS.browserPack).volatile(),
+  dismissedSteps: z.array(z.string().pattern(STEP_ID)).max(3)
+    .description('The deferred steps the person dismissed the Finish setup entry for, by step id. The entry stays hidden while the steps still waiting are all in this list, so a step deferred later shows it again.')
+    .default([...DEFAULT_SETTINGS.dismissedSteps]).volatile(),
   registry: z.string().pattern(/^https:\/\/[^\s/]+(?:\/[^\s]*)?$/u)
     .description('The npm registry the plugins step reads a package that is not installed from, only when the person asks.')
     .default('https://registry.npmjs.org'),

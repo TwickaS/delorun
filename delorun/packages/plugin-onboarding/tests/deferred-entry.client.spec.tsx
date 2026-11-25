@@ -18,8 +18,9 @@ const PIN_OFF = { enabled: false, idleMinutes: 15, lockWhenHidden: false, paused
 const PIN_ON = { enabled: true, kind: 'pin', idleMinutes: 15, lockWhenHidden: false, paused: false }
 
 /** The entry over fakes: the record, the reach read, the PIN read and where the page is. */
-function services(options: { readonly deferred?: readonly DeferrableStep[]; readonly reach?: 'set-up' | 'off'; readonly pin?: object; readonly computer?: boolean; readonly done?: boolean } = {}) {
-  const record: SetupRecord = { reachSetUp: false, ...options.deferred === undefined ? {} : { deferred: [...options.deferred] } }
+function services(options: { readonly deferred?: readonly DeferrableStep[]; readonly reach?: 'set-up' | 'off'; readonly pin?: object; readonly computer?: boolean; readonly done?: boolean; readonly dismissed?: readonly string[] } = {}) {
+  // The record is read on every mount, so a spec can defer another step and see the entry read it again.
+  const record: { deferred: DeferrableStep[] } = { deferred: [...options.deferred ?? []] }
   const cleared: DeferrableStep[] = []
   const defer = vi.fn((id: DeferrableStep, deferred: boolean) => { if (!deferred) cleared.push(id); return Promise.resolve([] as readonly DeferrableStep[]) })
   const reach = vi.fn(() => Promise.resolve(options.reach ?? 'off'))
@@ -27,12 +28,13 @@ function services(options: { readonly deferred?: readonly DeferrableStep[]; read
   const deferredOnly = createSnapshotStore(false)
   const changed = createSnapshotStore(0)
   const open = vi.fn()
-  const progress = liveForm<OnboardingSettings>(settings({ done: options.done ?? true })).form
-  return { progress, host: { reach, reachAddress: () => Promise.resolve(undefined), defer }, loadRecord: () => Promise.resolve(record), fetch, atComputer: () => options.computer ?? true, deferredOnly, changed, open, cleared, defer }
+  const progress = liveForm<OnboardingSettings>(settings({ done: options.done ?? true, dismissedSteps: [...options.dismissed ?? []] })).form
+  const loadRecord = (): Promise<SetupRecord> => Promise.resolve({ reachSetUp: false, ...record.deferred.length === 0 ? {} : { deferred: [...record.deferred] } })
+  return { progress, host: { reach, reachAddress: () => Promise.resolve(undefined), defer }, loadRecord, fetch, atComputer: () => options.computer ?? true, deferredOnly, changed, open, cleared, defer, record }
 }
 
 const mount = async (face: ReturnType<typeof services>, wide = true) => {
-  const { cleared: _cleared, defer: _defer, ...injected } = face
+  const { cleared: _cleared, defer: _defer, record: _record, ...injected } = face
   const view = render(<DeferredSetupEntry wide={wide} t={t} {...injected} />)
   await act(async () => { await Promise.resolve(); await Promise.resolve(); await Promise.resolve() })
   return view
@@ -92,7 +94,8 @@ describe('the Finish setup entry', () => {
     await mount(services({ done: false }))
     const entry = screen.getByRole('button', { name: en.finishSetup })
     expect(entry.textContent).toBe(en.finishSetup)
-    expect(entry.hasAttribute('data-sidebar-foot-line')).toBe(true)
+    // The line carries the marker, so the foot gives it a row of its own; the entry sits inside it beside the ×.
+    expect(entry.closest('[data-sidebar-foot-line]')).not.toBeNull()
   })
 
   it('is a counted dot in the narrow rail', async () => {
@@ -122,10 +125,37 @@ describe('the Finish setup entry', () => {
     expect(away.fetch).not.toHaveBeenCalled()
   })
 
+  it('dismisses the line, keeping the steps it covered, and stays hidden after a reload', async () => {
+    const face = services({ deferred: ['pin'] })
+    await mount(face)
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: en['deferred.dismiss'] })) })
+    expect(face.progress.getSnapshot().value?.dismissedSteps).toEqual(['pin'])
+    expect(screen.queryByRole('button', { name: en['deferred.entry'].replace('{n}', '1') })).toBeNull()
+    // A reload reads the same settings, so the line stays hidden.
+    cleanup()
+    await mount(face)
+    expect(screen.queryByRole('button', { name: en['deferred.entry'].replace('{n}', '1') })).toBeNull()
+  })
+
+  it('shows the line again when a step the person did not dismiss arrives', async () => {
+    const face = services({ deferred: ['pin'], dismissed: ['pin'] })
+    await mount(face)
+    expect(screen.queryByRole('button', { name: en['deferred.entry'].replace('{n}', '1') })).toBeNull()
+    face.record.deferred = ['pin', 'reach']
+    await act(async () => { face.changed.set(1); await Promise.resolve(); await Promise.resolve(); await Promise.resolve() })
+    expect(screen.getByRole('button', { name: en['deferred.entry'].replace('{n}', '2') })).toBeTruthy()
+  })
+
+  it('keeps the line while the guide is unfinished and nothing was deferred, because a dismissal covers no step', async () => {
+    const face = services({ done: false, dismissed: ['pin'] })
+    await mount(face)
+    expect(screen.getByRole('button', { name: en.finishSetup })).toBeTruthy()
+  })
+
   it('reads again when a step changes and when the guide closes', async () => {
     const face = services({ deferred: ['pin'] })
     await mount(face)
-    expect(screen.getByRole('button')).toBeTruthy()
+    expect(screen.getByRole('button', { name: en['deferred.entry'].replace('{n}', '1') })).toBeTruthy()
     face.fetch.mockResolvedValue(new Response(JSON.stringify(PIN_ON)))
     await act(async () => { face.changed.set(1); await Promise.resolve(); await Promise.resolve(); await Promise.resolve() })
     expect(screen.queryByRole('button')).toBeNull()
