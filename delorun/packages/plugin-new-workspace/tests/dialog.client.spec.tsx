@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { en } from '../src/client/locales.ts'
@@ -226,6 +228,27 @@ describe('a folder on this computer', () => {
     expect(folderNames(list)).toEqual(['delorun', 'site'])
     expect(within(screen.getByRole('navigation', { name: en['folder.crumbs'] })).getAllByRole('button').map(each => each.textContent)).toEqual([en['folder.home'], 'src'])
     expect(button('Use "src"').disabled).toBe(false)
+  })
+
+  it('keeps a long folder name on one line, cut with an ellipsis, and keeps the row compact (#90)', async () => {
+    const long = 'delorun-new-home-pre-import-20261123'
+    const found = [{ path: `${HOME}/${long}`, name: long }, { path: `${HOME}/delorun`, name: 'delorun' }]
+    await open({ api: { search: async () => ok({ results: found, stopped: 'complete' }) } })
+    await type(screen.getByRole('textbox', { name: en['folder.search'] }), 'delorun')
+    const first = await screen.findByRole('option', { name: new RegExp(`^${long}`) })
+    const results = screen.getByRole('listbox', { name: en['folder.results'] })
+    const options = within(results).getAllByRole('option')
+    expect(options[0]).toBe(first)
+    // The name is one line: the rule that lets it wrap to one letter per line is gone.
+    const sheet = readFileSync(resolve(import.meta.dirname, '../src/client/screens/screens.module.css'), 'utf8')
+    const name = /\.folderName\s*\{([^{}]*)\}/.exec(sheet)?.[1] ?? ''
+    expect(name).toContain('white-space: nowrap')
+    expect(name).toContain('text-overflow: ellipsis')
+    expect(name).toContain('min-width: 0')
+    expect(name).not.toContain('overflow-wrap: anywhere')
+    // The full path is the row's tooltip, so a cut name is still readable.
+    expect(options[0]?.getAttribute('title')).toBe(`~/${long}`)
+    expect(options[1]?.getAttribute('title')).toBe('~/delorun')
   })
 
   it('replaces the listing with the search results, selects a result with Enter, and says the list was cut', async () => {

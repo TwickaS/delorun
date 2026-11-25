@@ -384,6 +384,7 @@ export function FolderScreen({ t, api, browse, home, now, suggested, startPath, 
               const id = `${rowId}${String(index)}`
               return (
                 <li key={row.path} role="option" aria-selected={row.path === selected} className={css.folder}
+                  title={displayPath(row.path, home)}
                   aria-labelledby={hint === undefined ? undefined : `${id}n`} aria-describedby={hint === undefined ? undefined : `${id}h`}
                   tabIndex={row.path === selected || (selected === undefined && index === 0) ? 0 : -1}
                   onClick={() => { select(row.path) }} onDoubleClick={searching ? undefined : () => { void open(row.path, { focusList: true }) }}>
