@@ -49,6 +49,13 @@ export default defineConfig([
   },
   {
     ...shared,
+    entry: { 'long-chat-measure.worker': 'long-session-browser/long-chat-measure.worker.ts' },
+    outDir: '.dsh-build/long-chat-measure',
+    clean: true,
+    tsconfig: 'tsconfig.host.json',
+  },
+  {
+    ...shared,
     entry: {
       'session-corpus.worker': 'session-corpus/session-corpus.worker.ts',
       'projection-list.worker': 'session-corpus/projection-list.worker.ts',

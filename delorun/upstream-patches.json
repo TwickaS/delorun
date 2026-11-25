@@ -3637,6 +3637,24 @@
       "class": "delorun-feature",
       "feature": "delorun-sidebar-section-seat",
       "reason": "A slot declaration may reserve its cell (SlotEntryDef.reserved, SlotSpec.reserved): a registration below the floor is refused with the reason, which names the additive seat to take instead. The sidebar reserves sidebar.workspaces so a plugin cannot replace the Workspace and Session list and the lists registered into its child seats. Offer upstream as a general slot capability."
+    },
+    {
+      "path": "benchmarks/long-session-browser/long-chat-shape.ts",
+      "class": "delorun-feature",
+      "feature": "long-chat-load-measurement",
+      "reason": "Long-chat load measurement: a synthetic fixture shaped like the largest real Session (3.2 MB compressed, 11.8 MB logical, 6,306 events, one append frame per turn) built through the production Session and accumulator, so the measured workload matches what a person's long chat actually stores. No recorded Session, user material or network service supplies its content."
+    },
+    {
+      "path": "benchmarks/long-session-browser/long-chat-measure.worker.ts",
+      "class": "delorun-feature",
+      "feature": "long-chat-load-measurement",
+      "reason": "Long-chat load measurement: a phase-timed worker that runs the production open, read, Session restore, projection and first-history paths in a fresh process per scenario, and separately times the raw file read, frame decompression and JSONL parse, so a long chat's load time is attributed rather than guessed. It measures only; it changes no product behaviour."
+    },
+    {
+      "path": "benchmarks/tsdown.config.ts",
+      "class": "delorun-feature",
+      "feature": "long-chat-load-measurement",
+      "reason": "Long-chat load measurement: compiles the measurement worker beside the other benchmark workers, so the timed code runs as plain Node against built package entries exactly as the other benchmark cases do."
     }
   ],
   "retired": []
