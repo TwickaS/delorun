@@ -7,7 +7,7 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Input, Switch, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
+import { IconCheckOutlineRegular, IconCopyOutlineRegular, Input, Switch, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import { Button } from '@delorun/brand'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { RadioList, SettingsCard, type RadioRow } from '@delorun/settings-controls'
@@ -92,7 +92,8 @@ function CommandCopy({ t, command }: { readonly t: RunTranslate, readonly comman
   const said = answer === 'copied' ? t('copy.done') : answer === 'failed' ? t('copy.failed') : ''
   return <span className={commandCss.copy}>
     <Tooltip label={t('copy.tooltip', { command })} side="top" align="end" portal delayMs={300}>
-      <Button variant="ghost" size="sm" aria-label={t('copy.label', { command })} data-copy-answer={answer} onClick={() => { void copy() }}>
+      <Button variant="secondary" size="sm" aria-label={t('copy.label', { command })} data-copy-answer={answer}
+        icon={answer === 'copied' ? <IconCheckOutlineRegular size={14} /> : <IconCopyOutlineRegular size={14} />} onClick={() => { void copy() }}>
         {answer === 'copied' ? t('copy.done') : answer === 'failed' ? t('copy.failed') : t('copy.action')}
       </Button>
     </Tooltip>

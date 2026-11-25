@@ -9,6 +9,12 @@
   margin-top: 8px;
 }
 
+/* The answer is wider than the resting label; the button keeps one width so the row never shifts under the pointer. */
+.copy button {
+  min-width: 132px;
+  justify-content: center;
+}
+
 /* The answer is announced, not drawn: the button's own label already shows it. */
 .announce {
   position: absolute;
