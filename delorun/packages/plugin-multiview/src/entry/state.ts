@@ -8,7 +8,7 @@
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { HostObservable } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
-import type { MultiviewSettings, RememberScope } from '../config.ts'
+import { MAX_PANES_RANGE, type MultiviewSettings, type RememberScope } from '../config.ts'
 import {
   arrangeLayout, capacityRefusal, clampShare, cycleChoice, DEFAULT_PRESET, layoutOf, MAIN_SHARE_STEP, reconcileLayout, resizePaneShare,
   shapeOf, slotOrder,
@@ -235,6 +235,28 @@ export class MultiviewStore implements MultiviewService {
       else if (result.reason === 'max-panes' || result.reason === 'no-room') refused += 1
     }
     return { pinned, refused }
+  }
+
+  /** Remove every pin of a chat. */
+  unpinAll(chat: SessionId): number {
+    const state = this.#store(chat).getSnapshot()
+    if (state.pins.length === 0) return 0
+    const removed = state.pins.length
+    this.#write(chat, { ...state, pins: [], slots: undefined, layout: null })
+    return removed
+  }
+
+  /** Set the pane limit, kept inside the range Config accepts. */
+  setMaxPanes(panes: number): void {
+    const maxPanes = Math.min(MAX_PANES_RANGE.max, Math.max(MAX_PANES_RANGE.min, Math.round(panes)))
+    if (maxPanes === this.#settings().maxPanes) return
+    void this.#writeSettings({ maxPanes })
+  }
+
+  /** Set whether a hand-off pins its agent and opens Multiview. */
+  setAutoOpen(autoOpen: boolean): void {
+    if (autoOpen === this.#settings().autoOpen) return
+    void this.#writeSettings({ autoOpen })
   }
 
   /** Open Multiview for a chat, which is the person's own open: a later hand-off opens it again. */

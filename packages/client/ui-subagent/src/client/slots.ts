@@ -43,6 +43,14 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
       scope: 'session'
     }
     /**
+     * Controls at the top of the root Session's subagent catalog, above its tree and below its own filter (for example a
+     * settings button or an unpin-all action). Absent contributions render nothing.
+     */
+    'conversation.session.header.actions.subagent.header': {
+      kind: 'list'
+      scope: 'session'
+    }
+    /**
      * Controls at the end of the root Session's subagent action, after its trigger and inside the same control (for example
      * a view toggle). Shown and hidden with the action; absent contributions render nothing.
      */

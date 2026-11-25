@@ -3072,19 +3072,19 @@
       "path": "packages/client/ui-subagent/src/client/SubagentHeaderLineage.tsx",
       "class": "delorun-feature",
       "feature": "live-agents",
-      "reason": "Renders the optional row and trigger positions of the agents menu (EA13): a leading mark, second-line words and a trailing indicator on each catalog row, and an addition after the trigger's count. With no plugin registered they render nothing, so rows are unchanged. `@delorun/plugin-agent-seats` fills them (monogram, state words, 5-hour ring, Answer button, \"· N outside\"). It also renders the end slot after the root trigger, inside the same control and hidden with it, which `@delorun/plugin-multiview` fills with its icon toggle (A619)."
+      "reason": "Renders the optional row and trigger positions of the agents menu (EA13): a leading mark, second-line words and a trailing indicator on each catalog row, and an addition after the trigger's count. With no plugin registered they render nothing, so rows are unchanged. `@delorun/plugin-agent-seats` fills them (monogram, state words, 5-hour ring, Answer button, \"· N outside\"). It also renders the end slot after the root trigger, inside the same control and hidden with it, which `@delorun/plugin-multiview` fills with its icon toggle (A619). It renders the header slot above the tree, which `@delorun/plugin-multiview` fills with the agents list's control bar, and folds inactive and done agents behind one control at the bottom past eight rows, so a short catalog shows every agent and a long one stays readable; the fold's copy is the package's own."
     },
     {
       "path": "packages/client/ui-subagent/src/client/index.ts",
       "class": "delorun-feature",
       "feature": "live-agents",
-      "reason": "Declares the four row and trigger positions as children of the header-action registration (root conversations only: a slot has one declaring entry) and supplies their availability hook, so the menu renders them only while a plugin contributes. It also declares the end slot `conversation.session.header.actions.subagent.end` as a child of the catalog action (Multiview's toggle, A619)."
+      "reason": "Declares the four row and trigger positions as children of the header-action registration (root conversations only: a slot has one declaring entry) and supplies their availability hook, so the menu renders them only while a plugin contributes. It also declares the end slot `conversation.session.header.actions.subagent.end` as a child of the catalog action (Multiview's toggle, A619), and the header slot `conversation.session.header.actions.subagent.header` with its availability hook, which `@delorun/plugin-multiview` fills with the agents list's control bar."
     },
     {
       "path": "packages/client/ui-subagent/src/client/slots.ts",
       "class": "delorun-feature",
       "feature": "live-agents",
-      "reason": "Declares the `conversation.session.header.actions.subagent.row.lead|detail|trail` and `.trigger` list slots and their owner types (EA13). It also declares the session-scoped end slot after the trigger (Multiview's toggle, A619)."
+      "reason": "Declares the `conversation.session.header.actions.subagent.row.lead|detail|trail` and `.trigger` list slots and their owner types (EA13). It also declares the session-scoped end slot after the trigger (Multiview's toggle, A619) and the session-scoped header slot above the tree (the agents list's control bar)."
     },
     {
       "path": "docs/persistence-changes/2026-11-17-run-allowed-event.schema.json",
@@ -3701,8 +3701,14 @@
     {
       "path": "packages/client/ui-chat/src/client/chat/use-chat-viewport.ts",
       "class": "generic-fix",
-      "reason": "Following the tail measured the scrollport three times per update: once for the observation, once inside reclaimBelow, and once more for the follow itself. scrollToBottom now reads it once and passes that geometry to reclaimBelow, which reports the geometry that stands after it trims the spacer; readScroll accepts geometry its caller already read.",
-      "feature": "scroll-follow-cost"
+      "feature": "scroll-follow-cost",
+      "reason": "Following the tail measured the scrollport three times per update: once for the observation, once inside reclaimBelow, and once more for the follow itself. scrollToBottom now reads it once and passes that geometry to reclaimBelow, which reports the geometry that stands after it trims the spacer; readScroll accepts geometry its caller already read."
+    },
+    {
+      "path": "packages/client/ui-subagent/src/client/locales.ts",
+      "class": "delorun-feature",
+      "feature": "live-agents",
+      "reason": "Adds the agents list's fold copy: `fold.more` states how many inactive and done agents the control at the bottom holds, and `fold.less` returns them to the fold, in every dictionary the package ships."
     }
   ],
   "retired": []

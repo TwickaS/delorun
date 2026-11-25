@@ -169,7 +169,9 @@
   flex-direction: column;
 
   max-width: calc(100vw - 32px);
-  max-height: min(560px, calc(100dvh - 140px));
+  /* A popover over a chat, never a full-height surface: it grows with its rows up to 65% of the window, and the list
+     scrolls only past that. The 140px floor keeps it clear of the header and the composer on a short window. */
+  max-height: min(65dvh, calc(100dvh - 140px));
   padding: 6px;
   overflow: hidden;
   --dsh-scrollbar-thumb: var(--dsw-alias-scrollbar-bg-l2);
@@ -259,12 +261,12 @@
 .row {
   position: relative;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 7px;
   box-sizing: border-box;
   width: 100%;
-  min-height: 40px;
-  padding: 4px 6px 4px 9px;
+  min-height: 32px;
+  padding: 3px 6px 3px 9px;
   border: 0;
   border-radius: var(--dsw-radius-md);
   background: transparent;
@@ -291,11 +293,11 @@
   display: flex;
   flex: 1;
   align-self: stretch;
-  align-items: flex-start;
+  align-items: center;
   gap: 7px;
   min-width: 0;
-  margin: -4px -6px -4px;
-  padding: 4px 6px;
+  margin: -3px -6px -3px;
+  padding: 3px 6px;
   border-radius: var(--dsw-radius-md);
 }
 
@@ -305,14 +307,14 @@
   align-items: center;
   justify-content: center;
   width: 14px;
-  height: 17px;
+  height: 18px;
 }
 
 .disclosure,
 .disclosureSpace {
   flex: none;
   width: 14px;
-  height: 17px;
+  height: 18px;
 }
 
 .disclosure {
@@ -354,20 +356,25 @@
   transform: rotate(90deg);
 }
 
+/* One line per row: the name, then its muted facts beside it, so a row carries one line of text rather than two. */
 .content {
   display: flex;
   flex: 1;
-  flex-direction: column;
+  align-items: baseline;
+  gap: 6px;
   min-width: 0;
 }
 
 .label,
 .secondaryLabel {
-  white-space: normal;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .label {
+  flex: 0 1 auto;
+  min-width: 0;
   color: inherit;
   font-size: 13px;
   font-weight: 400;
@@ -378,28 +385,32 @@
 }
 
 .secondaryLabel {
+  flex: 0 1 auto;
+  min-width: 0;
   color: var(--dsw-alias-label-tertiary);
 }
 
+/* Tokens and duration share one line beside the name, so a row carries one line of facts rather than two. */
 .metrics {
-  color: var(--dsw-alias-label-tertiary);
-  font-size: 10px;
-  line-height: 15px;
-  display: grid;
-  grid-template-rows: 17px 15px;
+  display: inline-flex;
   flex: none;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--dsw-alias-label-tertiary);
+  font-size: 11px;
+  line-height: 17px;
   font-variant-numeric: tabular-nums;
-  text-align: right;
   white-space: nowrap;
 }
 
-.metricToken {
-  grid-row: 1;
+.metricToken,
+.metricDuration {
   line-height: 17px;
 }
 
 .metricDuration {
-  grid-row: 2;
+  min-width: 3.2em;
+  text-align: end;
 }
 
 .sidebarButton,
@@ -408,7 +419,6 @@
   flex: none;
   width: 28px;
   height: 28px;
-  margin: 4px 0;
 }
 
 .currentCheck {
@@ -442,8 +452,8 @@
 }
 
 .children {
-  /* First-line marker center: row inset 4px + half of the 17px status column. */
-  --branch-anchor-y: 12.5px;
+  /* The row's centre line: its 3px inset plus half of the 18px status column. */
+  --branch-anchor-y: 12px;
   position: relative;
   margin-left: 16px;
   padding-left: 3px;
@@ -524,6 +534,69 @@
 @media (hover: hover) {
   .refresh:hover {
     background: var(--dsw-alias-interactive-bg-hover);
+  }
+}
+
+/* The control bar at the top of the catalog: contributed controls sit in one row, above the tree and its section header. */
+.header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+  min-height: 30px;
+  padding: 0 3px 4px;
+}
+
+.header:empty {
+  display: none;
+}
+
+/* The fold's control: one quiet row at the bottom, stating how many agents it holds. */
+.seeMore {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 30px;
+  margin-top: 2px;
+  padding: 4px 9px;
+  border: 0;
+  border-radius: var(--dsw-radius-sm);
+  background: transparent;
+  color: var(--dsw-alias-label-tertiary);
+  font: inherit;
+  font-size: 12px;
+  line-height: 17px;
+  cursor: pointer;
+}
+
+.seeMore svg {
+  flex: none;
+  transition: transform var(--dl-motion-quick, 180ms) var(--dl-ease-out, cubic-bezier(0.23, 1, 0.32, 1));
+}
+
+.seeMoreOpen svg {
+  transform: rotate(180deg);
+}
+
+.seeMore:focus-visible {
+  background: var(--dsw-alias-interactive-bg-hover);
+  color: var(--dsw-alias-label-primary);
+}
+
+@media (hover: hover) {
+  .seeMore:hover {
+    background: var(--dsw-alias-interactive-bg-hover);
+    color: var(--dsw-alias-label-primary);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .seeMore svg {
+    transition: none;
   }
 }
 

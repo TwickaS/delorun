@@ -158,6 +158,22 @@ export interface MultiviewService {
    */
   pinAll(chat: SessionId, agents: readonly SessionId[]): { readonly pinned: number; readonly refused: number }
   /**
+   * Remove every pin of a chat, leaving its layout to be rebuilt from what remains.
+   * @param chat - the chat that Multiview belongs to.
+   * @returns how many pins were removed.
+   */
+  unpinAll(chat: SessionId): number
+  /**
+   * Set how many panes Multiview holds at most, the main chat included, as the agents list's settings popover does.
+   * @param panes - the limit; kept inside {@link MAX_PANES_RANGE}.
+   */
+  setMaxPanes(panes: number): void
+  /**
+   * Set whether a hand-off pins its agent and opens Multiview, as the agents list's settings popover does.
+   * @param autoOpen - the choice.
+   */
+  setAutoOpen(autoOpen: boolean): void
+  /**
    * Open Multiview for a chat: the layer in the chat's content shows the panes, and the choice is kept. This is the person's
    * own open, so a later hand-off opens Multiview again.
    * @param chat - the chat that Multiview belongs to.
