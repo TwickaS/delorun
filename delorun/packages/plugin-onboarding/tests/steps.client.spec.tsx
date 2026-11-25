@@ -209,6 +209,16 @@ describe('the welcome step', () => {
     expect(radio(zh['welcome.language.own']).getAttribute('aria-checked')).toBe('true')
   })
 
+  // The step offers the language and the picture only; the model is the next step's, so the lead must not promise it here.
+  it('names the language as this step\'s work and the model as the next step\'s', () => {
+    render(<WelcomeStep services={stepServices()} guide={guideOf()} notice={undefined} />)
+    expect(screen.getByText(en['welcome.lead'])).toBeTruthy()
+    expect(en['welcome.lead']).toMatch(/language/i)
+    expect(en['welcome.lead']).toMatch(/next step/i)
+    expect(screen.queryByRole('textbox')).toBeNull()
+    expect(screen.queryByRole('button', { name: /connect/i })).toBeNull()
+  })
+
   it('draws the studio in miniature in the active language', () => {
     render(<WelcomeStep services={stepServices()} guide={guideOf()} notice={undefined} />)
     const picture = screen.getByRole('img', { name: en['welcome.preview'] })
