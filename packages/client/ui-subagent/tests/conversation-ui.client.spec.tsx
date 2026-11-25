@@ -30,7 +30,7 @@ const GRANDCHILD = 'grandchild' as SessionId
 const t: SubagentHeaderLineageProps['t'] = makeTranslate(zh)
 
 type HeaderCatalogProps = SubagentHeaderLineageProps
-  & Pick<SubagentCatalogActionProps, 'useFooterAvailable' | 'renderSlot' | 'useRowSlotsAvailable'>
+  & Pick<SubagentCatalogActionProps, 'useFooterAvailable' | 'useHeaderAvailable' | 'renderSlot' | 'useRowSlotsAvailable'>
 
 type CatalogFixtureEntry<Entry = SubagentCatalogEntry> = Entry extends SubagentCatalogEntry
   ? Omit<Entry, 'createdAt'> & { activity: 'running' | 'inactive' }
@@ -150,6 +150,7 @@ function props(
     sessionId: PARENT,
     useSessions,
     useFooterAvailable: <T,>(select: (available: boolean) => T): T => select(true),
+    useHeaderAvailable: <T,>(select: (available: boolean) => T): T => select(false),
     useRowSlotsAvailable: <T,>(select: (available: boolean) => T): T => select(false),
     useSessionStatus: <T,>(select: (snapshot: SessionStatusSnapshot) => T): T => select(statuses),
     useSession: <T,>(select: (snapshot: SessionSnapshot) => T): T => select(snapshot),
@@ -266,6 +267,20 @@ describe('SubagentHeaderLineage', () => {
     expect(header.textContent).not.toContain('2 进行中')
     view.rerender(<HeaderCatalog {...input} t={makeTranslate(en)} />)
     expect(header.textContent).toBe('Subagents1 completed\u2002·\u20021 in progress\u2002·\u20021 not running\u2002·\u20021 external')
+  })
+
+  it('renders the header slot above the tree only while a plugin contributes to it', () => {
+    const contributed = {
+      ...props(catalog()),
+      useHeaderAvailable: <T,>(select: (available: boolean) => T): T => select(true),
+      renderSlot: vi.fn((key: string) => key === 'conversation.session.header.actions.subagent.header' ? <span>controls</span> : null),
+    }
+    const view = render(<HeaderCatalog {...contributed} />)
+    fireEvent.click(screen.getByRole('button', { name: '2 个子智能体' }))
+    expect(screen.getByText('controls')).toBeTruthy()
+    view.rerender(<HeaderCatalog {...props(catalog())} renderSlot={vi.fn(() => null)} />)
+    fireEvent.click(screen.getByRole('button', { name: '2 个子智能体' }))
+    expect(screen.queryByText('controls')).toBeNull()
   })
 
   it('renders end controls after the root trigger inside the same control, and hides them with it', () => {
@@ -764,6 +779,44 @@ describe('SubagentHeaderLineage', () => {
     })
   })
 
+  it('shows every agent and no fold control while the catalog is short', () => {
+    render(<HeaderCatalog {...props(catalog())} />)
+    fireEvent.click(screen.getByRole('button', { name: '2 个子智能体' }))
+    expect(screen.getByRole('treeitem', { name: /worker/ })).toBeTruthy()
+    expect(screen.getByRole('treeitem', { name: /reviewer/ })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /再显示/ })).toBeNull()
+  })
+
+  it('folds inactive and done agents behind one control past eight rows, and unfolds them in place', () => {
+    const entries = Array.from({ length: 10 }, (_, index) => ({
+      id: `agent-${String(index)}` as SessionId,
+      mode: 'continuable' as const,
+      label: `agent ${String(index)}`,
+      activity: index < 3 ? 'running' as const : 'inactive' as const,
+    }))
+    render(<HeaderCatalog {...props(catalog({ entries }))} />)
+    fireEvent.click(screen.getByRole('button', { name: '10 个子智能体' }))
+    expect(screen.getAllByRole('treeitem')).toHaveLength(3)
+    const more = screen.getByRole('button', { name: '再显示 7 个' })
+    expect(more.getAttribute('aria-expanded')).toBe('false')
+    fireEvent.click(more)
+    expect(screen.getAllByRole('treeitem')).toHaveLength(10)
+    expect(screen.getByRole('button', { name: '收起已结束的' }).getAttribute('aria-expanded')).toBe('true')
+  })
+
+  it('keeps a catalog of finished agents whole, since there is nothing to keep in view', () => {
+    const entries = Array.from({ length: 10 }, (_, index) => ({
+      id: `done-${String(index)}` as SessionId,
+      mode: 'continuable' as const,
+      label: `done ${String(index)}`,
+      activity: 'inactive' as const,
+    }))
+    render(<HeaderCatalog {...props(catalog({ entries }))} />)
+    fireEvent.click(screen.getByRole('button', { name: '10 个子智能体' }))
+    expect(screen.getAllByRole('treeitem')).toHaveLength(10)
+    expect(screen.queryByRole('button', { name: /再显示/ })).toBeNull()
+  })
+
   it('removes the disclosure column from branchless catalog levels', () => {
     render(<HeaderCatalog {...props(catalog({
       entries: catalog().entries.slice(0, 1),
@@ -1151,6 +1204,8 @@ describe('SubagentHeaderLineage', () => {
     const trigger = screen.getByRole('button', { name: /\d+ 个子智能体$/ })
     expect(within(trigger).getByText('9 个子智能体')).toBeTruthy()
     hoverCatalog(trigger)
+    // Nine agents with one running fold the other eight away; this spec reads every row's metrics, so it unfolds them.
+    fireEvent.click(screen.getByRole('button', { name: /再显示 8 个/ }))
 
     const runningRow = screen.getByRole('treeitem', { name: /running.*4\.6K tok · 1分10秒/ })
     const runningMetrics = within(runningRow)

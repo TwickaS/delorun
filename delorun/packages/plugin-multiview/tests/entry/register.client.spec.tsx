@@ -16,6 +16,7 @@ describe('registration', () => {
     expect([...h.entries.keys()].sort()).toEqual([
       'conversation.session.header.actions.subagent.end#multiview-toggle',
       'conversation.session.header.actions.subagent.footer#multiview-footer',
+      'conversation.session.header.actions.subagent.header#multiview-header',
       'conversation.session.header.actions.subagent.row.trail#multiview-pin',
     ])
     expect([...h.entries.keys()].some(key => key.startsWith('conversation.session.header.actions#'))).toBe(false)
@@ -40,6 +41,7 @@ describe('while the Multiview layer is not registered', () => {
   const ENTRY_KEYS = [
     'conversation.session.header.actions.subagent.end#multiview-toggle',
     'conversation.session.header.actions.subagent.footer#multiview-footer',
+    'conversation.session.header.actions.subagent.header#multiview-header',
     'conversation.session.header.actions.subagent.row.trail#multiview-pin',
   ]
 
@@ -83,7 +85,7 @@ describe('while the Multiview layer is not registered', () => {
     await h.fiber.await()
     h.registerLayer(true)
     h.registerLayer(true)
-    expect(h.entries.size).toBe(3)
+    expect(h.entries.size).toBe(ENTRY_KEYS.length)
     await h.fiber.dispose()
     expect(h.entries.size).toBe(0)
   })

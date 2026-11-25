@@ -6,10 +6,11 @@
 import { useEffect, useId, useRef, useState, useSyncExternalStore, type MouseEvent, type PointerEvent, type ReactNode, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import {
-  IconCloseOutlineRegular, IconPinFillRegular, IconPinOutlineRegular, MenuSurface, Tooltip,
+  IconCloseOutlineRegular, IconPinFillRegular, IconPinOutlineRegular, IconSettingsOutlineRegular, MenuSurface, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { HostObservable, InjectFace, PropsLocale, PropsRuntime, Translate as TranslateOf } from '@deepseek-ai/dsh-client-ui-slots'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
+import { MAX_PANES_RANGE, type MultiviewSettings } from '../config.ts'
 import { LayoutPicker, type CapacityRefusal, type LayoutsLocaleKey } from '../layout/index.ts'
 import type { MULTIVIEW_NS } from '../client/contract.ts'
 import { EMPTY_CHAT_MULTIVIEW, type ChatMultiview, type MultiviewService } from '../client/contract.ts'
@@ -84,32 +85,149 @@ export function PinButton({ sessionId, label, useSessions, multiview, t }: PinBu
   )
 }
 
+/** Props of the agents list's control bar. */
+export type HeaderProps = PropsRuntime<'conversation.session.header.actions.subagent.header'>
+  & PropsLocale<typeof MULTIVIEW_NS> & InjectFace<EntryInjected>
+
+/**
+ * The agents list's control bar: the pane limit as a stepper, "Unpin all" while anything is pinned, and the settings button
+ * that opens the pane's own settings. Each control states its own job; nothing here explains the pane.
+ * @param props - the chat, the services and the dictionary.
+ * @returns the bar.
+ */
+export function Header({ sessionId, multiview, layoutsT, t }: HeaderProps) {
+  const { pins } = useChat(multiview, sessionId)
+  const settings = useSyncExternalStore(listener => multiview.settings.subscribe(listener), () => multiview.settings.getSnapshot())
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const settingsRef = useRef<HTMLButtonElement>(null)
+  const anchorName = `--multiview-header-${useId().replaceAll(':', '')}`
+  const closeSettings = (restoreFocus: boolean): void => {
+    setSettingsOpen(false)
+    if (restoreFocus) settingsRef.current?.focus()
+  }
+  return (
+    <div className={css.header} role="group" aria-label={t('header.aria')}>
+      <span className={css.stepper}>
+        <span className={css.stepperLabel}>{t('header.panes')}</span>
+        <button
+          type="button"
+          className={css.stepperButton}
+          aria-label={t('header.panes.fewer')}
+          aria-disabled={settings.maxPanes <= MAX_PANES_RANGE.min || undefined}
+          onClick={() => { if (settings.maxPanes > MAX_PANES_RANGE.min) multiview.setMaxPanes(settings.maxPanes - 1) }}
+        >
+          <span aria-hidden>−</span>
+        </button>
+        <span className={css.stepperValue} aria-live="polite">{settings.maxPanes}</span>
+        <button
+          type="button"
+          className={css.stepperButton}
+          aria-label={t('header.panes.more')}
+          aria-disabled={settings.maxPanes >= MAX_PANES_RANGE.max || undefined}
+          onClick={() => { if (settings.maxPanes < MAX_PANES_RANGE.max) multiview.setMaxPanes(settings.maxPanes + 1) }}
+        >
+          <span aria-hidden>+</span>
+        </button>
+      </span>
+      <span className={css.headerSpacer} />
+      <button
+        type="button"
+        className={css.headerButton}
+        aria-disabled={pins.length === 0 || undefined}
+        onClick={() => { if (pins.length > 0) multiview.unpinAll(sessionId) }}
+      >
+        {t('header.unpinAll')}
+      </button>
+      <Tooltip label={t('header.settings')} side="bottom" align="end" delayMs={500} portal>
+        <button
+          ref={settingsRef}
+          type="button"
+          className={css.headerIcon}
+          style={{ anchorName }}
+          aria-haspopup="dialog"
+          aria-expanded={settingsOpen}
+          aria-label={t('header.settings')}
+          onClick={() => { setSettingsOpen(current => !current) }}
+        >
+          <IconSettingsOutlineRegular size={14} />
+        </button>
+      </Tooltip>
+      {settingsOpen && createPortal(
+        <MenuSurface
+          className={css.headerPopover}
+          style={{ positionAnchor: anchorName }}
+          role="dialog"
+          aria-label={t('header.settings')}
+          data-multiview-header-settings
+        >
+          <HeaderSettings chat={sessionId} multiview={multiview} settings={settings} layoutsT={layoutsT} t={t} onClose={() => { closeSettings(true) }} />
+        </MenuSurface>,
+        document.body,
+      )}
+    </div>
+  )
+}
+
+/** What the settings popover reads and does. */
+interface HeaderSettingsProps {
+  readonly chat: SessionId
+  readonly multiview: MultiviewService
+  readonly settings: MultiviewSettings
+  readonly layoutsT: TranslateOf<LayoutsLocaleKey>
+  readonly t: Translate
+  readonly onClose: () => void
+}
+
+/**
+ * The pane's own settings, moved out of the list body: the layout a new Multiview starts with, and whether a hand-off opens
+ * it. Both are the settings the pane's behaviour depends on, so they sit where the pane is used.
+ * @param props - the chat, the service, the settings in force, the copy and the close call.
+ * @returns the settings.
+ */
+function HeaderSettings({ chat, multiview, settings, layoutsT, t, onClose }: HeaderSettingsProps) {
+  return (
+    <div className={css.settingsBody}>
+      <div className={css.settingsGroup}>
+        <span className={css.settingsLabel}>{t('header.settings.layout')}</span>
+        <LayoutPicker chat={chat} multiview={multiview} variant="row" t={layoutsT} onChosen={onClose} />
+      </div>
+      <label className={css.settingsRow}>
+        <input
+          type="checkbox"
+          className={css.settingsCheck}
+          checked={settings.autoOpen}
+          onChange={(event) => { multiview.setAutoOpen(event.currentTarget.checked) }}
+        />
+        <span className={css.settingsText}>
+          <span className={css.settingsTitle}>{t('header.settings.autoOpen')}</span>
+          <span className={css.settingsHelp}>{t('header.settings.autoOpen.help')}</span>
+        </span>
+      </label>
+    </div>
+  )
+}
+
 /** Props of the popover footer. */
 export type FooterProps = PropsRuntime<'conversation.session.header.actions.subagent.footer'>
   & PropsLocale<typeof MULTIVIEW_NS> & InjectFace<EntryInjected>
 
 /**
- * The agents popover's footer: the layout picker, then how many agents are pinned and how many more fit, "Pin running", and
- * "Open Multiview".
+ * The agents popover's footer: the list's own actions, "Pin running" and "Open Multiview". The layout picker and the
+ * pinned-and-room line that used to sit here are a setting and an explanation of the pane, so they moved to the control bar's
+ * settings popover and out of the list; "Unpin all" sits in the control bar, where the pointer already is when the list opens.
  * @param props - the chat, the services and the dictionary.
  * @returns the footer.
  */
-export function Footer({ sessionId, useSessions, multiview, layoutsT, t }: FooterProps) {
+export function Footer({ sessionId, useSessions, multiview, t }: FooterProps) {
   const { pins, open: shown } = useChat(multiview, sessionId)
-  const settings = useSyncExternalStore(listener => multiview.settings.subscribe(listener), () => multiview.settings.getSnapshot())
   const running = useSessions(state => runningAgentsOf(state, sessionId).join('\n'))
   const unpinnedRunning = running === '' ? [] : running.split('\n').filter(id => !pins.includes(id as SessionId)) as SessionId[]
-  const room = Math.max(0, settings.maxPanes - 1 - pins.length)
-  const full = multiview.capacityRefusal(sessionId) !== undefined
   const pinRunningReason = unpinnedRunning.length > 0
     ? undefined
     : t(running === '' ? 'footer.pinRunning.none' : 'footer.pinRunning.allPinned')
-  const status = full ? t('footer.statusFull', { pinned: String(pins.length) }) : t('footer.status', { pinned: String(pins.length), free: String(room) })
   const openDisabled = !shown && pins.length === 0 && unpinnedRunning.length === 0
   return (
     <div className={css.footer} role="group" aria-label={t('button')}>
-      <div className={css.picker}><LayoutPicker chat={sessionId} multiview={multiview} variant="row" t={layoutsT} /></div>
-      <span className={css.status}>{status}</span>
       <Tooltip label={pinRunningReason ?? ''} disabled={pinRunningReason === undefined} side="top" delayMs={500} portal>
         <button
           type="button"

@@ -21,7 +21,7 @@ import type {} from '@deepseek-ai/dsh-client-shortcuts/client'
 import { DEFAULT_MULTIVIEW_SETTINGS, MULTIVIEW_ROW_ID, type MultiviewSettings } from '../config.ts'
 import { MULTIVIEW_LAYER_ID, MULTIVIEW_NS, type MultiviewPersistence } from '../client/contract.ts'
 import { LAYOUTS_NS } from '../layout/locales.ts'
-import { Footer, MultiviewToggle, PinButton, type EntryInjected } from './Entry.tsx'
+import { Footer, Header, MultiviewToggle, PinButton, type EntryInjected } from './Entry.tsx'
 import { focusKeysOf, registerFocusCommand } from './focus.ts'
 import type { HintPreference } from './hint.ts'
 import { en, zh } from './locales.ts'
@@ -174,10 +174,12 @@ function whileLayerRegistered(ctx: Context, registered: () => boolean, mount: ()
  */
 function mountEntries(ctx: Context, store: MultiviewStore, injected: () => EntryInjected): () => void {
   const row = 'conversation.session.header.actions.subagent.row.trail'
+  const header = 'conversation.session.header.actions.subagent.header'
   const footer = 'conversation.session.header.actions.subagent.footer'
   const end = 'conversation.session.header.actions.subagent.end'
   const disposers = [
     ctx.slots.inject(row, () => ctx.slots.register({ name: row, id: 'multiview-pin', locale: MULTIVIEW_NS, inject: injected }, PinButton)),
+    ctx.slots.inject(header, () => ctx.slots.register({ name: header, id: 'multiview-header', locale: MULTIVIEW_NS, inject: injected }, Header)),
     ctx.slots.inject(footer, () => ctx.slots.register({ name: footer, id: 'multiview-footer', order: 100, locale: MULTIVIEW_NS, inject: injected }, Footer)),
     ctx.slots.inject(end, () => ctx.slots.register({ name: end, id: 'multiview-toggle', locale: MULTIVIEW_NS, inject: injected }, MultiviewToggle)),
     observeChats(ctx, store),

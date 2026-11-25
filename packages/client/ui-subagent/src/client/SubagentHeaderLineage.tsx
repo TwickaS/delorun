@@ -7,7 +7,7 @@ import {
 import type { SubagentAddress } from '@deepseek-ai/dsh-subagent/client'
 import type { SessionId } from '@deepseek-ai/dsh-session/types'
 import {
-  IconChevronRightOutlineRegular, IconRefreshOutlineRegular, IconUsersOutlineRegular,
+  IconChevronDownOutlineRegular, IconChevronRightOutlineRegular, IconRefreshOutlineRegular, IconUsersOutlineRegular,
   IconCheckOutlineRegular, MenuSurface, StateDot, Tooltip,
 } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { HostObservable, InjectFace, PropsLocale, PropsRenderSlots, PropsRuntime, TranslateNS } from '@deepseek-ai/dsh-client-ui-slots'
@@ -17,6 +17,9 @@ import type {} from '@deepseek-ai/dsh-token-meter/client'
 import type {} from '@deepseek-ai/dsh-agent-team/client'
 import type { SubagentChildValues, SubagentRowOwner, SubagentTriggerOwner } from './slots.ts'
 import css from './SubagentHeaderLineage.module.css'
+
+/** The row count past which inactive and done agents fold away; a shorter catalog shows every agent. */
+const FOLD_ABOVE = 8
 
 type SubagentCatalogSnapshot = Omit<SessionProjectionSnapshot, 'values' | 'state'> & {
   state: 'idle' | 'loading' | 'ready' | 'migration-required' | 'error'
@@ -65,11 +68,13 @@ function bindRowSlots(
   }
 }
 
-/** Root catalog actions and availability of its optional footer. */
+/** Root catalog actions and availability of its optional header and footer. */
 export type SubagentCatalogActionInjected = SubagentCatalogInjected & {
   hooks: {
     /** Whether the catalog footer currently has a registered contributor. */
     footerAvailable: HostObservable<boolean>
+    /** Whether the catalog header currently has a registered contributor. */
+    headerAvailable: HostObservable<boolean>
     /** Whether any plugin contributes to the row or trigger positions. */
     rowSlotsAvailable: HostObservable<boolean>
   }
@@ -83,6 +88,8 @@ interface CatalogRowsProps {
   parentSessionId: SessionId
   currentSessionId: SessionId | undefined
   catalog: SubagentCatalogSnapshot
+  /** The entries to render, when the caller folds some away; the catalog still supplies the notices. */
+  entries?: readonly SubagentCatalogSnapshot['entries'][number][]
   catalogs: Catalogs
   summaries: Readonly<Record<SessionId, SessionSummary>>
   expanded: ReadonlySet<SessionId>
@@ -300,7 +307,7 @@ function triggerRow(
 
 /** Render one catalog level and recurse only through explicitly expanded rows. */
 function CatalogRows({
-  parentSessionId, currentSessionId, catalog, catalogs, summaries, expanded, level,
+  parentSessionId, currentSessionId, catalog, entries: listed, catalogs, summaries, expanded, level,
   openChild, openChildAside, refreshProjection, toggleBranch, closeCatalog, rowSlots, t,
 }: CatalogRowsProps & { t: TranslateNS<typeof NS> }) {
   const [now, setNow] = useState(() => Date.now())
@@ -333,7 +340,7 @@ function CatalogRows({
           </button>
         </div>
       )}
-      {catalog.entries.map((entry) => {
+      {(listed ?? catalog.entries).map((entry) => {
         const external = entry.mode === 'external'
         const childCatalog = catalogs[entry.id]
         const isCurrent = entry.id === currentSessionId
@@ -546,6 +553,8 @@ interface CatalogDropdownSharedProps extends InjectFace<SubagentCatalogInjected>
   /** Retain an empty catalog's entry for shared tasks or a task-board error. */
   hasBoardContent?: boolean
   renderFooter?: () => ReactNode
+  /** Controls at the top of the catalog, above its tree; only the root Session's count action has them. */
+  renderHeader?: () => ReactNode
   /** Controls after the trigger, inside the same control; only the root Session's count action has them. */
   renderEnd?: () => ReactNode
   /** Plugin-contributed row and trigger positions. */
@@ -632,6 +641,14 @@ function CatalogDropdown(props: CatalogDropdownProps) {
   const directChildren = catalog?.entries ?? []
   const directCount = directChildren.length
   const runningCount = directChildren.filter(entry => entry.activity === 'running').length
+  // Running and waiting agents stay in view; inactive and done ones fold behind one control that states how many it holds.
+  // The fold engages only past {@link FOLD_ABOVE} rows, so a short catalog shows everything and never offers a control that
+  // reveals nothing; it also needs something to keep in view, so a catalog of finished agents alone stays whole.
+  const liveChildren = directChildren.filter(entry => entry.activity === 'running')
+  const foldedChildren = directChildren.filter(entry => entry.activity !== 'running')
+  const [foldOpen, setFoldOpen] = useState(false)
+  const foldable = directCount > FOLD_ABOVE && foldedChildren.length > 0 && liveChildren.length > 0
+  const shownChildren = foldable && !foldOpen ? liveChildren : directChildren
   const progress = catalogProgress(directChildren, summaries, t)
   const totalCountKey = directCount === 1 ? 'count.total.one' : 'count.total.other'
   const runningCountKey = runningCount === 1 ? 'count.running.one' : 'count.running.other'
@@ -882,6 +899,7 @@ function CatalogDropdown(props: CatalogDropdownProps) {
           onPointerLeave={scheduleHoverClose}
         >
           <div className={css.menuBody}>
+            {props.renderHeader !== undefined && <div className={css.header} data-subagent-header>{props.renderHeader()}</div>}
             {hasSharedTasks && (
               <div className={css.sectionHeader} data-subagent-section-header>
                 <span className={css.sectionIcon} aria-hidden><IconUsersOutlineRegular size={14} /></span>
@@ -897,6 +915,7 @@ function CatalogDropdown(props: CatalogDropdownProps) {
                 parentSessionId={rootSessionId}
                 currentSessionId={currentSessionId}
                 catalog={presentedCatalog}
+                entries={shownChildren}
                 catalogs={catalogs}
                 summaries={summaries}
                 expanded={expanded}
@@ -910,6 +929,17 @@ function CatalogDropdown(props: CatalogDropdownProps) {
                 t={t}
               />
             </div>
+            {foldable && (
+              <button
+                type="button"
+                className={css.seeMore}
+                aria-expanded={foldOpen}
+                onClick={() => { setFoldOpen(current => !current) }}
+              >
+                <IconChevronDownOutlineRegular size={14} className={foldOpen ? css.seeMoreOpen : undefined} />
+                {t(foldOpen ? 'fold.less' : 'fold.more', { count: foldedChildren.length })}
+              </button>
+            )}
             {props.renderFooter?.()}
           </div>
         </MenuSurface>
@@ -922,7 +952,10 @@ function CatalogDropdown(props: CatalogDropdownProps) {
 export type SubagentCatalogActionProps =
   PropsRuntime<'conversation.session.header.actions'> & InjectFace<SubagentCatalogActionInjected> & PropsLocale<typeof NS>
   & Omit<PropsRenderSlots<
-    'conversation.session.header.actions.subagent.footer' | 'conversation.session.header.actions.subagent.end' | RowSlotKey
+    | 'conversation.session.header.actions.subagent.header'
+    | 'conversation.session.header.actions.subagent.footer'
+    | 'conversation.session.header.actions.subagent.end'
+    | RowSlotKey
   >, 'SessionProvider'>
 
 /**
@@ -942,13 +975,14 @@ export function SubagentCatalogAction(props: SubagentCatalogActionProps) {
 
 /** Bind task-board visibility only in root conversations. */
 function RootCatalogAction({
-  sessionId, useProjection, useSessions, useSessionStatus, useFooterAvailable, useRowSlotsAvailable,
+  sessionId, useProjection, useSessions, useSessionStatus, useFooterAvailable, useHeaderAvailable, useRowSlotsAvailable,
   openChild, openChildAside, refreshProjection, prepareCatalog, t, renderSlot,
 }: SubagentCatalogActionProps) {
   const hasSharedTasks = useProjection('agentTeam', team => team?.enabled === true
     && team.tasks.some(task => task.status !== 'deleted'))
   const hasTaskFailure = useProjection('agentTeam', team => team?.enabled === true && team.failure !== undefined)
   const footerAvailable = useFooterAvailable(value => value)
+  const headerAvailable = useHeaderAvailable(value => value)
   const rowSlots = bindRowSlots(useRowSlotsAvailable(value => value), renderSlot)
   return (
     <CatalogDropdown
@@ -957,6 +991,7 @@ function RootCatalogAction({
       variant="count"
       hasSharedTasks={footerAvailable && hasSharedTasks}
       hasBoardContent={footerAvailable && (hasSharedTasks || hasTaskFailure)}
+      {...headerAvailable ? { renderHeader: () => renderSlot('conversation.session.header.actions.subagent.header', {}) } : {}}
       renderFooter={() => renderSlot('conversation.session.header.actions.subagent.footer', {})}
       renderEnd={() => renderSlot('conversation.session.header.actions.subagent.end', {})}
       {...rowSlots === undefined ? {} : { rowSlots }}

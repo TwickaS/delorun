@@ -90,6 +90,10 @@ export function apply(ctx: ClientContext): void {
     'conversation.session.header.actions.subagent.row.trail',
     'conversation.session.header.actions.subagent.trigger',
   ] as const
+  const headerAvailable = {
+    getSnapshot: () => ctx.slots.entries('conversation.session.header.actions.subagent.header').length > 0,
+    subscribe: (listener: () => void) => ctx.slots.subscribe('conversation.session.header.actions.subagent.header', listener),
+  }
   const rowSlotsAvailable = {
     getSnapshot: () => rowSlotKeys.some(key => ctx.slots.entries(key).length > 0),
     subscribe: (listener: () => void) => {
@@ -120,9 +124,10 @@ export function apply(ctx: ClientContext): void {
       order: 10,
       locale: NS,
       inject: (sessionId): SubagentCatalogActionInjected => ({
-        ...catalogActions(sessionId), hooks: { footerAvailable, rowSlotsAvailable },
+        ...catalogActions(sessionId), hooks: { footerAvailable, headerAvailable, rowSlotsAvailable },
       }),
       children: {
+        'conversation.session.header.actions.subagent.header': { kind: 'list', scope: 'session' },
         'conversation.session.header.actions.subagent.footer': { kind: 'list', scope: 'session' },
         'conversation.session.header.actions.subagent.end': { kind: 'list', scope: 'session', inline: true },
         ...rowChildren,

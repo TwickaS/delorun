@@ -4,7 +4,7 @@ import { makeTranslate } from '@deepseek-ai/dsh-client-test-runtime'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import type { MultiviewSettings } from '../../src/config.ts'
-import { Footer, MultiviewToggle, PinButton, type EntryInjected, type FooterProps, type PinButtonProps, type ToggleProps } from '../../src/entry/Entry.tsx'
+import { Footer, Header, MultiviewToggle, PinButton, type EntryInjected, type FooterProps, type HeaderProps, type PinButtonProps, type ToggleProps } from '../../src/entry/Entry.tsx'
 import { localHint, MULTIVIEW_HINT_NAME, type HintPreference } from '../../src/entry/hint.ts'
 import { en } from '../../src/entry/locales.ts'
 import { layoutsEn } from '../../src/layout/index.ts'
@@ -20,6 +20,8 @@ interface SetupOptions { settings?: Partial<MultiviewSettings>; list?: ListSpec;
 
 function setup(options: SetupOptions = {}) {
   const made = makeStore(options.settings === undefined ? {} : { settings: options.settings })
+  // The settings writes the control bar makes go through the Host writer, which echoes the accepted value back.
+  made.store.attachHost({ write: async (patch) => { made.change(patch); return true } })
   const list = createSnapshotStore(listOf(options.list ?? { main: CHAT, catalogs: { [CHAT]: [A, B, C] }, running: [A, B] }))
   const statuses = createSnapshotStore(new Map((options.pending ?? []).map(id => [sid(id), { running: true, pendingInteraction: { kind: 'approval', key: 'k', sessionId: sid(id) }, completionUnread: false }])))
   const opened: boolean[] = []
@@ -51,6 +53,10 @@ function renderFooter(h: ReturnType<typeof setup>) {
 
 function renderToggle(h: ReturnType<typeof setup>) {
   return render(<MultiviewToggle {...slotProps<ToggleProps>({ sessionId: CHAT, useSessions: h.useSessions, useSessionStatus: h.useSessionStatus, t, ...h.injected })} />)
+}
+
+function renderHeader(h: ReturnType<typeof setup>) {
+  return render(<Header {...slotProps<HeaderProps>({ sessionId: CHAT, t, ...h.injected })} />)
 }
 
 /** Show tooltips at once in jsdom, which measures nothing. */
@@ -134,18 +140,14 @@ describe('the pin button of a row', () => {
 })
 
 describe('the popover footer', () => {
-  it('counts the pinned agents and the room left', () => {
+  it('carries only the two actions, since the layout picker and the pinned-and-room line moved to the control bar', () => {
     const h = setup()
     h.store.pinAll(CHAT, [A, B])
     renderFooter(h)
-    expect(screen.getByText('2 pinned · room for 3 more')).toBeTruthy()
-  })
-
-  it('says there is no room when the limit is reached', () => {
-    const h = setup({ settings: { maxPanes: 2 } })
-    h.store.pin(CHAT, A)
-    renderFooter(h)
-    expect(screen.getByText('1 pinned · no room for more')).toBeTruthy()
+    expect(screen.queryByText(/pinned · room for/)).toBeNull()
+    expect(screen.queryByRole('radiogroup')).toBeNull()
+    expect(within(screen.getByRole('group', { name: 'Multiview' })).getAllByRole('button').map(button => button.textContent))
+      .toEqual(['Pin running', 'Open Multiview'])
   })
 
   it('pins every running agent that is not pinned from Pin running', () => {
@@ -293,22 +295,25 @@ describe('the toggle at the end of the agents action', () => {
 })
 
 describe('the layout picker in the agents list', () => {
-  it('shows in the footer whether Multiview is open or closed, above the footer\'s buttons', () => {
+  it('sits in the control bar\'s settings popover, not in the list body', () => {
     const h = setup()
     h.store.pinAll(CHAT, [A, B])
-    renderFooter(h)
+    renderHeader(h)
+    expect(screen.queryByRole('radiogroup')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Agents list settings' }))
     const row = screen.getByRole('radiogroup', { name: layoutsEn['picker.label'] })
     expect(within(row).getAllByRole('radio').map(choice => choice.textContent)).toContain(layoutsEn['choice.auto'])
-    expect(row.compareDocumentPosition(screen.getByRole('button', { name: 'Pin running' })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 
   it('applies the chosen layout and resets to Auto, keeping every pane and Multiview open', () => {
     const h = setup({ open: true })
     h.store.pinAll(CHAT, [A, B])
-    renderFooter(h)
+    renderHeader(h)
+    fireEvent.click(screen.getByRole('button', { name: 'Agents list settings' }))
     fireEvent.click(screen.getByRole('radio', { name: layoutsEn['choice.grid'] }))
     expect(h.store.arrangementOf(CHAT)).toBe('grid')
-    expect(screen.getByRole('radio', { name: layoutsEn['choice.grid'] }).getAttribute('aria-checked')).toBe('true')
+    expect(h.store.of(CHAT).getSnapshot()).toMatchObject({ pins: [A, B], open: true })
+    fireEvent.click(screen.getByRole('button', { name: 'Agents list settings' }))
     fireEvent.click(screen.getByRole('button', { name: layoutsEn['picker.reset'] }))
     expect(h.store.arrangementOf(CHAT)).toBe('auto')
     expect(h.store.of(CHAT).getSnapshot()).toMatchObject({ pins: [A, B], open: true })
@@ -494,6 +499,62 @@ describe('the one-time hint', () => {
     onTestFinished(() => { dialog.remove() })
     await vi.waitFor(() => { expect(screen.queryByRole('status')).toBeNull() })
     expect(hint.seen()).toBe(true)
+  })
+})
+
+describe('the agents list control bar', () => {
+  it('steps the pane limit within the range Config accepts', () => {
+    const h = setup({ settings: { maxPanes: 6 } })
+    renderHeader(h)
+    fireEvent.click(screen.getByRole('button', { name: 'One pane more' }))
+    expect(h.store.settings.getSnapshot().maxPanes).toBe(7)
+    fireEvent.click(screen.getByRole('button', { name: 'One pane fewer' }))
+    fireEvent.click(screen.getByRole('button', { name: 'One pane fewer' }))
+    expect(h.store.settings.getSnapshot().maxPanes).toBe(5)
+  })
+
+  it('stops at the ends of the range and says so', () => {
+    const low = setup({ settings: { maxPanes: 2 } })
+    renderHeader(low)
+    expect(screen.getByRole('button', { name: 'One pane fewer' }).getAttribute('aria-disabled')).toBe('true')
+    fireEvent.click(screen.getByRole('button', { name: 'One pane fewer' }))
+    expect(low.store.settings.getSnapshot().maxPanes).toBe(2)
+    cleanup()
+    const high = setup({ settings: { maxPanes: 12 } })
+    renderHeader(high)
+    expect(screen.getByRole('button', { name: 'One pane more' }).getAttribute('aria-disabled')).toBe('true')
+    fireEvent.click(screen.getByRole('button', { name: 'One pane more' }))
+    expect(high.store.settings.getSnapshot().maxPanes).toBe(12)
+  })
+
+  it('unpins every agent from Unpin all, and is unavailable while nothing is pinned', () => {
+    const h = setup()
+    renderHeader(h)
+    const unpinAll = screen.getByRole('button', { name: 'Unpin all' })
+    expect(unpinAll.getAttribute('aria-disabled')).toBe('true')
+    fireEvent.click(unpinAll)
+    expect(h.store.of(CHAT).getSnapshot().pins).toEqual([])
+    cleanup()
+    const pinned = setup()
+    pinned.store.pinAll(CHAT, [A, B])
+    renderHeader(pinned)
+    fireEvent.click(screen.getByRole('button', { name: 'Unpin all' }))
+    expect(pinned.store.of(CHAT).getSnapshot().pins).toEqual([])
+  })
+
+  it('opens the pane\'s own settings, which carry the layout and the hand-off choice', () => {
+    const h = setup()
+    renderHeader(h)
+    const settings = screen.getByRole('button', { name: 'Agents list settings' })
+    expect(settings.getAttribute('aria-expanded')).toBe('false')
+    fireEvent.click(settings)
+    expect(settings.getAttribute('aria-expanded')).toBe('true')
+    const dialog = screen.getByRole('dialog', { name: 'Agents list settings' })
+    expect(within(dialog).getByText('Layout for a new Multiview')).toBeTruthy()
+    const autoOpen = within(dialog).getByRole('checkbox', { name: /Open Multiview on a hand-off/ })
+    expect((autoOpen as HTMLInputElement).checked).toBe(true)
+    fireEvent.click(autoOpen)
+    expect(h.store.settings.getSnapshot().autoOpen).toBe(false)
   })
 })
 

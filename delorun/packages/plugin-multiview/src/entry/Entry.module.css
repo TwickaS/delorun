@@ -1,10 +1,45 @@
 /* Pin button on an agents-list row, the Multiview toggle at the end of the agents action, and the popover footer with its layout row. */
-.pin { flex: none; display: inline-grid; place-items: center; width: 24px; height: 24px; margin-inline-start: 6px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: var(--dsw-alias-label-secondary); cursor: pointer; }
-.pin:hover { background: var(--dsw-alias-interactive-bg-hover, rgba(0, 0, 0, .06)); color: var(--dsw-alias-label-primary); }
-.pin:focus-visible { outline: 2px solid var(--dsw-alias-accent, var(--delorun-badge-blue, #3b82f6)); outline-offset: 1px; }
-.pin[data-pinned] { color: var(--dsw-alias-accent, var(--delorun-badge-blue, #3b82f6)); }
+/* The pin: a muted icon box on every row, not a bare glyph. The box carries a faint fill and a hairline edge at rest, lifts
+   its fill and strengthens the glyph on hover, and on a pinned agent turns to the accent with a short, restrained settle.
+   Only colour, fill and the press scale change between states, so nothing moves; reduced motion keeps the state change and
+   drops the animation. */
+.pin {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 24px;
+  height: 24px;
+  margin-inline-start: 6px;
+  padding: 0;
+  border: 1px solid var(--dsw-alias-border-l2, rgba(0, 0, 0, .1));
+  border-radius: var(--dsw-radius-sm, 8px);
+  background: var(--dsw-alias-bg-layer-2, rgba(0, 0, 0, .03));
+  color: var(--dsw-alias-label-tertiary);
+  cursor: pointer;
+  transition:
+    background-color var(--dl-duration-quick, 180ms) var(--dl-ease, ease),
+    border-color var(--dl-duration-quick, 180ms) var(--dl-ease, ease),
+    color var(--dl-duration-quick, 180ms) var(--dl-ease, ease),
+    transform var(--dl-motion-press, 120ms) var(--dl-ease-out, cubic-bezier(0.23, 1, 0.32, 1));
+}
+.pin svg { transition: transform var(--dl-motion-quick, 180ms) var(--dl-ease-out, cubic-bezier(0.23, 1, 0.32, 1)); }
+.pin:active:not([aria-disabled='true']) { transform: scale(var(--dl-scale-pressed, .97)); }
+.pin:focus-visible { outline: 2px solid var(--dsw-alias-border-selected, var(--delorun-badge-blue, #3b82f6)); outline-offset: 1px; color: var(--dsw-alias-label-primary); }
+.pin[data-pinned] { border-color: color-mix(in srgb, var(--dsw-alias-brand-primary, var(--delorun-badge-blue, #3b82f6)) 32%, transparent); background: color-mix(in srgb, var(--dsw-alias-brand-primary, var(--delorun-badge-blue, #3b82f6)) 12%, transparent); color: var(--dsw-alias-brand-primary, var(--delorun-badge-blue, #3b82f6)); }
+.pin[data-pinned] svg { animation: multiview-pin-set var(--dl-motion-quick, 180ms) var(--dl-ease-out, cubic-bezier(0.23, 1, 0.32, 1)); }
+@keyframes multiview-pin-set { from { transform: scale(.72); } }
 .pin[aria-disabled='true'] { opacity: .45; cursor: not-allowed; }
-.pin[aria-disabled='true']:hover { background: transparent; color: var(--dsw-alias-label-secondary); }
+.pin[aria-disabled='true']:hover { background: var(--dsw-alias-bg-layer-2, rgba(0, 0, 0, .03)); border-color: var(--dsw-alias-border-l2, rgba(0, 0, 0, .1)); color: var(--dsw-alias-label-tertiary); }
+@media (hover: hover) and (pointer: fine) {
+  .pin:hover:not([aria-disabled='true']) { background: var(--dsw-alias-interactive-bg-hover, rgba(0, 0, 0, .06)); border-color: var(--dsw-alias-border-l3, rgba(0, 0, 0, .16)); color: var(--dsw-alias-label-primary); }
+  .pin[data-pinned]:hover { background: color-mix(in srgb, var(--dsw-alias-brand-primary, var(--delorun-badge-blue, #3b82f6)) 18%, transparent); border-color: color-mix(in srgb, var(--dsw-alias-brand-primary, var(--delorun-badge-blue, #3b82f6)) 44%, transparent); color: var(--dsw-alias-brand-primary, var(--delorun-badge-blue, #3b82f6)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pin, .pin svg { transition: none; }
+  .pin:active:not([aria-disabled='true']) { transform: none; }
+  .pin[data-pinned] svg { animation: none; }
+}
 
 /* The icon toggle at the end of the agents action: a hairline divider before it, a 32 px target (44 px under a coarse pointer, drawn
    outside the box so the header keeps its height) and the theme's pressed fill while Multiview shows. Only colour, fill and the
@@ -27,6 +62,37 @@
   .toggle:active:not([aria-disabled='true']) { transform: none; }
 }
 .dot { position: absolute; inset-block-start: 5px; inset-inline-end: 5px; width: 7px; height: 7px; border-radius: 50%; background: var(--delorun-badge-amber, #e0a100); box-shadow: 0 0 0 2px var(--dsw-alias-bg-primary, #fff); pointer-events: none; }
+
+/* The agents list's control bar: a quiet row above the tree, its controls at the row's own 9 px inset. */
+.header { display: flex; align-items: center; gap: 4px; min-height: 30px; padding: 0 3px 4px; }
+.headerSpacer { flex: 1 1 auto; min-width: 0; }
+.stepper { display: inline-flex; align-items: center; gap: 2px; flex: none; }
+.stepperLabel { padding-inline-end: 4px; font-size: 12px; line-height: 17px; color: var(--dsw-alias-label-tertiary); }
+.stepperButton { display: inline-grid; place-items: center; width: 20px; height: 20px; padding: 0; border: 0; border-radius: 5px; background: transparent; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 13px; line-height: 1; cursor: pointer; }
+.stepperButton[aria-disabled='true'] { opacity: .4; cursor: not-allowed; }
+.stepperValue { min-width: 1.2em; text-align: center; font-size: 12px; line-height: 17px; font-variant-numeric: tabular-nums; color: var(--dsw-alias-label-primary); }
+.headerButton { flex: none; height: 24px; padding: 0 8px; border: 0; border-radius: var(--dsw-radius-sm, 8px); background: transparent; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 12px; font-weight: 500; cursor: pointer; transition: background-color var(--dl-duration-quick, 180ms) var(--dl-ease, ease), color var(--dl-duration-quick, 180ms) var(--dl-ease, ease); }
+.headerButton[aria-disabled='true'] { opacity: .45; cursor: not-allowed; }
+.headerIcon { display: inline-grid; place-items: center; flex: none; width: 24px; height: 24px; padding: 0; border: 0; border-radius: var(--dsw-radius-sm, 8px); background: transparent; color: var(--dsw-alias-label-tertiary); cursor: pointer; transition: background-color var(--dl-duration-quick, 180ms) var(--dl-ease, ease), color var(--dl-duration-quick, 180ms) var(--dl-ease, ease); }
+.headerButton:focus-visible, .headerIcon:focus-visible, .stepperButton:focus-visible { outline: 2px solid var(--dsw-alias-border-selected, var(--delorun-badge-blue, #3b82f6)); outline-offset: 1px; color: var(--dsw-alias-label-primary); }
+.headerIcon[aria-expanded='true'] { background: var(--dsw-alias-button-ghost-active-fill, rgba(0, 0, 0, .08)); color: var(--dsw-alias-label-primary); }
+@media (hover: hover) and (pointer: fine) {
+  .headerButton:hover:not([aria-disabled='true']), .headerIcon:hover, .stepperButton:hover:not([aria-disabled='true']) { background: var(--dsw-alias-interactive-bg-hover, rgba(0, 0, 0, .06)); color: var(--dsw-alias-label-primary); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .headerButton, .headerIcon { transition: none; }
+}
+
+/* The settings popover under the settings button: the pane's own settings, in the A630 quiet card. */
+.headerPopover { position: fixed; z-index: 100; box-sizing: border-box; margin: 0; top: calc(anchor(bottom) + 6px); left: clamp(8px, calc(anchor(left) - 8px), calc(100vw - var(--multiview-header-width) - 8px)); width: var(--multiview-header-width); --multiview-header-width: min(300px, calc(100vw - 16px)); padding: 10px; animation: multiview-popover-in 160ms cubic-bezier(.23, 1, .32, 1); transform-origin: top right; }
+.settingsBody { display: flex; flex-direction: column; gap: 10px; }
+.settingsGroup { display: flex; flex-direction: column; gap: 6px; }
+.settingsLabel { font-size: 12px; line-height: 17px; color: var(--dsw-alias-label-tertiary); }
+.settingsRow { display: flex; align-items: flex-start; gap: 8px; cursor: pointer; }
+.settingsCheck { flex: none; margin: 2px 0 0; accent-color: var(--dsw-alias-brand-primary, var(--delorun-badge-blue, #3b82f6)); }
+.settingsText { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.settingsTitle { font-size: 12px; line-height: 17px; color: var(--dsw-alias-label-primary); }
+.settingsHelp { font-size: 11px; line-height: 15px; color: var(--dsw-alias-label-tertiary); }
 
 /* The layout picker's place: one strip across the agents list's footer, the thumbnails with names in the toggle's popover. */
 .picker { min-width: 0; }
@@ -53,11 +119,10 @@
 /* The agents list's footer, inside the list's 6 px inset: the layout picker, then the status with "Pin running", then the single
    primary action across the rows' full width. Text lines up with the rows' text (9 px in); the action's edges line up with the
    rows' edges. The action is the A630 tinted text button: the link colour on 10% of itself, 14% in dark. */
-.footer { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 8px; row-gap: 4px; margin-top: 4px; padding-top: 6px; border-top: 1px solid var(--dsw-alias-border-primary, rgba(0, 0, 0, .1)); }
-.footer > .picker { grid-column: 1 / -1; padding-inline: 9px; }
-.status { min-width: 0; padding-inline-start: 9px; font-size: 12px; line-height: 16px; color: var(--dsw-alias-label-secondary); }
+.footer { display: flex; align-items: center; gap: 8px; margin-top: 4px; padding-top: 6px; border-top: 1px solid var(--dsw-alias-border-primary, rgba(0, 0, 0, .1)); }
+.footer > .footerButton:first-child { margin-inline-start: 9px; }
 .footerButton { height: 28px; padding: 0 9px; border: 0; border-radius: var(--dsw-radius-sm, 6px); background: transparent; color: var(--dsw-alias-label-secondary); font: inherit; font-size: 12px; font-weight: 500; cursor: pointer; transition: background-color 150ms ease, color 150ms ease, transform 160ms cubic-bezier(.23, 1, .32, 1); }
-.footerPrimary { --multiview-primary-tint: 10%; grid-column: 1 / -1; width: 100%; height: 36px; margin-top: 2px; background: color-mix(in srgb, var(--dsw-alias-link, #3b82f6) var(--multiview-primary-tint), transparent); color: var(--dsw-alias-link, #3b82f6); font-size: 13px; }
+.footerPrimary { --multiview-primary-tint: 10%; flex: 1 1 auto; height: 32px; background: color-mix(in srgb, var(--dsw-alias-link, #3b82f6) var(--multiview-primary-tint), transparent); color: var(--dsw-alias-link, #3b82f6); font-size: 13px; }
 :global(body[data-ds-dark-theme]) .footerPrimary { --multiview-primary-tint: 14%; }
 .footerButton:active:not([aria-disabled='true']) { transform: scale(.98); }
 .footerButton[aria-disabled='true'] { opacity: .5; cursor: not-allowed; }
