@@ -110,10 +110,10 @@ export async function createChannel(tools: ChannelTools): Promise<LocalChannel> 
     }
     for (const release of releases) {
       await tool(repository, 'delorun/apps/release/src/local-release.ts', [
-        '--version', release.version, '--out', channel, '--root', rootPath,
+        '--version', release.version, '--summary', `Benchmark release ${release.version}`, '--out', channel, '--root', rootPath,
         '--targets-key', targetsKey, '--timestamp-key', timestampKey, '--state', state,
         '--log-submit', log.endpoints.submit, '--log-checkpoint', log.endpoints.checkpoint, '--log-tiles', log.endpoints.tiles,
-        '--log-poll-seconds', '0', '--closures-from', release.directory,
+        '--log-poll-seconds', '0', '--closures-from', release.directory, '--allow-builder-paths',
       ], `signing release ${release.version}`)
     }
     return channel
