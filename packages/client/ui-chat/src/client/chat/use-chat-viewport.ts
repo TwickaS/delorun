@@ -613,17 +613,23 @@ export class ChatViewport {
   /**
    * Give reserved room back after acknowledged scrolling or content growth without clamping the reader.
    * Holds still during folds and unsampled movement; following includes the room that remains.
+   * @param known - geometry already read this turn; omitted callers measure the scrollport.
+   * @returns geometry valid after the change, or null when the caller's own reading still stands.
    */
-  reclaimBelow(): void {
+  reclaimBelow(known?: ViewportMetrics): ViewportMetrics | null {
     const elements = this.elements
-    if (elements === null || elements.spacer === null) return
+    if (elements === null || elements.spacer === null) return null
     const current = this.spacerHeight()
-    if (current === 0 || this.motion.foldActive()) return
-    const scroll = this.readScroll()
+    if (current === 0 || this.motion.foldActive()) return null
+    const scroll = this.readScroll(known)
     // Trimming the range before sampling could misclassify a reader's move as a layout clamp.
-    if (scroll === null || scroll.movedByReader) return
+    if (scroll === null || scroll.movedByReader) return null
     const floorWithoutSpacer = scroll.metrics.floor - current
-    this.setSpacer(Math.min(current, Math.max(0, scroll.metrics.top - floorWithoutSpacer)))
+    const next = Math.min(current, Math.max(0, scroll.metrics.top - floorWithoutSpacer))
+    if (next === current) return null
+    this.setSpacer(next)
+    // The spacer changed the range the caller measured, so only a fresh read describes it.
+    return this.metrics()
   }
 
   /**
@@ -649,10 +655,11 @@ export class ChatViewport {
 
   /**
    * Compare the current scroll geometry with the last acknowledged position.
+   * @param known - geometry already read this turn; omitted callers measure the scrollport.
    * @returns current metrics and movement attribution, or null while detached.
    */
-  readScroll(): ViewportScroll | null {
-    const metrics = this.metrics()
+  readScroll(known?: ViewportMetrics): ViewportScroll | null {
+    const metrics = known ?? this.metrics()
     if (metrics === null) return null
     return {
       metrics,
@@ -941,9 +948,11 @@ export class ChatViewport {
     const metrics = this.metrics()
     if (metrics === null || this.elements === null) return null
     this.observation = { top: metrics.top, landing: null }
-    this.reclaimBelow()
+    // Reclaiming room can shrink the range, so the follow reads the geometry it left behind rather than a second
+    // measurement of the same scrollport; only a spacer change makes that geometry stale.
+    const reclaimed = this.reclaimBelow(metrics)
     const landing: ViewportLanding = {
-      metrics: follow.toBottom(this.elements.scroller, scrollMetrics(this.elements.scroller), behavior),
+      metrics: follow.toBottom(this.elements.scroller, reclaimed ?? metrics, behavior),
       position: null,
       turn: this.latestTurn,
     }

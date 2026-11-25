@@ -3697,6 +3697,12 @@
       "class": "delorun-feature",
       "feature": "release-tooling",
       "reason": "The host-dependency policy classifies peerAdmission as a safe export: it is a pure factory over the caller own accessor and holds no module state, so a duplicate copy decides exactly as the installed one does. Reviewed by the owner (A704), which is what the policy human-review rule requires for every addition."
+    },
+    {
+      "path": "packages/client/ui-chat/src/client/chat/use-chat-viewport.ts",
+      "class": "generic-fix",
+      "reason": "Following the tail measured the scrollport three times per update: once for the observation, once inside reclaimBelow, and once more for the follow itself. scrollToBottom now reads it once and passes that geometry to reclaimBelow, which reports the geometry that stands after it trims the spacer; readScroll accepts geometry its caller already read.",
+      "feature": "scroll-follow-cost"
     }
   ],
   "retired": []
