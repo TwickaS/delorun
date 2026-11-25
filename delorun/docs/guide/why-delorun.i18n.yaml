@@ -4,46 +4,46 @@
 #   pnpm run verify-translation-pairing --write delorun/docs/guide/why-delorun.md
 /:
   en: cbdd80bd85a217e0
-  zh: cbdd80bd85a217e0
+  zh: d7a67889ce19d02d
 /why-delorun:
   en: f2288fd4693617ae
-  zh: 0a97e81c8ec48aa3
+  zh: caa35dd154219a49
 /why-delorun/summary:
   en: 0f5907e0c604f75e
-  zh: 0f5907e0c604f75e
+  zh: e687baefa73269dc
 /why-delorun/contents:
   en: 134a10ceced1ca79
-  zh: 134a10ceced1ca79
+  zh: c42952afba32dc5d
 /why-delorun/what-you-get:
   en: 51110ada303f1268
-  zh: 51110ada303f1268
+  zh: 83f725024b9f4992
 /why-delorun/what-you-get/web-first-phone-included:
   en: c82fbc2ea7bc4231
-  zh: c82fbc2ea7bc4231
+  zh: 5db665a15d0c9f06
 /why-delorun/what-you-get/asks-first-keeps-a-way-back:
   en: 766e038b75a1db8a
-  zh: 766e038b75a1db8a
+  zh: 113ba437e3c61a46
 /why-delorun/what-you-get/bring-your-own-inference:
   en: 4ee246a97b3b13d6
-  zh: 4ee246a97b3b13d6
+  zh: cb94c0af86b5f859
 /why-delorun/what-you-get/open-by-design:
   en: 82da8657825dc932
-  zh: 82da8657825dc932
+  zh: bb1c80e851a35c8d
 /why-delorun/what-delorun-changes-from-deepseek-harness:
   en: 3e26c53f59a1b54a
-  zh: 3e26c53f59a1b54a
+  zh: 2ee5d9cef31f45cc
 /why-delorun/how-it-compares:
   en: d1c511dc8338a3f2
-  zh: d1c511dc8338a3f2
+  zh: f4831f1bee93158f
 /why-delorun/when-another-tool-fits-better:
   en: 8b4e50b2b50e6b0f
-  zh: 8b4e50b2b50e6b0f
+  zh: 164eb263afdec360
 /why-delorun/try-it:
   en: 1f656289a6267d68
-  zh: 1f656289a6267d68
+  zh: 128da8d17bc02cad
 /why-delorun/next:
   en: 62ca292fd0969bf6
-  zh: 62ca292fd0969bf6
+  zh: e0af25e8bc7bb4e6
 /why-delorun/sources:
   en: c5ffa3f60346e614
-  zh: c5ffa3f60346e614
+  zh: cd0859ce90551408
