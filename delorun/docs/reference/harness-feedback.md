@@ -50,6 +50,16 @@ A running board of friction met while working in this harness and this repositor
 
 **Status:** `fixed`: security entries record reviewed non-model-visible hunks, and the check reads them.
 
+### 2026-11-26 · #5 Subagent model selection has no parity switch, so both parity checks fail on `main`
+
+**What happened.** #102 (subagent model selection) changed the `subagent` tool's description and registers a model-visible tool in `packages/subagent/tool-subagent/src/list-models.ts`, with no C16 switch to turn either off. On the merge tier at the preview.4 candidate, `parity-switches` flags the registration and `parity-replay` fails 234 scenarios whose request header diverges from upstream's at that description.
+
+**What it cost.** Every merge-tier push fails both checks, whatever it changes. The devbox's earlier "merge tier green" missed it.
+
+**What to do instead.** Until [#147](https://github.com/TwickaS/delorun/issues/147) adds the switch, a push may use `DELORUN_PUSH_SKIP=parity-replay,parity-switches` with this entry as the reason, by the owner's ruling for 0.1.0-preview.4. Any other check still runs.
+
+**Status:** `open`: #147, milestone 0.1.0-preview.5.
+
 ## Where to go next
 
 The [parity baseline](parity-with-deepseek-harness/parity-baseline.md) records the host state that several entries depend on. The [reference index](README.md) lists the other developer pages.

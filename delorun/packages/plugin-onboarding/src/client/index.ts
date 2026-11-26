@@ -409,6 +409,8 @@ export function applyStudio(ctx: Context): void {
       // Unfinished from its first screen, so a reload shows the guide again, as the explicit opening does now.
       writeProgress('done', false)
       writeProgress('step', '')
+      // A dismissal of the earlier guide does not carry over to the one shown again.
+      writeProgress('dismissedSteps', [])
       // Without upstream's Settings shell the guide shows at the next reload, because the progress is now unfinished.
       ctx.get('settingsShell')?.openOnboarding(ONBOARDING_STEP.id)
       // On a phone Settings opens from the sidebar drawer, which would stay open beneath the guide.

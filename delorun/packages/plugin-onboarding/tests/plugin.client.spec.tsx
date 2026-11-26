@@ -585,6 +585,13 @@ describe('Show again', () => {
     expect(progress.value()).toMatchObject({ done: false, step: '' })
   })
 
+  it('clears the Finish setup dismissals when Show again reopens the guide, so the line can show for the new run', async () => {
+    const { entries, served, progress } = await harness({ progress: settings({ done: true, dismissedSteps: ['setup.', 'pin'] }), late: {} })
+    served.on()
+    face<ShowAgainInjected>(entries, ROW_KEY).show()
+    expect(progress.value()).toMatchObject({ done: false, step: '', dismissedSteps: [] })
+  })
+
   it('warns when the reopened state cannot be saved, and still opens the guide', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const { requested, service } = shell()

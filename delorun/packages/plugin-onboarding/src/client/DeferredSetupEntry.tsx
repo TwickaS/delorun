@@ -5,9 +5,10 @@
  * phone deferred to this computer ("Finish setup · N left"), opens the guide with only those steps, and is gone at zero. A deferred step whose work is already
  * done (phone access is on, a PIN is set) is cleared when the entry reads, so it never counts a finished step.
  *
- * The line carries a × that dismisses it. The dismissal is kept in the guide's own settings as the steps it covered, so it
- * survives a reload and lasts only until a step the person has not dismissed arrives: a dismissal that lasted for ever
- * would hide a genuinely unfinished setup.
+ * The line carries a × that dismisses it. The dismissal is kept in the guide's own settings as what it covered — the
+ * waiting steps, or the unfinished guide at its saved step when nothing was deferred — so it survives a reload and lasts
+ * only until a step the person has not dismissed arrives or the guide moves on: a dismissal that lasted for ever would
+ * hide a genuinely unfinished setup.
  */
 import { IconChecklistOutlineRegular, IconCloseOutlineRegular, Tooltip } from '@deepseek-ai/dsh-client-ui-primitives'
 import type { InjectFace, OwnerOf, PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
@@ -79,6 +80,18 @@ function allDismissed(waiting: readonly DeferrableStep[], dismissed: readonly st
   return waiting.length > 0 && waiting.every(id => dismissed.includes(id))
 }
 
+/** The prefix of the dismissal that covers the unfinished guide rather than a deferred step; no step id starts with it. */
+const GUIDE_DISMISSAL = 'setup.'
+
+/**
+ * The dismissal that covers the unfinished guide at its saved step, so it lasts until the guide moves on.
+ * @param step - the guide's saved step.
+ * @returns the id kept in the dismissed steps, within the settings' 64-character step id.
+ */
+export function guideDismissal(step: string): string {
+  return `${GUIDE_DISMISSAL}${step}`.slice(0, 64)
+}
+
 /**
  * Render the entry on the computer while a deferred step waits.
  * @param props - the foot's width, the copy and the services.
@@ -86,13 +99,15 @@ function allDismissed(waiting: readonly DeferrableStep[], dismissed: readonly st
  */
 export function DeferredSetupEntry({ wide, t, host, loadRecord, fetch, atComputer, progress, deferredOnly, changed, open }: DeferredSetupEntryProps): ReactNode {
   const [waiting, setWaiting] = useState<readonly DeferrableStep[]>([])
+  // Nothing renders until the first read, so a × pressed before the deferred steps arrive cannot be saved as a dismissal of the guide.
+  const [read, setRead] = useState(false)
   const revision = useSyncExternalStore(changed.subscribe, changed.getSnapshot)
   const guideOpen = useSyncExternalStore(deferredOnly.subscribe, deferredOnly.getSnapshot)
   const computer = atComputer()
   useEffect(() => {
     if (!computer || guideOpen) return
     let live = true
-    void readWaiting({ host, loadRecord, fetch }).then((steps) => { if (live) setWaiting(steps) }, (error: unknown) => { console.warn('delorun onboarding: the deferred steps were not read', error) })
+    void readWaiting({ host, loadRecord, fetch }).then((steps) => { if (live) { setWaiting(steps); setRead(true) } }, (error: unknown) => { if (live) setRead(true); console.warn('delorun onboarding: the deferred steps were not read', error) })
     return () => { live = false }
   }, [computer, guideOpen, revision, host, loadRecord, fetch])
   const saved = useSyncExternalStore(useCallback(listener => progress.subscribe(listener), [progress]), () => progress.getSnapshot())
@@ -103,12 +118,17 @@ export function DeferredSetupEntry({ wide, t, host, loadRecord, fetch, atCompute
     open()
   }, [deferredOnly, open, unfinished])
   // A dismissal lasts until a step the person has not dismissed arrives, so an unfinished setup is never hidden for good.
+  // With nothing deferred, the line reads "Finish setup" and the dismissal covers the guide at its saved step, so the line
+  // returns when the guide moves on or a step is deferred; otherwise it covers the waiting steps.
+  const guideKey = guideDismissal(saved.status === 'ready' ? saved.value?.step ?? '' : '')
   const dismiss = useCallback((): void => {
-    const merged = [...new Set([...dismissed, ...waiting])]
-    progress.set('dismissedSteps', merged).catch((error: unknown) => { console.warn('delorun onboarding: the dismissal was not saved', error) })
-  }, [dismissed, waiting, progress])
-  if (!computer || (!unfinished && waiting.length === 0)) return null
+    const steps = dismissed.filter(id => !id.startsWith(GUIDE_DISMISSAL))
+    const next = waiting.length === 0 ? [guideKey] : [...new Set([...steps, ...waiting])]
+    progress.set('dismissedSteps', next).catch((error: unknown) => { console.warn('delorun onboarding: the dismissal was not saved', error) })
+  }, [dismissed, waiting, guideKey, progress])
+  if (!computer || !read || (!unfinished && waiting.length === 0)) return null
   if (allDismissed(waiting, dismissed)) return null
+  if (waiting.length === 0 && dismissed.includes(guideKey)) return null
   const label = waiting.length === 0 ? t('finishSetup') : t('deferred.entry', { n: String(waiting.length) })
   const button = <button type="button" className={wide ? css.entry : css.rail} aria-label={label} data-delorun-finish-setup-left={waiting.length} onClick={start}>
     <IconChecklistOutlineRegular aria-hidden="true" />
