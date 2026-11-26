@@ -3410,7 +3410,7 @@
   "versions": [
     {
       "version": "0.1.0-preview.4",
-      "date": "2026-11-25",
+      "date": "2026-11-26",
       "preview": true,
       "headlines": [
         "A device on your own Tailscale network is treated as your computer, so your phone stops asking for a PIN for ordinary work.",
