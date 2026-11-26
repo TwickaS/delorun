@@ -52,6 +52,16 @@
 
 **状态：** `fixed`：security 条目记录已审查的对模型不可见的差异块，该检查读取它们。
 
+### 2026-11-26 · #5 子代理模型选择没有对等开关，两项对等检查在 `main` 上失败
+
+**发生了什么。** #102（子代理模型选择）修改了 `subagent` 工具的描述，并在 `packages/subagent/tool-subagent/src/list-models.ts` 中注册了一个对模型可见的工具，但没有任何 C16 开关能将二者关闭。在 preview.4 候选版本的合并层级上，`parity-switches` 标记了该注册，`parity-replay` 有 234 个场景失败，其请求头在该描述处与上游不一致。
+
+**付出的代价。** 每次合并层级推送都会让这两项检查失败，无论改动内容是什么。开发机此前的"合并层级全绿"漏掉了它。
+
+**应改为怎样做。** 在 [#147](https://github.com/TwickaS/delorun/issues/147) 添加该开关之前，推送可以使用 `DELORUN_PUSH_SKIP=parity-replay,parity-switches`，并以本条目作为理由，这依据所有者对 0.1.0-preview.4 的裁定。其他检查照常运行。
+
+**状态：** `open`：#147，里程碑 0.1.0-preview.5。
+
 ## 下一步
 
 [对等基线](parity-with-deepseek-harness/parity-baseline.zh.md)记录了若干条目所依赖的主机状态。[参考资料索引](README.zh.md)列出其他开发者页面。

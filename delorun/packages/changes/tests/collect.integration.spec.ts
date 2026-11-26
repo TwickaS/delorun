@@ -220,7 +220,16 @@ describe('collectStore', () => {
     const setup = setUp()
     const version = await stored(setup.home, 'unreferenced')
     age(setup.home)
-    const result = await withStoreLock(setup.home, () => collectStore(setup.request))
+    // Another task holds the lock: the collection runs outside its call chain, where the lock is not reentrant.
+    let release = (): void => {}
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    let entered = (): void => {}
+    const inside = new Promise<void>((resolve) => { entered = resolve })
+    const holder = withStoreLock(setup.home, async () => { entered(); await gate })
+    await inside
+    const result = await collectStore(setup.request)
+    release()
+    await holder
     expect(result).toEqual({ complete: false, removedVersions: 0, removedObjects: 0, skipped: 'the store is in use' })
     expect(remaining(setup.home).versions).toEqual(versionFiles(version))
   })

@@ -175,10 +175,11 @@ describe('a dropped connection', () => {
   })
 
   it('fails with the original error after three dropped connections, not a wrapped one', async () => {
-    const first = socketClosed()
-    const flaky = flakyStore([first, socketClosed(), socketClosed()])
+    const last = socketClosed()
+    const flaky = flakyStore([socketClosed(), socketClosed(), last])
     const store = retryingStore(flaky.store, { sleep: async () => {} })
-    await expect(store.putIfAbsent('k', Buffer.from('x'))).rejects.toBe(first)
+    // The wrapper rethrows the error of its last attempt as it came, unwrapped.
+    await expect(store.putIfAbsent('k', Buffer.from('x'))).rejects.toBe(last)
     expect(flaky.calls).toHaveLength(SOCKET_ATTEMPTS)
   })
 

@@ -110,7 +110,8 @@ describe('cutting two candidates', () => {
     // The signer's state trusts root 1 until a release under root 2 is signed, so the second cut passes both.
     expect(await cut('0.1.0-preview.1', '', [join(keys, '1.root.json')])).toBe(0)
     const second = join(keys, '2.root.json')
-    writeFileSync(second, rootFile(trusted.keys, { version: 2 }).bytes)
+    // Root 2 keeps root 1's log and witness: only the version moves, as a real rotation that adds no log would.
+    writeFileSync(second, rootFile(trusted.keys, { version: 2, log: { origin: trusted.log.origin, vkey: trusted.log.vkey }, witnesses: { keys: [{ name: trusted.witness.name, vkey: trusted.witness.vkey }], threshold: 1 } }).bytes)
     expect(await cut('0.1.0-preview.2', '\n// preview.2\n', [join(keys, '1.root.json'), second])).toBe(0)
     const verified = verifyChannel(join(directory, 'channel'), '0.1.0-preview.2', Math.floor(Date.now() / 1000), [join(keys, '1.root.json'), second])
     expect(verified.others).toEqual(['0.1.0-preview.1'])

@@ -296,9 +296,16 @@ describe('what an undo of an agent action leaves alone', () => {
     await save(fx, 'profile before the agent')
     const entry = await ran(fx, { action: 'install_bundle', target: 'new-plugin' }, () => addDependency(fx, 'new-plugin'))
     const before = readFileSync(join(fx.profileDir, 'package.json'), 'utf8')
-    await withFileLock(join(fx.profileDir, 'package.json'), async () => {
-      await expect(undoAgentAction({ ...context(fx), lockWaitMs: 50 }, entry!.id, terminal(), { reload: RELOADED, run: succeeding() })).rejects.toThrow()
-    })
+    // Another task holds the lock: the undo runs outside its call chain, where the lock is not reentrant, so it waits and fails.
+    let release = (): void => {}
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    let entered = (): void => {}
+    const inside = new Promise<void>((resolve) => { entered = resolve })
+    const holder = withFileLock(join(fx.profileDir, 'package.json'), async () => { entered(); await gate })
+    await inside
+    await expect(undoAgentAction({ ...context(fx), lockWaitMs: 50 }, entry!.id, terminal(), { reload: RELOADED, run: succeeding() })).rejects.toThrow()
+    release()
+    await holder
     expect(readFileSync(join(fx.profileDir, 'package.json'), 'utf8')).toBe(before)
   })
 })
