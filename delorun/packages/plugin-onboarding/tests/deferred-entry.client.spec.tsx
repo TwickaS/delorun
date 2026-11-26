@@ -6,7 +6,7 @@
 import { createSnapshotStore } from '@deepseek-ai/dsh-client-store'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { DeferredSetupEntry, readWaiting } from '../src/client/DeferredSetupEntry.tsx'
+import { DeferredSetupEntry, guideDismissal, readWaiting } from '../src/client/DeferredSetupEntry.tsx'
 import { en } from '../src/client/locales.ts'
 import type { DeferrableStep, SetupRecord } from '../src/wire.ts'
 import type { OnboardingSettings } from '../src/config.ts'
@@ -146,10 +146,33 @@ describe('the Finish setup entry', () => {
     expect(screen.getByRole('button', { name: en['deferred.entry'].replace('{n}', '2') })).toBeTruthy()
   })
 
-  it('keeps the line while the guide is unfinished and nothing was deferred, because a dismissal covers no step', async () => {
+  it('keeps the line while the guide is unfinished and nothing was deferred, because a step dismissal does not cover the guide', async () => {
     const face = services({ done: false, dismissed: ['pin'] })
     await mount(face)
     expect(screen.getByRole('button', { name: en.finishSetup })).toBeTruthy()
+  })
+
+  it('dismisses "Finish setup" for the guide at its saved step, keeps it hidden after a reload, and shows it once the guide moves on', async () => {
+    const face = services({ done: false })
+    await face.progress.set('step', 'models')
+    await mount(face)
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: en['deferred.dismiss'] })) })
+    expect(face.progress.getSnapshot().value?.dismissedSteps).toEqual([guideDismissal('models')])
+    expect(screen.queryByRole('button', { name: en.finishSetup })).toBeNull()
+    cleanup()
+    await mount(face)
+    expect(screen.queryByRole('button', { name: en.finishSetup })).toBeNull()
+    await act(async () => { await face.progress.set('step', 'look') })
+    expect(screen.getByRole('button', { name: en.finishSetup })).toBeTruthy()
+  })
+
+  it('shows the line again when a step is deferred after "Finish setup" was dismissed', async () => {
+    const face = services({ done: false, dismissed: [guideDismissal('')] })
+    await mount(face)
+    expect(screen.queryByRole('button', { name: en.finishSetup })).toBeNull()
+    face.record.deferred = ['pin']
+    await act(async () => { face.changed.set(1); await Promise.resolve(); await Promise.resolve(); await Promise.resolve() })
+    expect(screen.getByRole('button', { name: en['deferred.entry'].replace('{n}', '1') })).toBeTruthy()
   })
 
   it('reads again when a step changes and when the guide closes', async () => {

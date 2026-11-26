@@ -1724,12 +1724,7 @@
     {
       "area": "Studio",
       "section": "Fixed",
-      "text": "The spreadsheet and PDF previews open again. A change that gave both a shared helper made each pane load it as a separate file, and the studio cannot fetch one file from inside another, so neither pane opened. The shared helper now arrives with the pane instead, so each opens on its own."
-    },
-    {
-      "area": "Studio",
-      "section": "Fixed",
-      "text": "The \"Finish setup\" line at the sidebar's foot pads its text by the sidebar's own inset, so the label no longer touches the bar's edges, and it carries a × that dismisses it. The dismissal is kept with the guide's progress, so it survives a reload, and it lasts only until a step the person has not dismissed arrives."
+      "text": "The \"Finish setup\" line at the sidebar's foot pads its text by the sidebar's own inset, so the label no longer touches the bar's edges, and it carries a × that dismisses it. The dismissal is kept with the guide's progress, so it survives a reload, and it lasts only until the guide moves on or a step the person has not dismissed arrives."
     },
     {
       "area": "Studio",
@@ -2964,6 +2959,11 @@
     {
       "area": "Plugins",
       "section": "Fixed",
+      "text": "Turning on a plugin that replaces one of Delorun's own services, such as dsh-layerfs replacing chat storage, no longer empties the sidebar and stops messages from sending. A live reload now stops the row the change turns off before it starts the replacement, and a change that would swap the provider of a service running chats depend on applies nothing live and asks for a restart instead."
+    },
+    {
+      "area": "Plugins",
+      "section": "Fixed",
       "text": "`delorun plugin remove` forgets the plugin it removed: its load copy under `changes/profiles/<profile>/active/` and the `active.json` entry that named it go, so a plugin a person installs, tries and removes leaves no copy of its files behind to load again. What Changes recorded of the plugin stays, so a change made while it was installed can still be undone, and a plugin the profile still depends on keeps its copy."
     },
     {
@@ -3324,7 +3324,7 @@
     {
       "area": "Commands",
       "section": "Fixed",
-      "text": "**Fixed:** The documentation and catalogue gates pass again. The persistence catalogue, the event producer and consumer lists, the capability seams and the Cordis API catalogue are regenerated from the code they describe, and the home-patch service is classified for the package-dependency gate."
+      "text": "The documentation and catalogue gates pass again. The persistence catalogue, the event producer and consumer lists, the capability seams and the Cordis API catalogue are regenerated from the code they describe, and the home-patch service is classified for the package-dependency gate."
     },
     {
       "area": "Commands",
@@ -3415,7 +3415,7 @@
       "headlines": [
         "A device on your own Tailscale network is treated as your computer, so your phone stops asking for a PIN for ordinary work.",
         "Delorun now starts by itself when you log in, if you ask it to during setup.",
-        "The spreadsheet and PDF previews open again, and a plugin switched off switches back on."
+        "Attachments and the spreadsheet, PDF and Office previews work over a reach listener again, and a plugin switched off switches back on."
       ],
       "areas": [
         {
@@ -3501,11 +3501,7 @@
             },
             {
               "section": "Fixed",
-              "text": "The spreadsheet and PDF previews open again. A change that gave both a shared helper made each pane load it as a separate file, and the studio cannot fetch one file from inside another, so neither pane opened. The shared helper now arrives with the pane instead, so each opens on its own."
-            },
-            {
-              "section": "Fixed",
-              "text": "The \"Finish setup\" line at the sidebar's foot pads its text by the sidebar's own inset, so the label no longer touches the bar's edges, and it carries a × that dismisses it. The dismissal is kept with the guide's progress, so it survives a reload, and it lasts only until a step the person has not dismissed arrives."
+              "text": "The \"Finish setup\" line at the sidebar's foot pads its text by the sidebar's own inset, so the label no longer touches the bar's edges, and it carries a × that dismisses it. The dismissal is kept with the guide's progress, so it survives a reload, and it lasts only until the guide moves on or a step the person has not dismissed arrives."
             },
             {
               "section": "Fixed",
@@ -3595,6 +3591,10 @@
             },
             {
               "section": "Fixed",
+              "text": "Turning on a plugin that replaces one of Delorun's own services, such as dsh-layerfs replacing chat storage, no longer empties the sidebar and stops messages from sending. A live reload now stops the row the change turns off before it starts the replacement, and a change that would swap the provider of a service running chats depend on applies nothing live and asks for a restart instead."
+            },
+            {
+              "section": "Fixed",
               "text": "`delorun plugin remove` forgets the plugin it removed: its load copy under `changes/profiles/<profile>/active/` and the `active.json` entry that named it go, so a plugin a person installs, tries and removes leaves no copy of its files behind to load again. What Changes recorded of the plugin stays, so a change made while it was installed can still be undone, and a plugin the profile still depends on keeps its copy."
             },
             {
@@ -3644,7 +3644,7 @@
             },
             {
               "section": "Fixed",
-              "text": "**Fixed:** The documentation and catalogue gates pass again. The persistence catalogue, the event producer and consumer lists, the capability seams and the Cordis API catalogue are regenerated from the code they describe, and the home-patch service is classified for the package-dependency gate."
+              "text": "The documentation and catalogue gates pass again. The persistence catalogue, the event producer and consumer lists, the capability seams and the Cordis API catalogue are regenerated from the code they describe, and the home-patch service is classified for the package-dependency gate."
             },
             {
               "section": "Fixed",
